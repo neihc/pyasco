@@ -31,4 +31,4 @@ pyco = "pyasco.app.console:main"
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["src"]
+packages = ["pyasco"]
