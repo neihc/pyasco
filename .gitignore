@@ -2,6 +2,7 @@
 .aider*
 .env
 *__pycache__
+*.egg-info/
 logs/
 skills/
 .pyasco_history
