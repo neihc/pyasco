@@ -23,7 +23,7 @@ uv pip install pyasco
 ```bash
 git clone https://github.com/neihc/pyasco.git
 cd pyasco
-uv pip install .
+uv tool install -e .
 ```
 
 ## Usage
@@ -57,17 +57,17 @@ pyco
 
 1. Start a basic session:
 ```bash
-uvx pyco
+pyco
 ```
 
 2. Run with Docker support:
 ```bash
-uvx pyco --use-docker --docker-image python:3.9-slim
+pyco --use-docker --docker-image python:3.9-slim
 ```
 
 3. Use a custom configuration:
 ```bash
-uvx pyco --config my_config.yaml
+pyco --config my_config.yaml
 ```
 
 ## Configuration
