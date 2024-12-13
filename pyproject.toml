@@ -1,0 +1,21 @@
+[project]
+name = "pyasco"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "ipython>=8.30.0",
+    "jupyter-client>=8.6.3",
+    "openai>=1.57.0",
+    "pytest>=8.3.4",
+    "tree-sitter-languages>=1.10.2",
+    "tree-sitter==0.21.3",
+    "ipykernel>=6.29.5",
+    "rich>=13.9.4",
+    "docker>=7.1.0",
+    "numpy>=2.2.0",
+    "prompt-toolkit>=3.0.48",
+    "pyyaml>=6.0.2",
+    "psutil>=6.1.0",
+]

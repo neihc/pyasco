@@ -1,0 +1,23 @@
+# PyAsco Configuration
+llm:
+  model: "meta-llama/llama-3.3-70b-instruct"
+  base_url: "https://openrouter.ai/api/v1"
+  api_key: ""  # Set via environment variable OPENROUTER_API_KEY
+skills_path: "skills"
+# custom_instructions: "You are a helpful AI assistant focused on Python development."
+
+docker:
+  use_docker: true
+  image: "rapidfort/python-chromedriver:latest"
+  mem_limit: "2g"
+  cpu_count: 2
+  env_file: "/Users/chien.nguyen/env"
+  volumes:
+    "/Users/chien.nguyen/Library/Application Support/Google/Chrome":
+      bind: "/root/.config/google-chrome"
+      mode: "rw"
+    "/Users/chien.nguyen/personal/pyasco":
+      bind: "/workspace"
+      mode: "rw"
+  bash_command: "/bin/sh"
+  python_command: "python3"

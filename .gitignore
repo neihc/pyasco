@@ -1,0 +1,7 @@
+.DS_Store
+.aider*
+.env
+*__pycache__
+logs/
+skills/
+.pyasco_history

@@ -1,0 +1,4 @@
+ipython>=8.30.0
+jupyter-client>=8.6.3
+pytest>=8.3.4
+tree-sitter-languages>=1.10.2
