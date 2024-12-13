@@ -26,3 +26,6 @@ dependencies = [
 
 [project.scripts]
 pyco = "src.app.console:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
