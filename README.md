@@ -30,7 +30,7 @@ uv pip install -e .
 Run the console application:
 
 ```bash
-python -m src.app.console
+pyco
 ```
 
 ### Command Line Options
@@ -56,17 +56,17 @@ python -m src.app.console
 
 1. Start a basic session:
 ```bash
-python -m src.app.console
+pyco
 ```
 
 2. Run with Docker support:
 ```bash
-python -m src.app.console --use-docker --docker-image python:3.9-slim
+pyco --use-docker --docker-image python:3.9-slim
 ```
 
 3. Use a custom configuration:
 ```bash
-python -m src.app.console --config my_config.yaml
+pyco --config my_config.yaml
 ```
 
 ## Configuration
