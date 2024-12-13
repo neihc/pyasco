@@ -27,5 +27,8 @@ dependencies = [
 [project.scripts]
 pyco = "src.app.console:main"
 
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [tool.hatch.build.targets.wheel]
 packages = ["src"]

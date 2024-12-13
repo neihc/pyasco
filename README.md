@@ -12,25 +12,26 @@ PyAsco is an AI-powered console application that helps you interact with a smart
 
 ## Installation
 
-1. Clone the repository:
+There are two ways to install PyAsco:
+
+### 1. Install from PyPI (Recommended)
+```bash
+uv pip install pyasco
+```
+
+### 2. Install from source
 ```bash
 git clone https://github.com/neihc/pyasco.git
 cd pyasco
-```
-
-2. Install dependencies using `uv`:
-```bash
-uv venv
-source .venv/bin/activate  # On Unix/macOS
-uv pip install -e .
+uv pip install .
 ```
 
 ## Usage
 
-Run the console application:
+After installation, you can run the console application from anywhere:
 
 ```bash
-uvx pyco
+pyco
 ```
 
 ### Command Line Options
