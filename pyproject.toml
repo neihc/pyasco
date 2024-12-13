@@ -4,10 +4,6 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
-
-[project.scripts]
-pyco = "src.app.console:main"
-
 dependencies = [
     "ipython>=8.30.0",
     "jupyter-client>=8.6.3",
@@ -23,3 +19,6 @@ dependencies = [
     "pyyaml>=6.0.2",
     "psutil>=6.1.0",
 ]
+
+[project.scripts]
+pyco = "src.app.console:main"
