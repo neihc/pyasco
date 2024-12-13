@@ -14,7 +14,7 @@ PyAsco is an AI-powered console application that helps you interact with a smart
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/pyasco.git
+git clone https://github.com/neihc/pyasco.git
 cd pyasco
 ```
 
