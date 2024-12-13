@@ -1,7 +1,7 @@
 from openai import OpenAI
 import os
 import logging
-from logger_config import setup_logger
+from ..logger_config import setup_logger
 
 # Setup verbose logger for LLM interactions
 llm_logger = setup_logger('llm', 'llm_verbose.log', verbose=True)

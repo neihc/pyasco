@@ -30,7 +30,7 @@ uv pip install -e .
 Run the console application:
 
 ```bash
-pyco
+uvx pyco
 ```
 
 ### Command Line Options
@@ -56,17 +56,17 @@ pyco
 
 1. Start a basic session:
 ```bash
-pyco
+uvx pyco
 ```
 
 2. Run with Docker support:
 ```bash
-pyco --use-docker --docker-image python:3.9-slim
+uvx pyco --use-docker --docker-image python:3.9-slim
 ```
 
 3. Use a custom configuration:
 ```bash
-pyco --config my_config.yaml
+uvx pyco --config my_config.yaml
 ```
 
 ## Configuration
