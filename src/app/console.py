@@ -1,8 +1,22 @@
 """
-PyAsco Console Application
+PyAsco Console Application - An AI-powered Python assistant
+
+This module provides an interactive console interface for the PyAsco AI assistant,
+capable of executing Python code, managing skills, and providing intelligent responses.
 
 Usage:
-    uv run -m src.app.console [options]
+    python -m src.app.console [options]
+
+Options:
+    --config PATH          Path to YAML configuration file
+    --use-docker          Run code in Docker environment
+    --docker-image TEXT   Docker image to use (default: python:3.9-slim)
+    --mem-limit TEXT      Docker memory limit (default: 512m)
+    --cpu-count INTEGER   Docker CPU count (default: 1)
+    --env-file PATH       Path to environment file for Docker
+    --mount TEXT          Mount points in format 'host_path:container_path'
+    --model TEXT          LLM model to use (default: meta-llama/llama-3.3-70b-instruct)
+    --skills-path TEXT    Path to skills directory (default: skills)
 """
 
 from typing import Optional, Union, List
