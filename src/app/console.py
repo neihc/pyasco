@@ -103,8 +103,12 @@ def parse_args():
     parser.add_argument("--env-file", help="Path to environment file for Docker container")
     parser.add_argument("--mount", action='append', 
                        help="Mount points in format 'host_path:container_path'. Can be specified multiple times")
-    parser.add_argument("--model", default="meta-llama/llama-3.3-70b-instruct", 
+    parser.add_argument("--model", default="meta-llama/llama-3.3-70b-instruct",
                        help="LLM model to use for responses")
+    parser.add_argument("--llm-base-url", default="https://openrouter.ai/api/v1",
+                       help="Base URL for LLM API")
+    parser.add_argument("--llm-api-key",
+                       help="API key for LLM service (defaults to OPENROUTER_API_KEY env var)")
     parser.add_argument("--skills-path", default="skills",
                        help="Path to skills directory")
     return parser.parse_args()

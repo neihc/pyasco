@@ -87,7 +87,10 @@ class Agent:
         )
         
         self.custom_instructions = None  # Can be set later if needed
-        self.model = config.model
+        self.model = config.llm.model
+        # Configure LLM client
+        from .services.llm import configure_client
+        configure_client(api_key=config.llm.api_key, base_url=config.llm.base_url)
         self.skill_manager = SkillManager(config.skills_path)
         
         # Install requirements in Docker container during initialization

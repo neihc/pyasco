@@ -15,9 +15,15 @@ class DockerConfig:
     python_command: str = "python"
 
 @dataclass
+class LLMConfig:
+    model: str = "meta-llama/llama-3.3-70b-instruct"
+    base_url: str = "https://openrouter.ai/api/v1"
+    api_key: Optional[str] = None
+
+@dataclass
 class Config:
     docker: DockerConfig = field(default_factory=DockerConfig)
-    model: str = "meta-llama/llama-3.3-70b-instruct"
+    llm: LLMConfig = field(default_factory=LLMConfig)
     skills_path: str = "skills"
     custom_instructions: Optional[str] = None
 
@@ -42,9 +48,15 @@ class ConfigManager:
             python_command=yaml_config.get('docker', {}).get('python_command', "python")
         )
         
+        llm_config = LLMConfig(
+            model=yaml_config.get('llm', {}).get('model', "meta-llama/llama-3.3-70b-instruct"),
+            base_url=yaml_config.get('llm', {}).get('base_url', "https://openrouter.ai/api/v1"),
+            api_key=yaml_config.get('llm', {}).get('api_key')
+        )
+        
         return Config(
             docker=docker_config,
-            model=yaml_config.get('model', "meta-llama/llama-3.3-70b-instruct"),
+            llm=llm_config,
             skills_path=yaml_config.get('skills_path', "skills"),
             custom_instructions=yaml_config.get('custom_instructions')
         )
@@ -72,9 +84,15 @@ class ConfigManager:
             python_command=args.python_command if hasattr(args, 'python_command') else "python"
         )
         
+        llm_config = LLMConfig(
+            model=args.model,
+            base_url=args.llm_base_url if hasattr(args, 'llm_base_url') else "https://openrouter.ai/api/v1",
+            api_key=args.llm_api_key if hasattr(args, 'llm_api_key') else None
+        )
+        
         return Config(
             docker=docker_config,
-            model=args.model,
+            llm=llm_config,
             skills_path=args.skills_path if hasattr(args, 'skills_path') else "skills",
             custom_instructions=args.custom_instructions if hasattr(args, 'custom_instructions') else None
         )
