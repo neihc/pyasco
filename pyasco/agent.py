@@ -240,10 +240,19 @@ Environment Variables:
         new_skills = [skill for skill in relevant_skills if skill.name not in existing_skills]
         
         if new_skills:
-            # First load the skills by executing their code
+            # First install requirements and load the skills
             skills_info = "\n\nLoading and making available these relevant skills:\n\n"
             for skill in new_skills:
                 skill_code = self.skill_manager.get_skill_code(skill)
+                
+                # Install requirements if any
+                if skill.requirements:
+                    req_install = f"pip install {' '.join(skill.requirements)}"
+                    stdout, stderr = self.python_executor.execute(req_install, 'bash')
+                    if stderr and "ERROR:" in stderr:
+                        self.logger.error(f"Error installing requirements for {skill.name}: {stderr}")
+                        continue
+                
                 # Execute the skill code to make functions available
                 stdout, stderr = self.python_executor.execute(skill_code)
                 if stderr:
