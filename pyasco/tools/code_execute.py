@@ -259,7 +259,7 @@ class CodeExecutor:
         try:
             # Execute code directly through jupyter console
             escaped_code = code.replace('"', r'\"')
-            cmd = f'''echo "{escaped_code}" | timeout 30s jupyter-console --existing {self.kernel_connection_file} --simple-prompt'''
+            cmd = f'''echo "{escaped_code}" | timeout 30s jupyter-console {self.kernel_connection_file} --simple-prompt'''
             try:
                 exit_code, (stdout, stderr) = self.container.exec_run(
                     ['bash', '-c', cmd],
