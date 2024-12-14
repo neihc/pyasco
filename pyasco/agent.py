@@ -240,11 +240,20 @@ Environment Variables:
         new_skills = [skill for skill in relevant_skills if skill.name not in existing_skills]
         
         if new_skills:
-            skills_info = "\n\nHere are some potentially relevant skills:\n\n"
+            # First load the skills by executing their code
+            skills_info = "\n\nLoading and making available these relevant skills:\n\n"
             for skill in new_skills:
+                skill_code = self.skill_manager.get_skill_code(skill)
+                # Execute the skill code to make functions available
+                stdout, stderr = self.python_executor.execute(skill_code)
+                if stderr:
+                    self.logger.warning(f"Warning while loading skill {skill.name}: {stderr}")
+                
                 skills_info += f"### {skill.name}\n"
                 skills_info += f"**Usage:** {skill.usage}\n"
-                skills_info += f"**Code:**\n```python\n{self.skill_manager.get_skill_code(skill)}\n```\n\n"
+                skills_info += f"**Note:** This skill's functions are now loaded and ready to use. "
+                skills_info += f"Only redefine them if you need to modify their behavior.\n"
+                skills_info += f"**Code:**\n```python\n{skill_code}\n```\n\n"
             user_input += skills_info
 
         self.messages.append({
