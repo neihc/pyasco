@@ -117,6 +117,7 @@ class CodeExecutor:
                         for line in kernel_output.splitlines():
                             if 'kernel-' in line and '.json' in line:
                                 connection_file = line.strip()
+                                print(connection_file)
                                 break
                     if connection_file:
                         break
@@ -262,8 +263,9 @@ class CodeExecutor:
 EOT"""
             self.container.exec_run(['bash', '-c', cmd])
             
+            print(self.kernel_connection_file)
             # Execute using jupyter console with timeout
-            cmd = f"""timeout 30s jupyter console --simple-prompt --existing={self.kernel_connection_file} --no-confirm-exit << EOF
+            cmd = f"""timeout 30s jupyter console --simple-prompt {self.kernel_connection_file} --no-confirm-exit << EOF
 %run /tmp/code.py
 exit
 EOF"""
