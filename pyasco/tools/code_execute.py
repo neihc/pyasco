@@ -254,44 +254,69 @@ class CodeExecutor:
             return None, str(e)
 
     def _execute_in_docker(self, code: str) -> Tuple[Optional[str], Optional[str]]:
-        """Execute code inside Docker container using a temporary file and %run magic"""
+        """Execute code inside Docker container using existing IPython kernel"""
         try:
-            # Create a temporary file in the container
+            # Create a temporary file for the code
             temp_file = '/tmp/code_to_run.py'
             cmd = f'cat > {temp_file} << EOL\n{code}\nEOL'
             self.container.exec_run(['bash', '-c', cmd])
 
-            # Execute the file using jupyter console with %run magic
-            run_cmd = f'''cat {temp_file} | jupyter-console {self.kernel_connection_file} --simple-prompt'''
+            # Execute using the existing kernel connection
+            run_cmd = """
+from jupyter_client import BlockingKernelClient
+import json, sys
+
+# Load the connection info
+with open('{}', 'r') as f:
+    connection_info = json.load(f)
+    
+# Create a client and connect to the running kernel
+kc = BlockingKernelClient()
+kc.load_connection_info(connection_info)
+kc.start_channels()
+
+# Execute the code
+with open('{}', 'r') as f:
+    code = f.read()
+    msg_id = kc.execute(code)
+    
+# Get the results
+while True:
+    try:
+        msg = kc.get_iopub_msg(timeout=1)
+        if msg['parent_header'].get('msg_id') != msg_id:
+            continue
+            
+        msg_type = msg['header']['msg_type']
+        content = msg['content']
+        
+        if msg_type == 'stream':
+            if content['name'] == 'stdout':
+                print(content['text'], end='')
+            elif content['name'] == 'stderr':
+                print(content['text'], file=sys.stderr, end='')
+        elif msg_type == 'execute_result':
+            print(content['data'].get('text/plain', ''))
+        elif msg_type == 'error':
+            print('\\n'.join(content['traceback']), file=sys.stderr)
+        elif msg_type == 'status' and content['execution_state'] == 'idle':
+            break
+    except:
+        break
+        
+kc.stop_channels()
+""".format(self.kernel_connection_file, temp_file)
             
             exit_code, (stdout, stderr) = self.container.exec_run(
-                ['bash', '-c', run_cmd],
+                ['python', '-c', run_cmd],
                 demux=True
             )
 
-            if exit_code == 124:  # timeout exit code
-                raise RuntimeError("Execution timed out after 30 seconds")
-            
             # Clean up the temporary file
             self.container.exec_run(['rm', temp_file])
             
-            stdout_content = None
-            stderr_content = None
-            
-            if stdout:
-                # Process the output, skipping jupyter-console formatting
-                lines = stdout.decode('utf-8').splitlines()
-                stdout_content = '\n'.join(lines[6:-2])
-                if stdout_content and stdout_content.startswith('In [1]:'):
-                    stdout_content = stdout_content[8:]
-            
-            if stderr:
-                stderr_str = stderr.decode('utf-8').strip()
-                if not any(msg in stderr_str for msg in [
-                    '[ZMQTerminalIPythonApp]',
-                    'Unrecognized alias'
-                ]):
-                    stderr_content = stderr_str
+            stdout_content = stdout.decode('utf-8').strip() if stdout else None
+            stderr_content = stderr.decode('utf-8').strip() if stderr else None
             
             return stdout_content, stderr_content
             
