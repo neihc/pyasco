@@ -83,22 +83,32 @@ class CodeExecutor:
                 **container_options
             )
             
-            # Install IPython if needed
-            print("Setting up IPython in container...")
-            setup_cmd = """
-            pip install ipython jupyter-client jupyter-console > /dev/null 2>&1
-            mkdir -p /root/.ipython/profile_default/
-            """
-            self.container.exec_run(['bash', '-c', setup_cmd])
-            print("IPython setup completed")
+            # Check if IPython is installed, if not install it
+            exit_code, output = self.container.exec_run(['which', 'ipython'])
+            if exit_code != 0:
+                print("Setting up IPython in container...")
+                setup_cmd = """
+                pip install ipython > /dev/null 2>&1
+                mkdir -p /root/.ipython/profile_default/
+                """
+                self.container.exec_run(['bash', '-c', setup_cmd])
+                print("IPython setup completed")
             
-        # Initialize kernel manager based on execution mode
-        self.km = jupyter_client.KernelManager(kernel_name=self.python_version)
-        self.km.start_kernel()
-        self.kc = self.km.client()
-        self.kc.start_channels()
-        # Wait for kernel to be ready
-        self.kc.wait_for_ready()
+            # Start IPython kernel in container if not running
+            exit_code, output = self.container.exec_run(['pgrep', '-f', 'ipython.*kernel'])
+            if exit_code != 0:
+                self.container.exec_run(['ipython', 'kernel'], detach=True)
+                # Give kernel time to start
+                time.sleep(2)
+            
+        if not self.use_docker:
+            # Initialize kernel manager for local execution
+            self.km = jupyter_client.KernelManager(kernel_name=self.python_version)
+            self.km.start_kernel()
+            self.kc = self.km.client()
+            self.kc.start_channels()
+            # Wait for kernel to be ready
+            self.kc.wait_for_ready()
 
     def reset(self):
         """Reset the current kernel"""
