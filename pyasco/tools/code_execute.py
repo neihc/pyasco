@@ -228,35 +228,37 @@ class CodeExecutor:
             return None, str(e)
 
     def _execute_in_docker(self, code: str) -> Tuple[Optional[str], Optional[str]]:
-        """Execute code inside Docker container using IPython"""
+        """Execute code inside Docker container using IPython kernel"""
         try:
-            # Create and execute IPython script
+            # Create a temporary Python script that uses IPython's existing kernel
             script = f"""
-from IPython import start_ipython
 import io
 import sys
+from IPython import get_ipython
 
 # Capture output
 stdout = io.StringIO()
 stderr = io.StringIO()
+old_stdout, old_stderr = sys.stdout, sys.stderr
 sys.stdout = stdout
 sys.stderr = stderr
 
-# Execute the code
 try:
-    exec('''{code}''')
+    # Get IPython instance and execute code
+    ipython = get_ipython()
+    ipython.run_cell('''{code}''')
 except Exception as e:
     print(str(e), file=sys.stderr)
-
-# Get output
-output = stdout.getvalue()
-error = stderr.getvalue()
-
-# Print for capture
-print("STDOUT_MARKER")
-print(output)
-print("STDERR_MARKER")
-print(error)
+finally:
+    # Restore original stdout/stderr
+    sys.stdout, sys.stderr = old_stdout, old_stderr
+    # Get captured output
+    output = stdout.getvalue()
+    error = stderr.getvalue()
+    print("STDOUT_MARKER")
+    print(output)
+    print("STDERR_MARKER")
+    print(error)
 """
             # Write script to temp file in container
             cmd = f"""cat << 'EOT' > /tmp/execute.py
@@ -264,29 +266,25 @@ print(error)
 EOT"""
             self.container.exec_run(['bash', '-c', cmd])
             
-            # Execute the script
+            # Execute using IPython
             exit_code, (stdout, stderr) = self.container.exec_run(
-                [self.python_command, '/tmp/execute.py'],
+                ['ipython', '/tmp/execute.py'],
                 demux=True
             )
             
             # Process output
+            stdout_content = None
+            stderr_content = None
+            
             if stdout:
                 output = stdout.decode('utf-8')
-                # Split output at markers
                 parts = output.split('STDOUT_MARKER\n')
                 if len(parts) > 1:
                     stdout_content = parts[1].split('STDERR_MARKER\n')[0].strip()
-                else:
-                    stdout_content = None
-            else:
-                stdout_content = None
-                
+            
             if stderr:
                 stderr_content = stderr.decode('utf-8').strip()
-            else:
-                stderr_content = None
-                
+            
             return stdout_content, stderr_content
             
         except Exception as e:
