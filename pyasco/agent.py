@@ -122,7 +122,7 @@ class Agent:
 import platform
 import os
 
-env_vars = '\\n'.join(f'- {k}={v}' for k, v in sorted(os.environ.items()))
+env_vars = '\\n'.join(f'- {k}' for k, v in sorted(os.environ.items()))
 print(f'''System Information:
 - OS: {platform.system()} {platform.release()}
 - Python: {platform.python_version()}
@@ -137,7 +137,7 @@ Environment Variables:
         else:
             # Get host system info
             memory = psutil.virtual_memory()
-            env_vars = '\n'.join(f'- {k}={v}' for k, v in sorted(os.environ.items()))
+            env_vars = '\n'.join(f'- {k}' for k, v in sorted(os.environ.items()))
             return f"""System Information:
 - OS: {platform.system()} {platform.release()}
 - Python: {platform.python_version()}
