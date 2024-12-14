@@ -94,34 +94,69 @@ class CodeExecutor:
                 self.container.exec_run(['bash', '-c', setup_cmd])
                 print("Jupyter console setup completed")
             
-            # Start IPython kernel in container and get connection file
-            exit_code, output = self.container.exec_run(['pgrep', '-f', 'ipython.*kernel'])
-            if exit_code != 0:
-                # Start kernel in background and get connection file
-                self.container.exec_run(
-                    ['bash', '-c', 'ipython kernel > /tmp/kernel_output.txt 2>&1 &']
-                )
+            # Create directories for communication
+            self.container.exec_run(['mkdir', '-p', '/tmp/pyasco'])
+            
+            # Start persistent Python process
+            python_server = """
+import sys, os, time, json
+from threading import Lock
+
+# Global namespace for code execution
+global_ns = {}
+file_lock = Lock()
+
+def execute_code(code):
+    try:
+        # Capture output
+        from io import StringIO
+        old_stdout, old_stderr = sys.stdout, sys.stderr
+        stdout = StringIO()
+        stderr = StringIO()
+        sys.stdout, sys.stderr = stdout, stderr
+        
+        try:
+            # Execute in the global namespace
+            exec(code, global_ns)
+            return stdout.getvalue(), stderr.getvalue()
+        finally:
+            sys.stdout, sys.stderr = old_stdout, old_stderr
+    except Exception as e:
+        import traceback
+        return None, traceback.format_exc()
+
+# Main loop
+while True:
+    try:
+        with file_lock:
+            if os.path.exists('/tmp/pyasco/input.py'):
+                with open('/tmp/pyasco/input.py', 'r') as f:
+                    code = f.read()
+                os.remove('/tmp/pyasco/input.py')
                 
-                # Wait for kernel to start and connection file to be created
-                max_retries = 10
-                connection_file = None
-                for _ in range(max_retries):
-                    time.sleep(1)
-                    # Read the kernel output file and extract the connection file path
-                    _, (stdout, _) = self.container.exec_run(
-                        ['bash', '-c', 'ls -1 /root/.local/share/jupyter/runtime/kernel-*.json | head -n 1'],
-                        demux=True
-                    )
-                    if stdout:
-                        connection_file = stdout.decode('utf-8').strip()
-                    if connection_file:
-                        break
+                stdout, stderr = execute_code(code)
                 
-                if not connection_file:
-                    raise RuntimeError("Failed to get kernel connection file after multiple retries")
+                with open('/tmp/pyasco/output.json', 'w') as f:
+                    json.dump({
+                        'stdout': stdout,
+                        'stderr': stderr
+                    }, f)
                 
-                # Store connection file for later use
-                self.kernel_connection_file = connection_file
+                # Signal completion
+                with open('/tmp/pyasco/done', 'w') as f:
+                    f.write('1')
+    except Exception as e:
+        # Log any errors
+        with open('/tmp/pyasco/error.log', 'a') as f:
+            f.write(f"{str(e)}\\n")
+    
+    time.sleep(0.1)
+"""
+            # Write server code to container
+            self.container.exec_run(['bash', '-c', f'cat > /tmp/server.py << EOL\n{python_server}\nEOL'])
+            
+            # Start Python server process
+            self.container.exec_run(['python', '/tmp/server.py'], detach=True)
             
         if not self.use_docker:
             # Initialize kernel manager for local execution
@@ -250,108 +285,35 @@ class CodeExecutor:
             return None, str(e)
 
     def _execute_in_docker(self, code: str) -> Tuple[Optional[str], Optional[str]]:
-        """Execute code inside Docker container using existing IPython kernel"""
+        """Execute code inside Docker container using persistent Python process"""
         try:
-            # Create a temporary file for the code
-            temp_file = '/tmp/code_to_run.py'
-            cmd = f'cat > {temp_file} << EOL\n{code}\nEOL'
+            # Clean up any old files
+            self.container.exec_run(['rm', '-f', '/tmp/pyasco/output.json', '/tmp/pyasco/done'])
+            
+            # Write code to input file
+            cmd = f'cat > /tmp/pyasco/input.py << EOL\n{code}\nEOL'
             self.container.exec_run(['bash', '-c', cmd])
-
-            # Modified kernel execution script with better message handling
-            run_cmd = """
-from jupyter_client import BlockingKernelClient
-import json, sys, time
-
-# Load the connection info
-with open(r'{}', 'r') as f:
-    connection_info = json.load(f)
-    
-# Create a client and connect to the running kernel
-kc = BlockingKernelClient()
-kc.load_connection_info(connection_info)
-kc.start_channels()
-
-# Execute the code
-with open('{}', 'r') as f:
-    code = f.read()
-    msg_id = kc.execute(code)
-    
-# Get the results
-timeout = 300  # Five minute timeout
-start_time = time.time()
-stdout_parts = []
-stderr_parts = []
-execution_done = False
-
-while time.time() - start_time < timeout and not execution_done:
-    try:
-        msg = kc.get_iopub_msg(timeout=1)
-        if msg['parent_header'].get('msg_id') != msg_id:
-            continue
             
-        msg_type = msg['header']['msg_type']
-        content = msg['content']
-        
-        if msg_type == 'stream':
-            if content['name'] == 'stdout':
-                stdout_parts.append(content['text'])
-                print(content['text'], end='', flush=True)
-            elif content['name'] == 'stderr':
-                stderr_parts.append(content['text'])
-                print(content['text'], file=sys.stderr, end='', flush=True)
-        elif msg_type == 'execute_result':
-            result = content['data'].get('text/plain', '')
-            stdout_parts.append(result)
-            print(result, flush=True)
-        elif msg_type == 'error':
-            error_text = '\\n'.join(content['traceback'])
-            stderr_parts.append(error_text)
-            print(error_text, file=sys.stderr, flush=True)
-        elif msg_type == 'status' and content['execution_state'] == 'idle':
-            # Wait a bit more for any remaining messages
-            time.sleep(0.5)
-            execution_done = True
-    except Exception as e:
-        print(f"Error in message handling: {{str(e)}}", file=sys.stderr)
-        break
-
-# Ensure we capture all remaining messages
-while True:
-    try:
-        msg = kc.get_iopub_msg(timeout=0.5)
-        if msg['parent_header'].get('msg_id') != msg_id:
-            continue
-        
-        content = msg['content']
-        if msg['header']['msg_type'] == 'stream':
-            if content['name'] == 'stdout':
-                stdout_parts.append(content['text'])
+            # Wait for execution to complete
+            max_retries = 30  # 3 seconds
+            for _ in range(max_retries):
+                exit_code, _ = self.container.exec_run(['test', '-f', '/tmp/pyasco/done'])
+                if exit_code == 0:
+                    break
+                time.sleep(0.1)
             else:
-                stderr_parts.append(content['text'])
-    except:
-        break
-
-kc.stop_channels()
-
-# Print final outputs for capture
-if stdout_parts:
-    print(''.join(stdout_parts), flush=True)
-if stderr_parts:
-    print(''.join(stderr_parts), file=sys.stderr, flush=True)
-""".format(self.kernel_connection_file, temp_file)
+                return None, "Execution timeout"
             
-            exit_code, (stdout, stderr) = self.container.exec_run(
-                ['python', '-c', run_cmd],
-                demux=True
+            # Read results
+            exit_code, output = self.container.exec_run(
+                ['cat', '/tmp/pyasco/output.json']
             )
-
-            # Clean up the temporary file
-            self.container.exec_run(['rm', temp_file])
             
-            stdout_content = stdout.decode('utf-8').strip() if stdout else None
-            stderr_content = stderr.decode('utf-8').strip() if stderr else None
-            
-            return stdout_content, stderr_content
+            if exit_code != 0:
+                return None, "Failed to read output"
+                
+            result = json.loads(output.decode('utf-8'))
+            return result['stdout'], result['stderr']
             
         except Exception as e:
             return None, str(e)
