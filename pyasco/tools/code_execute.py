@@ -260,7 +260,7 @@ class CodeExecutor:
             # Execute using the existing kernel connection
             run_cmd = """
 from jupyter_client import BlockingKernelClient
-import json, sys
+import json, sys, time
 
 # Load the connection info
 with open(r'{}', 'r') as f:
@@ -282,7 +282,7 @@ start_time = time.time()
 
 while time.time() - start_time < timeout:
     try:
-        msg = kc.get_iopub_msg(timeout=1)
+        msg = kc.get_iopub_msg(timeout=5)
         if msg['parent_header'].get('msg_id') != msg_id:
             continue
             
