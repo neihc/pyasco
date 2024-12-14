@@ -115,27 +115,37 @@ class Agent:
         return "\n".join(skill_info)
 
     def _get_system_info(self, use_docker: bool = False, docker_image: str = None) -> str:
-        """Get current system information"""
+        """Get current system information including environment variables"""
         if use_docker:
             # Get system info from inside Docker container
             code = """
 import platform
+import os
+
+env_vars = '\\n'.join(f'- {k}={v}' for k, v in sorted(os.environ.items()))
 print(f'''System Information:
 - OS: {platform.system()} {platform.release()}
 - Python: {platform.python_version()}
 - CPU Architecture: {platform.machine()}
-- Execution Environment: Docker container using {docker_image}''')
+- Execution Environment: Docker container using {docker_image}
+
+Environment Variables:
+{env_vars}''')
 """.replace("{docker_image}", docker_image)
             stdout, _ = self.python_executor.execute(code)
             return stdout.strip()
         else:
             # Get host system info
             memory = psutil.virtual_memory()
+            env_vars = '\n'.join(f'- {k}={v}' for k, v in sorted(os.environ.items()))
             return f"""System Information:
 - OS: {platform.system()} {platform.release()}
 - Python: {platform.python_version()}
 - CPU Architecture: {platform.machine()}
-- Memory: {memory.total / (1024**3):.1f}GB total, {memory.available / (1024**3):.1f}GB available"""
+- Memory: {memory.total / (1024**3):.1f}GB total, {memory.available / (1024**3):.1f}GB available
+
+Environment Variables:
+{env_vars}"""
 
     def _initialize_chat(self) -> None:
         """Initialize chat with system prompt including available skills"""
