@@ -258,7 +258,8 @@ class CodeExecutor:
         """Execute code inside Docker container using jupyter console"""
         try:
             # Execute code directly through jupyter console
-            cmd = f"""echo "{code.replace('"', '\\"')}" | timeout 30s jupyter-console --existing {self.kernel_connection_file} --simple-prompt"""
+            escaped_code = code.replace('"', r'\"')
+            cmd = f'''echo "{escaped_code}" | timeout 30s jupyter-console --existing {self.kernel_connection_file} --simple-prompt'''
             try:
                 exit_code, (stdout, stderr) = self.container.exec_run(
                     ['bash', '-c', cmd],
