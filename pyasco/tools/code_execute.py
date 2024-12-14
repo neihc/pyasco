@@ -83,6 +83,21 @@ class CodeExecutor:
                 **container_options
             )
             
+            # Check and install IPython dependencies
+            check_cmd = "pip list | grep -E 'ipython|jupyter-client|jupyter-console'"
+            exit_code, output = self.container.exec_run(check_cmd, demux=True)
+            
+            if exit_code != 0:
+                print("Installing IPython dependencies in container...")
+                install_cmd = "pip install ipython jupyter-client jupyter-console"
+                self.container.exec_run(install_cmd)
+                print("IPython dependencies installed successfully")
+            
+            # Start IPython kernel in container
+            kernel_cmd = "ipython kernel &"
+            self.container.exec_run(kernel_cmd)
+            
+        # Use local kernel manager for both Docker and local modes
         self.km = jupyter_client.KernelManager(kernel_name=self.python_version)
         self.km.start_kernel()
         self.kc = self.km.client()
@@ -208,14 +223,31 @@ class CodeExecutor:
             return None, str(e)
 
     def _execute_in_docker(self, code: str) -> Tuple[Optional[str], Optional[str]]:
-        """Execute code inside a Docker container"""
+        """Execute code inside Docker container using IPython kernel"""
         try:
+            # Create a temporary file with the code
+            cmd = f"""cat << 'EOT' > /tmp/code.py
+{code}
+EOT"""
+            self.container.exec_run(['bash', '-c', cmd])
+            
+            # Execute using jupyter-console with simple prompt
+            exec_cmd = "jupyter-console --simple-prompt --existing -y /tmp/code.py"
             exit_code, (stdout, stderr) = self.container.exec_run(
-                [self.python_command, '-c', code],
+                ['bash', '-c', exec_cmd],
                 demux=True
             )
             
-            stdout = stdout.decode('utf-8') if stdout else None
+            if stdout:
+                # Clean up IPython output markers
+                output = stdout.decode('utf-8')
+                # Remove IPython prompts and continuation marks
+                cleaned = '\n'.join(
+                    line for line in output.split('\n')
+                    if not line.startswith(('In [', 'Out[', '   ...:', '   ...:'))
+                )
+                stdout = cleaned.strip()
+            
             stderr = stderr.decode('utf-8') if stderr else None
             
             if exit_code != 0 and not stderr:
