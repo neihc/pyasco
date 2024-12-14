@@ -277,23 +277,14 @@ class CodeExecutor:
             stderr_content = None
             
             if stdout:
-                # Filter out jupyter console noise and extract actual output
-                lines = stdout.decode('utf-8').splitlines()
+                # Skip header lines and extract actual output
+                lines = stdout.decode('utf-8').splitlines()[6:]  # Skip first 6 lines
                 output_lines = []
                 in_prompt_seen = False
                 
                 for line in lines:
                     stripped = line.strip()
-                    
-                    # Skip common noise lines
-                    if (line.startswith('Jupyter console') or 
-                        '[ZMQTerminalIPythonApp]' in line or
-                        'Type' in line or
-                        'IPython' in line or
-                        'Python' in line or
-                        'keeping kernel alive' in line or
-                        'Do you really want to exit' in line or
-                        stripped == ''):
+                    if stripped == '':
                         continue
                     
                     # If we see an input prompt, mark it and check for inline output
