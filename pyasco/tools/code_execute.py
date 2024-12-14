@@ -280,15 +280,24 @@ class CodeExecutor:
                 # Filter out jupyter console noise and extract actual output
                 lines = stdout.decode('utf-8').splitlines()
                 output_lines = []
+                capture_output = False
                 for line in lines:
                     # Skip jupyter console UI lines and prompts
                     if (line.startswith('Jupyter console') or 
                         '[ZMQTerminalIPythonApp]' in line or
+                        'Type' in line or
+                        'IPython' in line or
+                        'Python' in line or
+                        'keeping kernel alive' in line or
                         'In [' in line or 
                         'Out[' in line or
                         line.strip() == ''):
                         continue
-                    output_lines.append(line)
+                    if line.startswith('In [1]:'):
+                        capture_output = True
+                        continue
+                    if capture_output:
+                        output_lines.append(line.strip())
                 
                 if output_lines:
                     stdout_content = '\n'.join(output_lines) + '\n'
