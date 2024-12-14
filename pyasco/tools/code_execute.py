@@ -236,8 +236,11 @@ class CodeExecutor:
 EOT"""
             self.container.exec_run(['bash', '-c', cmd])
             
-            # Execute using jupyter console with simple prompt
-            cmd = f"""jupyter console --simple-prompt --existing -c "%run /tmp/code.py" --no-confirm-exit"""
+            # Execute using jupyter console with simple prompt and capture output
+            cmd = f"""jupyter console --simple-prompt --existing --no-confirm-exit << EOF
+%run /tmp/code.py
+exit
+EOF"""
             exit_code, (stdout, stderr) = self.container.exec_run(
                 ['bash', '-c', cmd],
                 demux=True
@@ -248,13 +251,30 @@ EOT"""
             stderr_content = None
             
             if stdout:
-                output = stdout.decode('utf-8')
-                parts = output.split('STDOUT_MARKER\n')
-                if len(parts) > 1:
-                    stdout_content = parts[1].split('STDERR_MARKER\n')[0].strip()
+                # Filter out jupyter console noise and extract actual output
+                lines = stdout.decode('utf-8').splitlines()
+                output_lines = []
+                for line in lines:
+                    # Skip jupyter console UI lines and prompts
+                    if (line.startswith('Jupyter console') or 
+                        '[ZMQTerminalIPythonApp]' in line or
+                        'In [' in line or 
+                        'Out[' in line or
+                        line.strip() == ''):
+                        continue
+                    output_lines.append(line)
+                
+                if output_lines:
+                    stdout_content = '\n'.join(output_lines) + '\n'
             
             if stderr:
-                stderr_content = stderr.decode('utf-8').strip()
+                stderr_str = stderr.decode('utf-8').strip()
+                # Filter out common warning messages
+                if not any(msg in stderr_str for msg in [
+                    '[ZMQTerminalIPythonApp]',
+                    'Unrecognized alias'
+                ]):
+                    stderr_content = stderr_str
             
             return stdout_content, stderr_content
             
