@@ -280,7 +280,7 @@ class CodeExecutor:
                 # Filter out jupyter console noise and extract actual output
                 lines = stdout.decode('utf-8').splitlines()
                 output_lines = []
-                last_in_prompt = False
+                in_prompt_seen = False
                 
                 for line in lines:
                     stripped = line.strip()
@@ -292,18 +292,20 @@ class CodeExecutor:
                         'IPython' in line or
                         'Python' in line or
                         'keeping kernel alive' in line or
+                        'Do you really want to exit' in line or
                         stripped == ''):
                         continue
-                        
-                    # Track if we just saw an input prompt
+                    
+                    # If we see an input prompt, mark it
                     if line.startswith('In ['):
-                        last_in_prompt = True
+                        in_prompt_seen = True
                         continue
-                        
-                    # If this line follows an input prompt and isn't empty, it's output
-                    if last_in_prompt and stripped:
-                        output_lines.append(stripped)
-                        last_in_prompt = False
+                    
+                    # Capture any non-empty line after we've seen an input prompt
+                    if in_prompt_seen and stripped:
+                        # If it's not another prompt
+                        if not stripped.startswith('In ['):
+                            output_lines.append(stripped)
                 
                 if output_lines:
                     stdout_content = '\n'.join(output_lines) + '\n'
