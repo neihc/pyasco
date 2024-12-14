@@ -257,7 +257,7 @@ class CodeExecutor:
             cmd = f'cat > {temp_file} << EOL\n{code}\nEOL'
             self.container.exec_run(['bash', '-c', cmd])
 
-            # Execute using the existing kernel connection
+            # Modified kernel execution script with better message handling
             run_cmd = """
 from jupyter_client import BlockingKernelClient
 import json, sys, time
@@ -277,12 +277,15 @@ with open('{}', 'r') as f:
     msg_id = kc.execute(code)
     
 # Get the results
-timeout = 300  # Five minute timeout for long-running code
+timeout = 300  # Five minute timeout
 start_time = time.time()
+stdout_parts = []
+stderr_parts = []
+execution_done = False
 
-while time.time() - start_time < timeout:
+while time.time() - start_time < timeout and not execution_done:
     try:
-        msg = kc.get_iopub_msg(timeout=5)
+        msg = kc.get_iopub_msg(timeout=1)
         if msg['parent_header'].get('msg_id') != msg_id:
             continue
             
@@ -291,19 +294,50 @@ while time.time() - start_time < timeout:
         
         if msg_type == 'stream':
             if content['name'] == 'stdout':
-                print(content['text'], end='')
+                stdout_parts.append(content['text'])
+                print(content['text'], end='', flush=True)
             elif content['name'] == 'stderr':
-                print(content['text'], file=sys.stderr, end='')
+                stderr_parts.append(content['text'])
+                print(content['text'], file=sys.stderr, end='', flush=True)
         elif msg_type == 'execute_result':
-            print(content['data'].get('text/plain', ''))
+            result = content['data'].get('text/plain', '')
+            stdout_parts.append(result)
+            print(result, flush=True)
         elif msg_type == 'error':
-            print('\\n'.join(content['traceback']), file=sys.stderr)
+            error_text = '\\n'.join(content['traceback'])
+            stderr_parts.append(error_text)
+            print(error_text, file=sys.stderr, flush=True)
         elif msg_type == 'status' and content['execution_state'] == 'idle':
-            break
+            # Wait a bit more for any remaining messages
+            time.sleep(0.5)
+            execution_done = True
+    except Exception as e:
+        print(f"Error in message handling: {{str(e)}}", file=sys.stderr)
+        break
+
+# Ensure we capture all remaining messages
+while True:
+    try:
+        msg = kc.get_iopub_msg(timeout=0.5)
+        if msg['parent_header'].get('msg_id') != msg_id:
+            continue
+        
+        content = msg['content']
+        if msg['header']['msg_type'] == 'stream':
+            if content['name'] == 'stdout':
+                stdout_parts.append(content['text'])
+            else:
+                stderr_parts.append(content['text'])
     except:
         break
-        
+
 kc.stop_channels()
+
+# Print final outputs for capture
+if stdout_parts:
+    print(''.join(stdout_parts), flush=True)
+if stderr_parts:
+    print(''.join(stderr_parts), file=sys.stderr, flush=True)
 """.format(self.kernel_connection_file, temp_file)
             
             exit_code, (stdout, stderr) = self.container.exec_run(
