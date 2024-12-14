@@ -97,24 +97,35 @@ class CodeExecutor:
             # Start IPython kernel in container and get connection file
             exit_code, output = self.container.exec_run(['pgrep', '-f', 'ipython.*kernel'])
             if exit_code != 0:
-                # Start kernel and capture connection file path
-                _, (stdout, _) = self.container.exec_run(
-                    ['ipython', 'kernel'], 
-                    demux=True
+                # Start kernel in background and get connection file
+                self.container.exec_run(
+                    ['bash', '-c', 'ipython kernel > /tmp/kernel_output.txt 2>&1 &']
                 )
-                # Parse connection file from output
-                kernel_output = stdout.decode('utf-8')
+                
+                # Wait for kernel to start and connection file to be created
+                max_retries = 10
                 connection_file = None
-                for line in kernel_output.splitlines():
-                    if 'kernel-' in line and '.json' in line:
-                        connection_file = line.strip()
+                for _ in range(max_retries):
+                    time.sleep(1)
+                    # Read the kernel output file
+                    _, (stdout, _) = self.container.exec_run(
+                        ['cat', '/tmp/kernel_output.txt'],
+                        demux=True
+                    )
+                    if stdout:
+                        kernel_output = stdout.decode('utf-8')
+                        for line in kernel_output.splitlines():
+                            if 'kernel-' in line and '.json' in line:
+                                connection_file = line.strip()
+                                break
+                    if connection_file:
                         break
+                
                 if not connection_file:
-                    raise RuntimeError("Failed to get kernel connection file")
+                    raise RuntimeError("Failed to get kernel connection file after multiple retries")
+                
                 # Store connection file for later use
                 self.kernel_connection_file = connection_file
-                # Give kernel time to start
-                time.sleep(2)
             
         if not self.use_docker:
             # Initialize kernel manager for local execution
@@ -251,15 +262,20 @@ class CodeExecutor:
 EOT"""
             self.container.exec_run(['bash', '-c', cmd])
             
-            # Execute using jupyter console with simple prompt and capture output
-            cmd = f"""jupyter console --simple-prompt --existing={self.kernel_connection_file} --no-confirm-exit << EOF
+            # Execute using jupyter console with timeout
+            cmd = f"""timeout 30s jupyter console --simple-prompt --existing={self.kernel_connection_file} --no-confirm-exit << EOF
 %run /tmp/code.py
 exit
 EOF"""
-            exit_code, (stdout, stderr) = self.container.exec_run(
-                ['bash', '-c', cmd],
-                demux=True
-            )
+            try:
+                exit_code, (stdout, stderr) = self.container.exec_run(
+                    ['bash', '-c', cmd],
+                    demux=True
+                )
+                if exit_code == 124:  # timeout exit code
+                    raise RuntimeError("Execution timed out after 30 seconds")
+            except Exception as e:
+                return None, f"Execution failed: {str(e)}"
             
             # Process output
             stdout_content = None
