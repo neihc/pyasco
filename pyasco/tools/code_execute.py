@@ -277,7 +277,10 @@ with open('{}', 'r') as f:
     msg_id = kc.execute(code)
     
 # Get the results
-while True:
+timeout = 300  # Five minute timeout for long-running code
+start_time = time.time()
+
+while time.time() - start_time < timeout:
     try:
         msg = kc.get_iopub_msg(timeout=1)
         if msg['parent_header'].get('msg_id') != msg_id:
