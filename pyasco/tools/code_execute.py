@@ -320,6 +320,8 @@ class CodeExecutor:
             
         if hasattr(self, 'container') and self.container is not None:
             try:
+                # Stop the container first
+                self.container.stop(timeout=5)
                 # Commit container state to new image
                 self.container.commit(
                     repository=self.docker_image.split(':')[0],
