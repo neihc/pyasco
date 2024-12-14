@@ -9,7 +9,7 @@ class CodeExecutor:
     """A class to execute Python and Bash code using Jupyter kernel or Docker"""
     
     def __init__(self, python_version: str = 'python3', use_docker: bool = False, 
-                 docker_image: str = 'python:3.9-slim', 
+                 docker_image: str = 'python:3.11-slim', 
                  docker_options: Optional[Dict] = None,
                  bash_shell: str = '/bin/bash',
                  python_command: str = 'python',
@@ -262,7 +262,7 @@ class CodeExecutor:
             self.container.exec_run(['bash', '-c', cmd])
 
             # Execute the file using jupyter console with %run magic
-            run_cmd = f'''echo "%run {temp_file}" | jupyter-console {self.kernel_connection_file} --simple-prompt'''
+            run_cmd = f'''cat {temp_file} | jupyter-console {self.kernel_connection_file} --simple-prompt'''
             
             exit_code, (stdout, stderr) = self.container.exec_run(
                 ['bash', '-c', run_cmd],
@@ -281,13 +281,9 @@ class CodeExecutor:
             if stdout:
                 # Process the output, skipping jupyter-console formatting
                 lines = stdout.decode('utf-8').splitlines()
-                output_lines = []
-                for line in lines[6:-2]:  # Skip header and footer lines
-                    if not line.strip().startswith(('In [', 'Out[')):
-                        if line.strip():
-                            output_lines.append(line.strip())
-                if output_lines:
-                    stdout_content = '\n'.join(output_lines) + '\n'
+                stdout_content = '\n'.join(lines[6:-2])
+                if stdout_content and stdout_content.startswith('In [1]:'):
+                    stdout_content = stdout_content[8:]
             
             if stderr:
                 stderr_str = stderr.decode('utf-8').strip()
