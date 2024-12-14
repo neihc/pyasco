@@ -277,8 +277,9 @@ class CodeExecutor:
             stderr_content = None
             
             if stdout:
-                # Skip header lines and extract actual output
-                lines = stdout.decode('utf-8').splitlines()[6:]  # Skip first 6 lines
+                # Skip header and footer lines and extract actual output
+                lines = stdout.decode('utf-8').splitlines()
+                lines = lines[6:-2]  # Skip first 6 and last 2 lines
                 output_lines = []
                 in_prompt_seen = False
                 
