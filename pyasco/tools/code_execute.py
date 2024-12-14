@@ -3,6 +3,7 @@ import queue
 import docker
 import jupyter_client
 import os
+import json
 from typing import Optional, Tuple, Dict
 
 class CodeExecutor:
