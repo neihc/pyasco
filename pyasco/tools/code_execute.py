@@ -289,15 +289,23 @@ class CodeExecutor:
                         'IPython' in line or
                         'Python' in line or
                         'keeping kernel alive' in line or
-                        'In [' in line or 
-                        'Out[' in line or
+                        line.startswith('In [') or 
+                        line.startswith('Out[') or
                         line.strip() == ''):
                         continue
+                    
+                    # Start capturing after first prompt
                     if line.startswith('In [1]:'):
                         capture_output = True
                         continue
+                        
                     if capture_output:
-                        output_lines.append(line.strip())
+                        # If line is just a number (like raw output), format it as if printed
+                        stripped = line.strip()
+                        if stripped.isdigit():
+                            output_lines.append(stripped)
+                        else:
+                            output_lines.append(stripped)
                 
                 if output_lines:
                     stdout_content = '\n'.join(output_lines) + '\n'
