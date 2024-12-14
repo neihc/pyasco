@@ -263,12 +263,8 @@ class CodeExecutor:
 EOT"""
             self.container.exec_run(['bash', '-c', cmd])
             
-            print(self.kernel_connection_file)
-            # Execute using jupyter console with timeout
-            cmd = f"""timeout 30s jupyter console --simple-prompt {self.kernel_connection_file} --no-confirm-exit << EOF
-%run /tmp/code.py
-exit
-EOF"""
+            # Execute using jupyter console with timeout and pipe
+            cmd = f"""echo "%run /tmp/code.py" | timeout 30s jupyter-console --existing {self.kernel_connection_file} --simple-prompt"""
             try:
                 exit_code, (stdout, stderr) = self.container.exec_run(
                     ['bash', '-c', cmd],
@@ -276,6 +272,8 @@ EOF"""
                 )
                 if exit_code == 124:  # timeout exit code
                     raise RuntimeError("Execution timed out after 30 seconds")
+                elif exit_code != 0:
+                    raise RuntimeError(f"jupyter-console failed with exit code {exit_code}")
             except Exception as e:
                 return None, f"Execution failed: {str(e)}"
             
