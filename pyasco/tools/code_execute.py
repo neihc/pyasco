@@ -280,32 +280,30 @@ class CodeExecutor:
                 # Filter out jupyter console noise and extract actual output
                 lines = stdout.decode('utf-8').splitlines()
                 output_lines = []
-                capture_output = False
+                last_in_prompt = False
+                
                 for line in lines:
-                    # Skip jupyter console UI lines and prompts
+                    stripped = line.strip()
+                    
+                    # Skip common noise lines
                     if (line.startswith('Jupyter console') or 
                         '[ZMQTerminalIPythonApp]' in line or
                         'Type' in line or
                         'IPython' in line or
                         'Python' in line or
                         'keeping kernel alive' in line or
-                        line.startswith('In [') or 
-                        line.startswith('Out[') or
-                        line.strip() == ''):
-                        continue
-                    
-                    # Start capturing after first prompt
-                    if line.startswith('In [1]:'):
-                        capture_output = True
+                        stripped == ''):
                         continue
                         
-                    if capture_output:
-                        # If line is just a number (like raw output), format it as if printed
-                        stripped = line.strip()
-                        if stripped.isdigit():
-                            output_lines.append(stripped)
-                        else:
-                            output_lines.append(stripped)
+                    # Track if we just saw an input prompt
+                    if line.startswith('In ['):
+                        last_in_prompt = True
+                        continue
+                        
+                    # If this line follows an input prompt and isn't empty, it's output
+                    if last_in_prompt and stripped:
+                        output_lines.append(stripped)
+                        last_in_prompt = False
                 
                 if output_lines:
                     stdout_content = '\n'.join(output_lines) + '\n'
