@@ -255,61 +255,43 @@ class CodeExecutor:
             return None, str(e)
 
     def _execute_in_docker(self, code: str) -> Tuple[Optional[str], Optional[str]]:
-        """Execute code inside Docker container using jupyter console"""
+        """Execute code inside Docker container using a temporary file and %run magic"""
         try:
-            # Execute code directly through jupyter console
-            escaped_code = code.replace('"', r'\"')
-            cmd = f'''echo "{escaped_code}" | timeout 30s jupyter-console {self.kernel_connection_file} --simple-prompt'''
-            import pdb; pdb.set_trace()
-            try:
-                exit_code, (stdout, stderr) = self.container.exec_run(
-                    ['bash', '-c', cmd],
-                    demux=True
-                )
-                if exit_code == 124:  # timeout exit code
-                    raise RuntimeError("Execution timed out after 30 seconds")
-                elif exit_code != 0:
-                    raise RuntimeError(f"jupyter-console failed with exit code {exit_code}")
-            except Exception as e:
-                return None, f"Execution failed: {str(e)}"
+            # Create a temporary file in the container
+            temp_file = '/tmp/code_to_run.py'
+            cmd = f'cat > {temp_file} << EOL\n{code}\nEOL'
+            self.container.exec_run(['bash', '-c', cmd])
+
+            # Execute the file using jupyter console with %run magic
+            run_cmd = f'''echo "%run {temp_file}" | timeout 30s jupyter-console {self.kernel_connection_file} --simple-prompt'''
             
-            # Process output
+            exit_code, (stdout, stderr) = self.container.exec_run(
+                ['bash', '-c', run_cmd],
+                demux=True
+            )
+
+            if exit_code == 124:  # timeout exit code
+                raise RuntimeError("Execution timed out after 30 seconds")
+            
+            # Clean up the temporary file
+            self.container.exec_run(['rm', temp_file])
+            
             stdout_content = None
             stderr_content = None
             
             if stdout:
-                # Skip header and footer lines and extract actual output
+                # Process the output, skipping jupyter-console formatting
                 lines = stdout.decode('utf-8').splitlines()
-                lines = lines[6:-2]  # Skip first 6 and last 2 lines
                 output_lines = []
-                in_prompt_seen = False
-                
-                for line in lines:
-                    stripped = line.strip()
-                    if stripped == '':
-                        continue
-                    
-                    # If we see an input prompt, mark it and check for inline output
-                    if 'In [' in line:
-                        in_prompt_seen = True
-                        # Check if there's output on the same line after the prompt
-                        parts = line.split(':', 1)
-                        if len(parts) > 1 and parts[1].strip():
-                            output_lines.append(parts[1].strip())
-                        continue
-                    
-                    # Capture any non-empty line after we've seen an input prompt
-                    if in_prompt_seen and stripped:
-                        # If it's not another prompt
-                        if 'In [' not in line:
-                            output_lines.append(stripped)
-                
+                for line in lines[6:-2]:  # Skip header and footer lines
+                    if not line.strip().startswith(('In [', 'Out[')):
+                        if line.strip():
+                            output_lines.append(line.strip())
                 if output_lines:
                     stdout_content = '\n'.join(output_lines) + '\n'
             
             if stderr:
                 stderr_str = stderr.decode('utf-8').strip()
-                # Filter out common warning messages
                 if not any(msg in stderr_str for msg in [
                     '[ZMQTerminalIPythonApp]',
                     'Unrecognized alias'
