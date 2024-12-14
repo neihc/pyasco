@@ -107,17 +107,13 @@ class CodeExecutor:
                 connection_file = None
                 for _ in range(max_retries):
                     time.sleep(1)
-                    # Read the kernel output file
+                    # Read the kernel output file and extract the connection file path
                     _, (stdout, _) = self.container.exec_run(
-                        ['cat', '/tmp/kernel_output.txt'],
+                        ['bash', '-c', 'ls -1 /root/.local/share/jupyter/runtime/kernel-*.json | head -n 1'],
                         demux=True
                     )
                     if stdout:
-                        kernel_output = stdout.decode('utf-8')
-                        for line in kernel_output.splitlines():
-                            if 'kernel-' in line and '.json' in line:
-                                connection_file = line.strip()
-                                break
+                        connection_file = stdout.decode('utf-8').strip()
                     if connection_file:
                         break
                 
@@ -267,7 +263,7 @@ from jupyter_client import BlockingKernelClient
 import json, sys
 
 # Load the connection info
-with open('{}', 'r') as f:
+with open(r'{}', 'r') as f:
     connection_info = json.load(f)
     
 # Create a client and connect to the running kernel
