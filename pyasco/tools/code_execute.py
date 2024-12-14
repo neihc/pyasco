@@ -83,21 +83,16 @@ class CodeExecutor:
                 **container_options
             )
             
-            # Check and install IPython dependencies
-            check_cmd = "pip list | grep -E 'ipython|jupyter-client|jupyter-console'"
-            exit_code, output = self.container.exec_run(check_cmd, demux=True)
+            # Install IPython if needed
+            print("Setting up IPython in container...")
+            setup_cmd = """
+            pip install ipython jupyter-client jupyter-console > /dev/null 2>&1
+            mkdir -p /root/.ipython/profile_default/
+            """
+            self.container.exec_run(['bash', '-c', setup_cmd])
+            print("IPython setup completed")
             
-            if exit_code != 0:
-                print("Installing IPython dependencies in container...")
-                install_cmd = "pip install ipython jupyter-client jupyter-console"
-                self.container.exec_run(install_cmd)
-                print("IPython dependencies installed successfully")
-            
-            # Start IPython kernel in container
-            kernel_cmd = "ipython kernel &"
-            self.container.exec_run(kernel_cmd)
-            
-        # Use local kernel manager for both Docker and local modes
+        # Initialize kernel manager based on execution mode
         self.km = jupyter_client.KernelManager(kernel_name=self.python_version)
         self.km.start_kernel()
         self.kc = self.km.client()
@@ -223,37 +218,67 @@ class CodeExecutor:
             return None, str(e)
 
     def _execute_in_docker(self, code: str) -> Tuple[Optional[str], Optional[str]]:
-        """Execute code inside Docker container using IPython kernel"""
+        """Execute code inside Docker container using IPython"""
         try:
-            # Create a temporary file with the code
-            cmd = f"""cat << 'EOT' > /tmp/code.py
-{code}
+            # Create and execute IPython script
+            script = f"""
+from IPython import start_ipython
+import io
+import sys
+
+# Capture output
+stdout = io.StringIO()
+stderr = io.StringIO()
+sys.stdout = stdout
+sys.stderr = stderr
+
+# Execute the code
+try:
+    exec('''{code}''')
+except Exception as e:
+    print(str(e), file=sys.stderr)
+
+# Get output
+output = stdout.getvalue()
+error = stderr.getvalue()
+
+# Print for capture
+print("STDOUT_MARKER")
+print(output)
+print("STDERR_MARKER")
+print(error)
+"""
+            # Write script to temp file in container
+            cmd = f"""cat << 'EOT' > /tmp/execute.py
+{script}
 EOT"""
             self.container.exec_run(['bash', '-c', cmd])
             
-            # Execute using jupyter-console with simple prompt
-            exec_cmd = "jupyter-console --simple-prompt --existing -y /tmp/code.py"
+            # Execute the script
             exit_code, (stdout, stderr) = self.container.exec_run(
-                ['bash', '-c', exec_cmd],
+                [self.python_command, '/tmp/execute.py'],
                 demux=True
             )
             
+            # Process output
             if stdout:
-                # Clean up IPython output markers
                 output = stdout.decode('utf-8')
-                # Remove IPython prompts and continuation marks
-                cleaned = '\n'.join(
-                    line for line in output.split('\n')
-                    if not line.startswith(('In [', 'Out[', '   ...:', '   ...:'))
-                )
-                stdout = cleaned.strip()
+                # Split output at markers
+                parts = output.split('STDOUT_MARKER\n')
+                if len(parts) > 1:
+                    stdout_content = parts[1].split('STDERR_MARKER\n')[0].strip()
+                else:
+                    stdout_content = None
+            else:
+                stdout_content = None
+                
+            if stderr:
+                stderr_content = stderr.decode('utf-8').strip()
+            else:
+                stderr_content = None
+                
+            return stdout_content, stderr_content
             
-            stderr = stderr.decode('utf-8') if stderr else None
-            
-            if exit_code != 0 and not stderr:
-                stderr = f"Exit code: {exit_code}"
-                    
-            return stdout, stderr
         except Exception as e:
             return None, str(e)
                     
