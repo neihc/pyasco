@@ -257,14 +257,8 @@ class CodeExecutor:
     def _execute_in_docker(self, code: str) -> Tuple[Optional[str], Optional[str]]:
         """Execute code inside Docker container using jupyter console"""
         try:
-            # Write code to temp file
-            cmd = f"""cat << 'EOT' > /tmp/code.py
-{code}
-EOT"""
-            self.container.exec_run(['bash', '-c', cmd])
-            
-            # Execute using jupyter console with timeout and pipe
-            cmd = f"""echo "%run /tmp/code.py" | timeout 30s jupyter-console --existing {self.kernel_connection_file} --simple-prompt"""
+            # Execute code directly through jupyter console
+            cmd = f"""echo "{code.replace('"', '\\"')}" | timeout 30s jupyter-console --existing {self.kernel_connection_file} --simple-prompt"""
             try:
                 exit_code, (stdout, stderr) = self.container.exec_run(
                     ['bash', '-c', cmd],
