@@ -40,3 +40,26 @@ def test_kernel_reset(executor):
     stdout, stderr = executor.execute('print(x)')
     assert stdout is None
     assert "NameError" in stderr
+
+@pytest.mark.docker
+def test_docker_kernel_state():
+    """Test that Docker IPython kernel maintains state between executions"""
+    executor = CodeExecutor(use_docker=True)
+    try:
+        # Define a variable
+        stdout, stderr = executor.execute('x = 42')
+        assert stderr is None
+        
+        # Variable should persist in next execution
+        stdout, stderr = executor.execute('print(x)')
+        assert stdout == "42\n"
+        assert stderr is None
+        
+        # Complex state should also persist
+        executor.execute('import math')
+        executor.execute('y = math.pi')
+        stdout, stderr = executor.execute('print(y)')
+        assert stdout.startswith('3.14')
+        assert stderr is None
+    finally:
+        executor.cleanup()
