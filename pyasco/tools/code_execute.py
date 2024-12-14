@@ -297,15 +297,19 @@ class CodeExecutor:
                         stripped == ''):
                         continue
                     
-                    # If we see an input prompt, mark it
-                    if line.startswith('In ['):
+                    # If we see an input prompt, mark it and check for inline output
+                    if 'In [' in line:
                         in_prompt_seen = True
+                        # Check if there's output on the same line after the prompt
+                        parts = line.split(':', 1)
+                        if len(parts) > 1 and parts[1].strip():
+                            output_lines.append(parts[1].strip())
                         continue
                     
                     # Capture any non-empty line after we've seen an input prompt
                     if in_prompt_seen and stripped:
                         # If it's not another prompt
-                        if not stripped.startswith('In ['):
+                        if 'In [' not in line:
                             output_lines.append(stripped)
                 
                 if output_lines:
