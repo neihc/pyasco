@@ -94,10 +94,25 @@ class CodeExecutor:
                 self.container.exec_run(['bash', '-c', setup_cmd])
                 print("Jupyter console setup completed")
             
-            # Start IPython kernel in container if not running
+            # Start IPython kernel in container and get connection file
             exit_code, output = self.container.exec_run(['pgrep', '-f', 'ipython.*kernel'])
             if exit_code != 0:
-                self.container.exec_run(['ipython', 'kernel'], detach=True)
+                # Start kernel and capture connection file path
+                _, (stdout, _) = self.container.exec_run(
+                    ['ipython', 'kernel'], 
+                    demux=True
+                )
+                # Parse connection file from output
+                kernel_output = stdout.decode('utf-8')
+                connection_file = None
+                for line in kernel_output.splitlines():
+                    if 'kernel-' in line and '.json' in line:
+                        connection_file = line.strip()
+                        break
+                if not connection_file:
+                    raise RuntimeError("Failed to get kernel connection file")
+                # Store connection file for later use
+                self.kernel_connection_file = connection_file
                 # Give kernel time to start
                 time.sleep(2)
             
@@ -237,7 +252,7 @@ EOT"""
             self.container.exec_run(['bash', '-c', cmd])
             
             # Execute using jupyter console with simple prompt and capture output
-            cmd = f"""jupyter console --simple-prompt --existing --no-confirm-exit << EOF
+            cmd = f"""jupyter console --simple-prompt --existing={self.kernel_connection_file} --no-confirm-exit << EOF
 %run /tmp/code.py
 exit
 EOF"""
