@@ -117,7 +117,6 @@ class CodeExecutor:
                         for line in kernel_output.splitlines():
                             if 'kernel-' in line and '.json' in line:
                                 connection_file = line.strip()
-                                print(connection_file)
                                 break
                     if connection_file:
                         break
@@ -263,7 +262,7 @@ class CodeExecutor:
             self.container.exec_run(['bash', '-c', cmd])
 
             # Execute the file using jupyter console with %run magic
-            run_cmd = f'''echo "%run {temp_file}" | timeout 30s jupyter-console {self.kernel_connection_file} --simple-prompt'''
+            run_cmd = f'''echo "%run {temp_file}" | jupyter-console {self.kernel_connection_file} --simple-prompt'''
             
             exit_code, (stdout, stderr) = self.container.exec_run(
                 ['bash', '-c', run_cmd],
