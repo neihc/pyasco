@@ -83,16 +83,16 @@ class CodeExecutor:
                 **container_options
             )
             
-            # Check if IPython is installed, if not install it
-            exit_code, output = self.container.exec_run(['which', 'ipython'])
+            # Check if jupyter console is installed, if not install it
+            exit_code, output = self.container.exec_run(['which', 'jupyter-console'])
             if exit_code != 0:
-                print("Setting up IPython in container...")
+                print("Setting up Jupyter console in container...")
                 setup_cmd = """
-                pip install ipython > /dev/null 2>&1
+                pip install jupyter-console ipykernel > /dev/null 2>&1
                 mkdir -p /root/.ipython/profile_default/
                 """
                 self.container.exec_run(['bash', '-c', setup_cmd])
-                print("IPython setup completed")
+                print("Jupyter console setup completed")
             
             # Start IPython kernel in container if not running
             exit_code, output = self.container.exec_run(['pgrep', '-f', 'ipython.*kernel'])
@@ -228,29 +228,18 @@ class CodeExecutor:
             return None, str(e)
 
     def _execute_in_docker(self, code: str) -> Tuple[Optional[str], Optional[str]]:
-        """Execute code inside Docker container using IPython kernel"""
+        """Execute code inside Docker container using jupyter console"""
         try:
-            # Create a temporary Python script that uses IPython's existing kernel
-            script = f"""
-from IPython import get_ipython
-ipython = get_ipython()
-result = ipython.run_cell('''{code}''')
-if result.error_before_exec or result.error_in_exec:
-    print("ERROR_MARKER")
-    if result.error_before_exec:
-        print(str(result.error_before_exec))
-    if result.error_in_exec:
-        print(str(result.error_in_exec))
-"""
-            # Write script to temp file in container
-            cmd = f"""cat << 'EOT' > /tmp/execute.py
-{script}
+            # Write code to temp file
+            cmd = f"""cat << 'EOT' > /tmp/code.py
+{code}
 EOT"""
             self.container.exec_run(['bash', '-c', cmd])
             
-            # Execute using IPython in the same kernel
+            # Execute using jupyter console with simple prompt
+            cmd = f"""jupyter console --simple-prompt --existing -c "%run /tmp/code.py" --no-confirm-exit"""
             exit_code, (stdout, stderr) = self.container.exec_run(
-                ['ipython', '-c', '%run /tmp/execute.py'],
+                ['bash', '-c', cmd],
                 demux=True
             )
             
