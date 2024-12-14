@@ -232,33 +232,15 @@ class CodeExecutor:
         try:
             # Create a temporary Python script that uses IPython's existing kernel
             script = f"""
-import io
-import sys
 from IPython import get_ipython
-
-# Capture output
-stdout = io.StringIO()
-stderr = io.StringIO()
-old_stdout, old_stderr = sys.stdout, sys.stderr
-sys.stdout = stdout
-sys.stderr = stderr
-
-try:
-    # Get IPython instance and execute code
-    ipython = get_ipython()
-    ipython.run_cell('''{code}''')
-except Exception as e:
-    print(str(e), file=sys.stderr)
-finally:
-    # Restore original stdout/stderr
-    sys.stdout, sys.stderr = old_stdout, old_stderr
-    # Get captured output
-    output = stdout.getvalue()
-    error = stderr.getvalue()
-    print("STDOUT_MARKER")
-    print(output)
-    print("STDERR_MARKER")
-    print(error)
+ipython = get_ipython()
+result = ipython.run_cell('''{code}''')
+if result.error_before_exec or result.error_in_exec:
+    print("ERROR_MARKER")
+    if result.error_before_exec:
+        print(str(result.error_before_exec))
+    if result.error_in_exec:
+        print(str(result.error_in_exec))
 """
             # Write script to temp file in container
             cmd = f"""cat << 'EOT' > /tmp/execute.py
@@ -266,9 +248,9 @@ finally:
 EOT"""
             self.container.exec_run(['bash', '-c', cmd])
             
-            # Execute using IPython
+            # Execute using IPython in the same kernel
             exit_code, (stdout, stderr) = self.container.exec_run(
-                ['ipython', '/tmp/execute.py'],
+                ['ipython', '-c', '%run /tmp/execute.py'],
                 demux=True
             )
             
