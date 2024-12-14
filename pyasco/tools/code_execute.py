@@ -283,6 +283,7 @@ class CodeExecutor:
                 in_prompt_seen = False
                 
                 for line in lines:
+                    import pdb; pdb.set_trace()
                     stripped = line.strip()
                     
                     # Skip common noise lines
