@@ -320,31 +320,42 @@ while True:
             return None, str(e)
                     
     def cleanup(self):
-        """Cleanup the kernel, client and Docker resources properly"""
-        if hasattr(self, 'kc') and self.kc is not None:
+        """Cleanup all resources properly"""
+        # Clean up Jupyter kernel resources
+        if not self.use_docker:
+            if hasattr(self, 'kc'):
+                try:
+                    self.kc.stop_channels()
+                    self.kc = None
+                except:
+                    pass
+                
+            if hasattr(self, 'km'):
+                try:
+                    self.km.shutdown_kernel(now=True)
+                    self.km = None
+                except:
+                    pass
+        
+        # Clean up Docker resources
+        if self.use_docker and hasattr(self, 'container'):
             try:
-                self.kc.stop_channels()
-            except Exception as e:
-                pass  # Ignore errors
-            self.kc = None
-            
-        if hasattr(self, 'km') and self.km is not None:
-            try:
-                self.km.shutdown_kernel(now=True)
-            except Exception as e:
-                pass  # Ignore errors
-            self.km = None
-            
-        if hasattr(self, 'container') and self.container is not None:
-            try:
-                # Stop the container first
-                self.container.stop(timeout=5)
-                # Commit container state to new image
+                # Kill the Python server process
+                self.container.exec_run(
+                    ["pkill", "-f", "python /tmp/server.py"]
+                )
+                
+                # Stop the container
+                self.container.stop(timeout=2)
+                
+                # Save container state
                 self.container.commit(
                     repository=self.docker_image.split(':')[0],
                     tag='latest_state'
                 )
+                
+                # Remove container
                 self.container.remove(force=True)
-            except Exception as e:
-                pass  # Ignore errors
-            self.container = None
+                self.container = None
+            except:
+                pass
