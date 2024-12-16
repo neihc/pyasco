@@ -170,25 +170,14 @@ while True:
 
     def reset(self):
         """Reset the current kernel"""
-        # Properly cleanup old client and kernel
-        if hasattr(self, 'kc'):
-            try:
-                self.kc.stop_channels()
-            except:
-                pass
-
-        if hasattr(self, 'km'):
-            try:
-                self.km.shutdown_kernel(now=True)
-            except:
-                pass
-
-        # Create fresh kernel manager and client
-        self.km = jupyter_client.KernelManager(kernel_name=self.python_version)
-        self.km.start_kernel()
-        self.kc = self.km.client()
-        self.kc.start_channels()
-        self.kc.wait_for_ready()
+        self.cleanup()
+        if not self.use_docker:
+            # Create fresh kernel manager and client
+            self.km = jupyter_client.KernelManager(kernel_name=self.python_version)
+            self.km.start_kernel()
+            self.kc = self.km.client()
+            self.kc.start_channels()
+            self.kc.wait_for_ready()
 
     def execute(self, code: str, language: str = 'python') -> Tuple[Optional[str], Optional[str]]:
         """
@@ -214,36 +203,27 @@ while True:
             
     def _execute_local(self, code: str) -> Tuple[Optional[str], Optional[str]]:
         """Execute code in local Jupyter kernel"""
-        msg_id = self.kc.execute(code)
-        
-        # Collect the outputs
-        stdout = []
-        stderr = []
+        self.kc.execute(code)
+        stdout, stderr = [], []
         
         while True:
             try:
                 msg = self.kc.get_iopub_msg(timeout=1)
-                msg_type = msg['header']['msg_type']
                 content = msg['content']
                 
-                if msg_type == 'stream':
+                if msg['header']['msg_type'] == 'stream':
                     if content['name'] == 'stdout':
                         stdout.append(content['text'])
-                    elif content['name'] == 'stderr':
+                    else:
                         stderr.append(content['text'])
-                        
-                elif msg_type == 'execute_result':
+                elif msg['header']['msg_type'] == 'execute_result':
                     stdout.append(str(content['data'].get('text/plain', '')))
-                    
-                elif msg_type == 'error':
+                elif msg['header']['msg_type'] == 'error':
                     stderr.append('\n'.join(content['traceback']))
-                    
             except queue.Empty:
                 break
-
                 
-        return (''.join(stdout) if stdout else None, 
-                ''.join(stderr) if stderr else None)
+        return (''.join(stdout) or None, ''.join(stderr) or None)
 
     def _execute_bash_local(self, code: str) -> Tuple[Optional[str], Optional[str]]:
         """Execute bash code locally"""
@@ -288,34 +268,23 @@ while True:
     def _execute_in_docker(self, code: str) -> Tuple[Optional[str], Optional[str]]:
         """Execute code inside Docker container using persistent Python process"""
         try:
-            # Clean up any old files
             self.container.exec_run(['rm', '-f', '/tmp/pyasco/output.json', '/tmp/pyasco/done'])
+            self.container.exec_run(['bash', '-c', f'cat > /tmp/pyasco/input.py << EOL\n{code}\nEOL'])
             
-            # Write code to input file
-            cmd = f'cat > /tmp/pyasco/input.py << EOL\n{code}\nEOL'
-            self.container.exec_run(['bash', '-c', cmd])
-            
-            # Wait for execution to complete
-            max_retries = 30  # 3 seconds
-            for _ in range(max_retries):
-                exit_code, _ = self.container.exec_run(['test', '-f', '/tmp/pyasco/done'])
-                if exit_code == 0:
+            # Wait up to 3 seconds for execution
+            for _ in range(30):
+                if self.container.exec_run(['test', '-f', '/tmp/pyasco/done']).exit_code == 0:
                     break
                 time.sleep(0.1)
             else:
                 return None, "Execution timeout"
             
-            # Read results
-            exit_code, output = self.container.exec_run(
-                ['cat', '/tmp/pyasco/output.json']
-            )
-            
-            if exit_code != 0:
+            output = self.container.exec_run(['cat', '/tmp/pyasco/output.json'])
+            if output.exit_code != 0:
                 return None, "Failed to read output"
                 
-            result = json.loads(output.decode('utf-8'))
+            result = json.loads(output.output.decode('utf-8'))
             return result['stdout'], result['stderr']
-            
         except Exception as e:
             return None, str(e)
                     
