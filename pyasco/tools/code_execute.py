@@ -153,8 +153,11 @@ while True:
     
     time.sleep(0.1)
 """
-            # Write server code to container
-            self.container.exec_run(['bash', '-c', f'cat > /tmp/server.py << EOL\n{python_server}\nEOL'])
+            # Copy server code to container
+            server_path = os.path.join(os.path.dirname(__file__), 'python_server.py')
+            with open(server_path, 'r') as f:
+                server_code = f.read()
+            self.container.exec_run(['bash', '-c', f'cat > /tmp/server.py << EOL\n{server_code}\nEOL'])
             
             # Start Python server process
             self.container.exec_run(['python', '/tmp/server.py'], detach=True)
