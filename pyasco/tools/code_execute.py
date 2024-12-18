@@ -117,9 +117,60 @@ class CodeExecutor:
             self.kc.wait_for_ready()
 
     def reset(self):
-        """Reset the current kernel"""
+        """Reset the current kernel or container"""
         self.cleanup()
-        if not self.use_docker:
+        if self.use_docker:
+            # Reinitialize Docker container
+            container_image = self.docker_image
+            # Try to use saved state image if it exists
+            try:
+                saved_image = f"{self.docker_image.split(':')[0]}:latest_state"
+                self.docker_client.images.get(saved_image)
+                container_image = saved_image
+            except docker.errors.ImageNotFound:
+                pass
+
+            # Load environment variables if env_file exists
+            environment = {}
+            if self.env_file and os.path.exists(self.env_file):
+                with open(self.env_file) as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#'):
+                            key, value = line.split('=', 1)
+                            environment[key.strip()] = value.strip()
+
+            # Prepare container options
+            container_options = {
+                'command': ['tail', '-f', '/dev/null'],
+                'detach': True,
+                'environment': environment
+            }
+            
+            # Add specific Docker options
+            if 'mem_limit' in self.docker_options:
+                container_options['mem_limit'] = self.docker_options['mem_limit']
+            if 'cpu_count' in self.docker_options:
+                container_options['cpu_count'] = self.docker_options['cpu_count']
+            if 'volumes' in self.docker_options:
+                container_options['volumes'] = self.docker_options['volumes']
+
+            # Create new container
+            self.container = self.docker_client.containers.run(
+                container_image,
+                **container_options
+            )
+
+            # Set up container environment
+            self.container.exec_run(['mkdir', '-p', '/tmp/pyasco'])
+            
+            # Copy and start Python server
+            server_path = os.path.join(os.path.dirname(__file__), 'python_server.py')
+            with open(server_path, 'r') as f:
+                server_code = f.read()
+            self.container.exec_run(['bash', '-c', f'cat > /tmp/server.py << EOL\n{server_code}\nEOL'])
+            self.container.exec_run(['python', '/tmp/server.py'], detach=True)
+        else:
             # Create fresh kernel manager and client
             self.km = jupyter_client.KernelManager(kernel_name=self.python_version)
             self.km.start_kernel()
