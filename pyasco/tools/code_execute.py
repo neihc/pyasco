@@ -219,8 +219,8 @@ class CodeExecutor:
             self.container.exec_run(['rm', '-f', '/tmp/pyasco/output.json', '/tmp/pyasco/done'])
             self.container.exec_run(['bash', '-c', f'cat > /tmp/pyasco/input.py << EOL\n{code}\nEOL'])
             
-            # Wait up to 3 seconds for execution
-            for _ in range(30):
+            # Wait up to 1200 seconds for execution
+            for _ in range(1200):
                 if self.container.exec_run(['test', '-f', '/tmp/pyasco/done']).exit_code == 0:
                     break
                 time.sleep(0.1)
