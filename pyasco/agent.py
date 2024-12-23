@@ -45,6 +45,7 @@ class Agent:
         
         I will provide you with relevant skills that might help with the user's request. 
         You can choose to use them or provide your own solution based on what's most appropriate.
+        Your solution will be execute without considering, so do not provide two solutions with same purpose at once
         """).strip()
 
     def __init__(self, config: Config):
@@ -261,7 +262,7 @@ Environment Variables:
                 skills_info += f"### {skill.name}\n"
                 skills_info += f"**Usage:** {skill.usage}\n"
                 skills_info += f"**Note:** This skill's functions are now loaded and ready to use. "
-                skills_info += f"Only redefine them if you need to modify their behavior.\n"
+                skills_info += f"Do not redefine them unless you need to modify their behavior.\n"
                 skills_info += f"**Code:**\n```python\n{skill_code}\n```\n\n"
             user_input += skills_info
 
@@ -626,7 +627,7 @@ Environment Variables:
     
     def get_follow_up(self, results: List[str]) -> str:
         """Generate follow-up message based on execution results"""
-        return f"""I executed that code. This was the output::\n{chr(10).join(results)}\nWhat does this output mean (I can't understand it, please help) / what code needs to be run next (if anything, or are we done)? I can't replace any placeholders. In case we're done, let make sure your previous answer didn't have any mistake, if yes do not suggest any unnecessary code"""
+        return f"""I executed that code. This was the output::\n{chr(10).join(results)}\nWhat does this output mean (I can't understand it, please help) / what code needs to be run next (if anything, or are we done)? I can't replace any placeholders. In case we're done, let make sure your previous answer didn't have any mistake, if wer're done do not place code inside your answer"""
     
     def should_stop_follow_up(self, loop_count: int, max_loops: int = 5) -> bool:
         """Check if we should stop follow-up iterations"""
