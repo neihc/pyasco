@@ -38,11 +38,12 @@ while True:
                 
                 stdout, stderr = execute_code(code)
                 
-                with open('/tmp/pyasco/output.json', 'w') as f:
+                # Ensure proper JSON encoding of special characters
+                with open('/tmp/pyasco/output.json', 'w', encoding='utf-8') as f:
                     json.dump({
                         'stdout': stdout,
                         'stderr': stderr
-                    }, f)
+                    }, f, ensure_ascii=False)
                 
                 # Signal completion
                 with open('/tmp/pyasco/done', 'w') as f:
