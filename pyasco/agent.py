@@ -304,6 +304,7 @@ Environment Variables:
             for snippet in params.get("snippets", []):
                 if snippet.language:
                     language = snippet.language.lower()
+                    stdout = stderr = None
                     if 'python' in language or 'bash' in language:
                         stdout, stderr = self.python_executor.execute(snippet.content, language)
                     if stdout or stderr:
