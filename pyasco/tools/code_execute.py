@@ -92,28 +92,32 @@ class CodeExecutor:
                 return self._execute_local(code)
             
     def _execute_local(self, code: str) -> Tuple[Optional[str], Optional[str]]:
-        """Execute code in local Jupyter kernel"""
-        self.kc.execute(code)
-        stdout, stderr = [], []
+        """Execute code in __main__ context"""
+        import tempfile
+        import subprocess
+        import json
+        import os
+
+        runner_path = os.path.join(os.path.dirname(__file__), 'code_runner.py')
         
-        while True:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py') as f:
+            f.write(code)
+            f.flush()
+            
             try:
-                msg = self.kc.get_iopub_msg(timeout=1)
-                content = msg['content']
+                result = subprocess.run(
+                    [self.python_command, runner_path, f.name],
+                    capture_output=True,
+                    text=True
+                )
                 
-                if msg['header']['msg_type'] == 'stream':
-                    if content['name'] == 'stdout':
-                        stdout.append(content['text'])
-                    else:
-                        stderr.append(content['text'])
-                elif msg['header']['msg_type'] == 'execute_result':
-                    stdout.append(str(content['data'].get('text/plain', '')))
-                elif msg['header']['msg_type'] == 'error':
-                    stderr.append('\n'.join(content['traceback']))
-            except queue.Empty:
-                break
-                
-        return (''.join(stdout) or None, ''.join(stderr) or None)
+                if result.returncode == 0:
+                    output = json.loads(result.stdout)
+                    return (output.get('stdout'), output.get('stderr'))
+                else:
+                    return None, result.stderr
+            except Exception as e:
+                return None, str(e)
 
     def _execute_bash_local(self, code: str) -> Tuple[Optional[str], Optional[str]]:
         """Execute bash code locally"""

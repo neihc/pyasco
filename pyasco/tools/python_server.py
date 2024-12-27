@@ -66,3 +66,63 @@ while True:
             f.write(f"{str(e)}\n")
     
     time.sleep(0.1)
+import os
+import json
+import time
+from pathlib import Path
+
+def run_code_in_main():
+    """Monitor for input files and execute code in __main__ context"""
+    base_dir = Path("/tmp/pyasco")
+    input_file = base_dir / "input.py"
+    output_file = base_dir / "output.json"
+    done_file = base_dir / "done"
+    
+    while True:
+        if input_file.exists():
+            try:
+                # Create a new module to run the code
+                import types
+                import sys
+                module = types.ModuleType("__main__")
+                module.__file__ = "__main__.py"
+                sys.modules["__main__"] = module
+                
+                # Capture output
+                import io
+                import contextlib
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        code = input_file.read_text()
+                        exec(code, module.__dict__)
+                    except Exception as e:
+                        import traceback
+                        stderr.write(traceback.format_exc())
+                
+                # Write output
+                output = {
+                    "stdout": stdout.getvalue() or None,
+                    "stderr": stderr.getvalue() or None
+                }
+                
+                output_file.write_text(json.dumps(output))
+                
+            except Exception as e:
+                output = {
+                    "stdout": None,
+                    "stderr": str(e)
+                }
+                output_file.write_text(json.dumps(output))
+            
+            finally:
+                # Cleanup
+                input_file.unlink(missing_ok=True)
+                done_file.touch()
+                
+        time.sleep(0.1)
+
+if __name__ == "__main__":
+    run_code_in_main()
