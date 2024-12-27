@@ -220,16 +220,14 @@ class CodeExecutor:
             **container_options
         )
         
-        # Check if jupyter console is installed, if not install it
-        exit_code, output = self.container.exec_run(['which', 'jupyter-console'])
-        if exit_code != 0:
-            print("Setting up Jupyter console in container...")
-            setup_cmd = """
-            pip install jupyter-console ipykernel > /dev/null 2>&1
-            mkdir -p /root/.ipython/profile_default/
-            """
-            self.container.exec_run(['bash', '-c', setup_cmd])
-            print("Jupyter console setup completed")
+        # Install required packages
+        print("Setting up IPython kernel in container...")
+        setup_cmd = """
+        pip install jupyter_client ipykernel > /dev/null 2>&1
+        python -m ipykernel install --user
+        """
+        self.container.exec_run(['bash', '-c', setup_cmd])
+        print("IPython kernel setup completed")
         
         # Create directories for communication
         self.container.exec_run(['mkdir', '-p', '/tmp/pyasco'])
