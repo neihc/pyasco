@@ -97,7 +97,7 @@ class TelegramInterface:
         except ValueError as e:
             await update.message.reply_text(f"❌ Error improving skill: {str(e)}")
 
-    def _should_process_message(self, message) -> bool:
+    def _should_process_message(self, message, context: ContextTypes.DEFAULT_TYPE) -> bool:
         """
         Check if the message should be processed based on:
         - Message is a reply to bot's message
@@ -109,11 +109,12 @@ class TelegramInterface:
             
         # Check if message mentions the bot
         if message.entities:
+            bot_username = context.bot.username
             for entity in message.entities:
                 if entity.type == "mention":
                     # Extract mention text
                     mention = message.text[entity.offset:entity.offset + entity.length]
-                    if mention.lower() == f"@{message.bot.username.lower()}":
+                    if mention.lower() == f"@{bot_username.lower()}":
                         return True
         
         return False
@@ -125,7 +126,7 @@ class TelegramInterface:
             return
             
         # Only process messages that are replies or mentions
-        if not self._should_process_message(update.message):
+        if not self._should_process_message(update.message, context):
             return
             
         user_id = update.effective_user.id
