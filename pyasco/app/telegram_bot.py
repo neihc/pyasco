@@ -141,7 +141,7 @@ def parse_args():
                        help="Path to skills directory")
     return parser.parse_args()
 
-async def main():
+def main():
     """Main function to run the Telegram bot"""
     args = parse_args()
     
@@ -170,12 +170,12 @@ async def main():
     try:
         # Start the bot
         print("Bot started successfully!")
-        await application.run_polling()
+        application.run_polling()
     finally:
         agent.cleanup()
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        main()
     except KeyboardInterrupt:
         print("\nBot stopped by user")
