@@ -39,8 +39,9 @@ file_handler.setFormatter(logging.Formatter(
 logger.addHandler(file_handler)
 
 class TelegramInterface:
-    def __init__(self, agent: Agent):
+    def __init__(self, agent: Agent, auto: bool = False):
         self.agent = agent
+        self.auto = auto
         self.user_states: Dict[int, dict] = {}
         self.code_to_image = CodeToImage()
         self.code_extractor = CodeSnippetExtractor()
@@ -187,7 +188,7 @@ class TelegramInterface:
         try:
             # Get response from agent
             logger.debug("Sending request to agent")
-            response = self.agent.get_response(user_input, stream=False)
+            response = self.agent.ask(user_input, stream=False, auto=self.auto)
             logger.debug(f"Got response from agent: {response.content}")
             
             # Prepare all messages to send
@@ -279,6 +280,8 @@ def parse_args():
     parser.add_argument("--log-level", default="INFO",
                        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
                        help="Set the logging level")
+    parser.add_argument("--auto", action="store_true",
+                       help="Automatically execute code without asking user")
     return parser.parse_args()
 
 def main():
@@ -306,7 +309,7 @@ def main():
     # Initialize agent
     logger.info("Initializing agent...")
     agent = Agent(config)
-    interface = TelegramInterface(agent)
+    interface = TelegramInterface(agent, auto=args.auto)
     
     # Initialize bot
     logger.info("Setting up Telegram bot...")
