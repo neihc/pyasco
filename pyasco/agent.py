@@ -328,12 +328,6 @@ Environment Variables:
             Dict: Assistant response with content and tools, and stream if enabled
         """
         response = self.get_response(new_input, stream=stream)
-        
-        if stream:
-            return response
-        
-        # For non-streaming responses, append to history and print
-        self.messages.append(response)
         return response
         
     def confirm(self) -> List | None:
