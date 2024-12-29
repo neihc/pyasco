@@ -169,13 +169,9 @@ async def main():
     
     try:
         # Start the bot
-        await application.initialize()
-        await application.start()
         print("Bot started successfully!")
-        await application.start_polling()
-        await application.idle()
+        await application.run_polling()
     finally:
-        await application.stop()
         agent.cleanup()
 
 if __name__ == "__main__":
