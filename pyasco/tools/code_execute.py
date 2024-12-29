@@ -304,9 +304,23 @@ class CodeExecutor:
                     
                     # Remove old state image if it exists
                     try:
-                        old_image = self.docker_client.images.get(f"{self.docker_image.split(':')[0]}:latest_state")
-                        self.docker_client.images.remove(old_image.id, force=True)
-                        print("Removed old state image")
+                        old_image_tag = f"{self.docker_image.split(':')[0]}:latest_state"
+                        old_image = self.docker_client.images.get(old_image_tag)
+                        
+                        # Find and stop containers using this image
+                        for container in self.docker_client.containers.list(all=True):
+                            if container.image.id == old_image.id:
+                                print(f"Stopping container {container.short_id} using old image")
+                                container.stop(timeout=2)
+                                container.remove(force=True)
+                        
+                        # Now try to remove the image
+                        try:
+                            self.docker_client.images.remove(old_image.id, force=True)
+                            print("Removed old state image")
+                        except docker.errors.APIError as e:
+                            print(f"Warning: Could not remove old image: {str(e)}")
+                            # Continue anyway since we'll overwrite the tag
                     except docker.errors.ImageNotFound:
                         pass
 
