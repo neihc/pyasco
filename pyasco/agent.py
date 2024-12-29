@@ -315,20 +315,47 @@ Environment Variables:
         
         return []
     
-    def ask(self, new_input: str, stream: bool = False) -> Dict:
+    def ask(self, new_input: str, stream: bool = False, auto: bool = False, max_loops: int = 5) -> Dict:
         """
         Get response for new input and append to message history.
-        Does not execute any tools.
         
         Args:
             new_input: The user's message
             stream: Whether to stream the response
+            auto: Whether to automatically confirm and follow up until completion
+            max_loops: Maximum number of auto-confirmation loops (default: 5)
             
         Returns:
             Dict: Assistant response with content and tools, and stream if enabled
         """
         response = self.get_response(new_input, stream=stream)
-        return response
+        
+        if not auto:
+            return response
+            
+        # Auto-confirmation loop
+        loop_count = 0
+        current_response = response
+        
+        while True:
+            if not self.should_ask_user():
+                break
+                
+            if self.should_stop_follow_up(loop_count, max_loops):
+                self.logger.warning(f"Reached maximum follow-up iterations ({max_loops})")
+                break
+                
+            # Execute tools and get results
+            results = self.confirm()
+            if not results:
+                break
+                
+            # Get follow-up response
+            follow_up = self.get_follow_up(results)
+            current_response = self.get_response(follow_up, stream=stream)
+            loop_count += 1
+            
+        return current_response
         
     def confirm(self) -> List | None:
         """
