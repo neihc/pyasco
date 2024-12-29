@@ -48,18 +48,18 @@ def test_docker_kernel_state():
     try:
         # Define a variable
         stdout, stderr = executor.execute('x = 42')
-        assert stderr is None
+        assert stderr == ''
         
         # Variable should persist in next execution
         stdout, stderr = executor.execute('print(x)')
         assert stdout == "42\n"
-        assert stderr is None
+        assert stderr == ''
         
         # Complex state should also persist
         executor.execute('import math')
         executor.execute('y = math.pi')
         stdout, stderr = executor.execute('print(y)')
         assert stdout.startswith('3.14')
-        assert stderr is None
+        assert stderr == ''
     finally:
         executor.cleanup()

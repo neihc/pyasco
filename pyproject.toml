@@ -22,6 +22,7 @@ dependencies = [
     "prompt-toolkit>=3.0.48",
     "pyyaml>=6.0.2",
     "psutil>=6.1.0",
+    "python-telegram-bot>=21.9",
 ]
 
 [project.scripts]
