@@ -267,35 +267,73 @@ class CodeExecutor:
                 try:
                     self.kc.stop_channels()
                     self.kc = None
-                except:
-                    pass
+                except Exception as e:
+                    print(f"Error stopping kernel channels: {str(e)}")
                 
             if hasattr(self, 'km'):
                 try:
                     self.km.shutdown_kernel(now=True)
                     self.km = None
-                except:
-                    pass
+                except Exception as e:
+                    print(f"Error shutting down kernel: {str(e)}")
         
         # Clean up Docker resources
         if self.use_docker and hasattr(self, 'container'):
             try:
+                print("Starting Docker cleanup...")
+                
+                # Check if container is still running
+                container_info = self.container.attrs
+                print(f"Container status: {container_info['State']['Status']}")
+                
                 # Kill the Python server process
-                self.container.exec_run(
-                    ["pkill", "-f", "python /tmp/server.py"]
-                )
+                try:
+                    kill_result = self.container.exec_run(
+                        ["pkill", "-f", "python /tmp/server.py"]
+                    )
+                    print(f"Kill server result: {kill_result.output.decode()}")
+                except Exception as e:
+                    print(f"Error killing Python server: {str(e)}")
                 
                 # Stop the container
-                self.container.stop(timeout=2)
+                try:
+                    print("Stopping container...")
+                    self.container.stop(timeout=2)
+                    print("Container stopped successfully")
+                except Exception as e:
+                    print(f"Error stopping container: {str(e)}")
                 
-                # Save container state
-                self.container.commit(
-                    repository=self.docker_image.split(':')[0],
-                    tag='latest_state'
-                )
+                # Save container state with detailed logging
+                try:
+                    print("Attempting to save container state...")
+                    # List installed packages before commit
+                    pip_list = self.container.exec_run("pip list")
+                    print(f"Installed packages before commit:\n{pip_list.output.decode()}")
+                    
+                    commit_result = self.container.commit(
+                        repository=self.docker_image.split(':')[0],
+                        tag='latest_state'
+                    )
+                    print(f"Container state saved successfully. New image ID: {commit_result.id}")
+                    
+                    # Verify the commit worked
+                    try:
+                        saved_image = self.docker_client.images.get(f"{self.docker_image.split(':')[0]}:latest_state")
+                        print(f"Verified saved image exists: {saved_image.id}")
+                    except Exception as e:
+                        print(f"Error verifying saved image: {str(e)}")
+                    
+                except Exception as e:
+                    print(f"Failed to save container state: {str(e)}")
                 
                 # Remove container
-                self.container.remove(force=True)
-                self.container = None
-            except:
-                pass
+                try:
+                    print("Removing container...")
+                    self.container.remove(force=True)
+                    print("Container removed successfully")
+                    self.container = None
+                except Exception as e:
+                    print(f"Error removing container: {str(e)}")
+                    
+            except Exception as e:
+                print(f"Unexpected error during Docker cleanup: {str(e)}")
