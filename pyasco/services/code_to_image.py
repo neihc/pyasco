@@ -12,7 +12,9 @@ class CodeToImage:
     def __init__(self):
         # Default font settings
         font_path = os.path.join(os.path.dirname(__file__), "../../assets/fonts/JetBrainsMono-Regular.ttf")
-        self.font_size = 14
+        self.font_size = 16  # Increased base font size
+        self.dpi = 300  # High DPI for better quality
+        self.scale_factor = 2  # Scale factor for dimensions
         try:
             self.font = ImageFont.truetype(font_path, self.font_size)
         except:
@@ -60,12 +62,16 @@ class CodeToImage:
         # Split code into lines
         lines = code.split('\n')
         
-        # Calculate image dimensions
+        # Calculate base image dimensions
         max_line_width = max(self.font.getlength(line) for line in lines)
-        width = int(max_line_width + 2 * self.padding)
-        height = len(lines) * self.line_height + 2 * self.padding
+        base_width = int(max_line_width + 2 * self.padding)
+        base_height = len(lines) * self.line_height + 2 * self.padding
         
-        # Create image
+        # Scale dimensions
+        width = base_width * self.scale_factor
+        height = base_height * self.scale_factor
+        
+        # Create high-res image
         img = Image.new('RGB', (width, height), self.bg_color)
         draw = ImageDraw.Draw(img)
         
@@ -101,9 +107,9 @@ class CodeToImage:
                 draw.text((x, y), text, font=self.font, fill=color)
                 x += self.font.getlength(text)
             
-        # Convert to bytes
+        # Convert to bytes with high DPI
         img_byte_arr = io.BytesIO()
-        img.save(img_byte_arr, format='PNG')
+        img.save(img_byte_arr, format='PNG', dpi=(self.dpi, self.dpi), optimize=True, quality=95)
         img_byte_arr.seek(0)
         
         return img_byte_arr.getvalue()
