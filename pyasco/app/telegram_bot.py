@@ -97,10 +97,35 @@ class TelegramInterface:
         except ValueError as e:
             await update.message.reply_text(f"❌ Error improving skill: {str(e)}")
 
+    def _should_process_message(self, message) -> bool:
+        """
+        Check if the message should be processed based on:
+        - Message is a reply to bot's message
+        - Message mentions the bot
+        """
+        # Check if message is a reply to bot's message
+        if message.reply_to_message and message.reply_to_message.from_user.is_bot:
+            return True
+            
+        # Check if message mentions the bot
+        if message.entities:
+            for entity in message.entities:
+                if entity.type == "mention":
+                    # Extract mention text
+                    mention = message.text[entity.offset:entity.offset + entity.length]
+                    if mention.lower() == f"@{message.bot.username.lower()}":
+                        return True
+        
+        return False
+
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle incoming messages."""
         if not update or not update.message:
             logger.error("Received update with no message")
+            return
+            
+        # Only process messages that are replies or mentions
+        if not self._should_process_message(update.message):
             return
             
         user_id = update.effective_user.id
