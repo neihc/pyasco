@@ -171,10 +171,15 @@ async def main():
         # Start the bot
         await application.initialize()
         await application.start()
-        await application.run_polling()
+        print("Bot started successfully!")
+        await application.updater.start_polling()
+        await application.updater.idle()
     finally:
         await application.stop()
         agent.cleanup()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nBot stopped by user")
