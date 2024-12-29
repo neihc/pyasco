@@ -19,7 +19,7 @@ import logging
 from typing import Optional, Dict
 import asyncio
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler
 from rich.console import Console
 from ..config import ConfigManager
 from ..agent import Agent
@@ -118,6 +118,44 @@ class TelegramInterface:
                         return True
         
         return False
+
+    async def handle_button(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle button callbacks"""
+        query = update.callback_query
+        await query.answer()  # Acknowledge the button click
+        
+        if query.data == "execute_yes":
+            # Execute the pending code
+            results = self.agent.confirm()
+            if results:
+                output_message = "Execution Output:\n"
+                for result in results:
+                    output_message += f"{result}\n"
+                await query.message.reply_text(output_message)
+                
+                # Handle follow-up if needed
+                follow_up = self.agent.get_follow_up(results)
+                if follow_up:
+                    response = self.agent.get_response(follow_up, stream=False)
+                    await query.message.reply_text(response.content)
+                    
+                    # If there's more code to execute, ask again
+                    if self.agent.should_ask_user():
+                        reply_markup = {
+                            'inline_keyboard': [[
+                                {'text': 'Yes ✅', 'callback_data': 'execute_yes'},
+                                {'text': 'No ❌', 'callback_data': 'execute_no'}
+                            ]]
+                        }
+                        await query.message.reply_text(
+                            "Do you want to execute the code snippets?",
+                            reply_markup=reply_markup
+                        )
+        
+        elif query.data == "execute_no":
+            # Cancel the execution
+            response = self.agent.get_response("no", stream=False)
+            await query.message.reply_text(response.content)
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle incoming messages."""
@@ -239,6 +277,7 @@ def main():
     application.add_handler(CommandHandler("improve", interface.improve_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,
                                          interface.handle_message))
+    application.add_handler(CallbackQueryHandler(interface.handle_button))
     
     try:
         logger.info("Starting bot polling...")
