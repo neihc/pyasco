@@ -302,17 +302,25 @@ class CodeExecutor:
                     pip_list = self.container.exec_run("pip list")
                     print(f"Installed packages before commit:\n{pip_list.output.decode()}")
                     
-                    # Export and import to flatten layers
-                    print("Flattening container layers...")
-                    image_tar = self.container.export()
-                    imported_image = self.docker_client.images.load(image_tar)[0]
-                    
-                    # Tag the flattened image
-                    imported_image.tag(
+                    # Remove old state image if it exists
+                    try:
+                        old_image = self.docker_client.images.get(f"{self.docker_image.split(':')[0]}:latest_state")
+                        self.docker_client.images.remove(old_image.id, force=True)
+                        print("Removed old state image")
+                    except docker.errors.ImageNotFound:
+                        pass
+
+                    # Commit new state
+                    commit_result = self.container.commit(
                         repository=self.docker_image.split(':')[0],
-                        tag='latest_state'
+                        tag='latest_state',
+                        conf={
+                            'Cmd': ['tail', '-f', '/dev/null'],
+                            'WorkingDir': '/',
+                            'Entrypoint': None
+                        }
                     )
-                    print(f"Container state saved successfully. New image ID: {imported_image.id}")
+                    print(f"Container state saved successfully. New image ID: {commit_result.id}")
                     
                     # Verify the save worked
                     try:
