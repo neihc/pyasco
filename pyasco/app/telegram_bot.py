@@ -104,9 +104,14 @@ class TelegramInterface:
     def _should_process_message(self, message, context: ContextTypes.DEFAULT_TYPE) -> bool:
         """
         Check if the message should be processed based on:
+        - Message is a direct message (DM)
         - Message is a reply to bot's message
         - Message mentions the bot
         """
+        # Check if message is a DM (chat type is 'private')
+        if message.chat.type == "private":
+            return True
+            
         # Check if message is a reply to bot's message
         if message.reply_to_message and message.reply_to_message.from_user.is_bot:
             return True
