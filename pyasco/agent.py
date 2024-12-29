@@ -87,7 +87,7 @@ class Agent:
             env_file=config.docker.env_file
         )
         
-        self.custom_instructions = None  # Can be set later if needed
+        self.custom_instructions = config.custom_instructions or ""
         self.model = config.llm.model
         # Configure LLM client
         from .services.llm import configure_client
@@ -649,7 +649,7 @@ Environment Variables:
     
     def get_follow_up(self, results: List[str]) -> str:
         """Generate follow-up message based on execution results"""
-        return f"""I executed that code. This was the output::\n{chr(10).join(results)}\nWhat does this output mean (I can't understand it, please help) / what code needs to be run next (if anything, or are we done)? I can't replace any placeholders. In case we're done, let make sure your previous answer didn't have any mistake, if wer're done do not place code inside your answer"""
+        return f"""I executed that code. This was the output::\n{chr(10).join(results)}\nWhat code needs to be run next (if anything, or are we done)? I can't replace any placeholders. In case we're done, let based on the output and give me the answer I need (remember I can't read the output). Do not response code in your final answer"""
     
     def should_stop_follow_up(self, loop_count: int, max_loops: int = 5) -> bool:
         """Check if we should stop follow-up iterations"""
