@@ -280,126 +280,17 @@ class CodeExecutor:
         # Clean up Docker resources
         if self.use_docker and hasattr(self, 'container'):
             try:
-                print("Starting Docker cleanup...")
-                
-                # Check if container is still running
-                container_info = self.container.attrs
-                print(f"Container status: {container_info['State']['Status']}")
-                
-                # Kill the Python server process using ps and kill
-                try:
-                    # Find PID of Python server
-                    ps_result = self.container.exec_run(
-                        ["ps", "-ef", "|", "grep", "python /tmp/server.py", "|", "grep", "-v", "grep"]
-                    )
-                    if ps_result.exit_code == 0:
-                        pid = ps_result.output.decode().split()[1]
-                        kill_result = self.container.exec_run(["kill", pid])
-                        print(f"Kill server result: {kill_result.output.decode()}")
-                except Exception as e:
-                    print(f"Error killing Python server: {str(e)}")
-                
-                # Verify container exists and is in proper state
-                try:
-                    self.container.reload()
-                    if self.container.status not in ['running', 'created']:
-                        print(f"Container in invalid state: {self.container.status}")
-                        return
-                except docker.errors.NotFound:
-                    print("Container no longer exists, skipping state save")
-                    return
-                except Exception as e:
-                    print(f"Error checking container state: {str(e)}")
-                    return
-
-                # Save container state with detailed logging
-                print(f"Container {self.container.short_id} is in state: {self.container.status}")
-                try:
-                    print("Attempting to save container state...")
-                    
-                    # Remove old state image if it exists
-                    old_image_tag = f"{self.docker_image.split(':')[0]}:latest_state"
-                    try:
-                        old_image = self.docker_client.images.get(old_image_tag)
-                        
-                        # Find and stop containers using this image
-                        for container in self.docker_client.containers.list(all=True):
-                            if container.image.id == old_image.id:
-                                print(f"Stopping container {container.short_id} using old image")
-                                try:
-                                    container.stop(timeout=2)
-                                    container.remove(force=True)
-                                except docker.errors.NotFound:
-                                    print(f"Container {container.short_id} already removed")
-                                except Exception as e:
-                                    print(f"Error cleaning up container {container.short_id}: {str(e)}")
-                        
-                        # Now try to remove the image
-                        try:
-                            self.docker_client.images.remove(old_image.id, force=True)
-                            print("Removed old state image")
-                        except docker.errors.APIError as e:
-                            print(f"Warning: Could not remove old image: {str(e)}")
-                    except docker.errors.ImageNotFound:
-                        print("No existing state image found")
-
-                    # Start container if not running
-                    if self.container.status == 'created':
-                        print("Starting container before commit...")
-                        self.container.start()
-                        time.sleep(2)  # Give it time to start
-                        self.container.reload()
-                    
-                    if self.container.status != 'running':
-                        raise Exception(f"Container in invalid state for commit: {self.container.status}")
-
-                    # Commit new state
-                    print("Committing container state...")
-                    commit_result = self.container.commit(
+                # Save current state as new image
+                if self.container.status == 'running':
+                    self.container.commit(
                         repository=self.docker_image.split(':')[0],
-                        tag='latest_state',
-                        conf={
-                            'Cmd': ['tail', '-f', '/dev/null'],
-                            'WorkingDir': '/',
-                            'Entrypoint': None
-                        }
+                        tag='latest_state'
                     )
-                    print(f"Container state saved successfully. New image ID: {commit_result.id}")
                     
-                    # Verify the save worked
-                    try:
-                        saved_image = self.docker_client.images.get(f"{self.docker_image.split(':')[0]}:latest_state")
-                        print(f"Verified saved image exists: {saved_image.id}")
-                    except Exception as e:
-                        print(f"Error verifying saved image: {str(e)}")
-                        
-                except Exception as e:
-                    print(f"Failed to save container state: {str(e)}")
-
-                # Commit state before stopping if container exists
-                try:
-                    self.container.reload()
-                    if self.container.status == 'running':
-                        print("Committing final container state...")
-                        self.container.commit(
-                            repository=self.docker_image.split(':')[0],
-                            tag='latest_state'
-                        )
-                        print("Final state committed successfully")
-                        
-                        print("Stopping container...")
-                        self.container.stop(timeout=2)
-                        print("Container stopped successfully")
-                        
-                        print("Removing container...")
-                        self.container.remove(force=True)
-                        print("Container removed successfully")
-                except docker.errors.NotFound:
-                    print("Container already removed")
-                except Exception as e:
-                    print(f"Error during container cleanup: {str(e)}")
-                finally:
+                    # Stop and remove container
+                    self.container.stop(timeout=2)
+                    self.container.remove(force=True)
                     self.container = None
                     
             except Exception as e:
-                print(f"Unexpected error during Docker cleanup: {str(e)}")
+                print(f"Error during Docker cleanup: {str(e)}")
