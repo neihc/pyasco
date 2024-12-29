@@ -162,13 +162,29 @@ class CodeExecutor:
     def _execute_in_docker(self, code: str) -> Tuple[Optional[str], Optional[str]]:
         """Execute code inside Docker container using persistent Python process"""
         try:
-            self.container.exec_run(['rm', '-f', '/tmp/pyasco/output.json', '/tmp/pyasco/done'])
-            self.container.exec_run(['bash', '-c', f'cat > /tmp/pyasco/input.py << EOL\n{code}\nEOL'])
+            # Generate unique execution ID
+            exec_id = str(time.time())
             
-            # Wait up to 1200 seconds for execution
+            # Clean up old files and verify cleanup
+            cleanup_result = self.container.exec_run(
+                ['rm', '-f', '/tmp/pyasco/output.json', '/tmp/pyasco/done', '/tmp/pyasco/exec_id'])
+            if cleanup_result.exit_code != 0:
+                return None, "Failed to cleanup previous execution files"
+
+            # Write execution ID and code
+            write_result = self.container.exec_run(['bash', '-c', 
+                f'echo "{exec_id}" > /tmp/pyasco/exec_id && '
+                f'cat > /tmp/pyasco/input.py << EOL\n{code}\nEOL'])
+            if write_result.exit_code != 0:
+                return None, "Failed to write input files"
+            
+            # Wait for execution
             for _ in range(1200):
                 if self.container.exec_run(['test', '-f', '/tmp/pyasco/done']).exit_code == 0:
-                    break
+                    # Verify it's our execution
+                    id_check = self.container.exec_run(['cat', '/tmp/pyasco/exec_id'])
+                    if id_check.exit_code == 0 and id_check.output.decode('utf-8').strip() == exec_id:
+                        break
                 time.sleep(0.1)
             else:
                 return None, "Execution timeout"
