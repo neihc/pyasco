@@ -302,13 +302,19 @@ class CodeExecutor:
                     pip_list = self.container.exec_run("pip list")
                     print(f"Installed packages before commit:\n{pip_list.output.decode()}")
                     
-                    commit_result = self.container.commit(
+                    # Export and import to flatten layers
+                    print("Flattening container layers...")
+                    image_tar = self.container.export()
+                    imported_image = self.docker_client.images.load(image_tar)[0]
+                    
+                    # Tag the flattened image
+                    imported_image.tag(
                         repository=self.docker_image.split(':')[0],
                         tag='latest_state'
                     )
-                    print(f"Container state saved successfully. New image ID: {commit_result.id}")
+                    print(f"Container state saved successfully. New image ID: {imported_image.id}")
                     
-                    # Verify the commit worked
+                    # Verify the save worked
                     try:
                         saved_image = self.docker_client.images.get(f"{self.docker_image.split(':')[0]}:latest_state")
                         print(f"Verified saved image exists: {saved_image.id}")
@@ -325,22 +331,6 @@ class CodeExecutor:
                     print("Container stopped successfully")
                 except Exception as e:
                     print(f"Error stopping container: {str(e)}")
-                    
-                    commit_result = self.container.commit(
-                        repository=self.docker_image.split(':')[0],
-                        tag='latest_state'
-                    )
-                    print(f"Container state saved successfully. New image ID: {commit_result.id}")
-                    
-                    # Verify the commit worked
-                    try:
-                        saved_image = self.docker_client.images.get(f"{self.docker_image.split(':')[0]}:latest_state")
-                        print(f"Verified saved image exists: {saved_image.id}")
-                    except Exception as e:
-                        print(f"Error verifying saved image: {str(e)}")
-                    
-                except Exception as e:
-                    print(f"Failed to save container state: {str(e)}")
                 
                 # Remove container
                 try:
