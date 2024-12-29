@@ -3,9 +3,7 @@ import io
 from typing import Optional
 import os
 from pygments import highlight
-from pygments.formatters import formatter
 from pygments.lexers import PythonLexer, BashLexer, TextLexer
-from pygments.formatters import formatter
 from pygments.token import Token
 
 class CodeToImage:
