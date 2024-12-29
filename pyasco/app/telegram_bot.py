@@ -99,8 +99,12 @@ class TelegramInterface:
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle incoming messages."""
+        if not update or not update.message:
+            logger.error("Received update with no message")
+            return
+            
         user_id = update.effective_user.id
-        logger.debug(f"Received message from user {user_id}: {update.message.text}")
+        logger.info(f"Received message from user {user_id}: {update.message.text}")
         
         if user_id not in self.user_states:
             logger.debug(f"Initializing state for new user {user_id}")
@@ -192,7 +196,12 @@ def main():
     
     # Initialize bot
     logger.info("Setting up Telegram bot...")
-    application = Application.builder().token(args.telegram_token).build()
+    try:
+        application = Application.builder().token(args.telegram_token).build()
+        logger.info("Successfully created Telegram application")
+    except Exception as e:
+        logger.error(f"Failed to create Telegram application: {str(e)}", exc_info=True)
+        return
     
     # Add handlers
     logger.info("Registering command handlers...")
@@ -208,7 +217,7 @@ def main():
     try:
         logger.info("Starting bot polling...")
         print("Bot started successfully!")
-        application.run_polling()
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
     except Exception as e:
         logger.error(f"Failed to start bot: {str(e)}", exc_info=True)
     finally:
