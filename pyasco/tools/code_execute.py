@@ -376,16 +376,24 @@ class CodeExecutor:
                 except Exception as e:
                     print(f"Failed to save container state: {str(e)}")
 
-                # Stop and remove the container if it still exists
+                # Commit state before stopping if container exists
                 try:
                     self.container.reload()
-                    print("Stopping container...")
-                    self.container.stop(timeout=2)
-                    print("Container stopped successfully")
-                    
-                    print("Removing container...")
-                    self.container.remove(force=True)
-                    print("Container removed successfully")
+                    if self.container.status == 'running':
+                        print("Committing final container state...")
+                        self.container.commit(
+                            repository=self.docker_image.split(':')[0],
+                            tag='latest_state'
+                        )
+                        print("Final state committed successfully")
+                        
+                        print("Stopping container...")
+                        self.container.stop(timeout=2)
+                        print("Container stopped successfully")
+                        
+                        print("Removing container...")
+                        self.container.remove(force=True)
+                        print("Container removed successfully")
                 except docker.errors.NotFound:
                     print("Container already removed")
                 except Exception as e:
