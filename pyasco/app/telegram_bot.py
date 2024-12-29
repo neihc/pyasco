@@ -41,9 +41,14 @@ class TelegramInterface:
         self.agent = agent
         self.user_states: Dict[int, dict] = {}
     
+    async def ping_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Simple command to test if bot is responsive"""
+        logger.debug("Received ping command")
+        await update.message.reply_text("Pong! 🏓")
+
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Send a message when the command /start is issued."""
-        print('recevie start')
+        logger.debug("Received start command")
         welcome_message = (
             "Welcome to PyAsco Bot! 🤖\n\n"
             "I can help you with Python programming and execute code.\n\n"
@@ -95,16 +100,22 @@ class TelegramInterface:
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle incoming messages."""
         user_id = update.effective_user.id
+        logger.debug(f"Received message from user {user_id}: {update.message.text}")
+        
         if user_id not in self.user_states:
+            logger.debug(f"Initializing state for new user {user_id}")
             self.user_states[user_id] = {}
 
         user_input = update.message.text
         try:
             # Get response from agent
+            logger.debug("Sending request to agent")
             response = self.agent.get_response(user_input, stream=False)
+            logger.debug(f"Got response from agent: {response.content}")
             
             # Send the response
             await update.message.reply_text(response.content)
+            logger.debug("Sent response to user")
 
             # If there's code to execute, ask user
             if self.agent.should_ask_user():
@@ -153,20 +164,32 @@ def main():
     """Main function to run the Telegram bot"""
     args = parse_args()
     
+    if not args.telegram_token:
+        logger.error("Telegram token is missing!")
+        return
+        
+    logger.info(f"Starting bot with configuration from: {args.config if args.config else 'command line arguments'}")
+    
     # Load configuration
     if args.config and os.path.exists(args.config):
+        logger.info(f"Loading configuration from {args.config}")
         config = ConfigManager.load_from_yaml(args.config)
     else:
+        logger.info("Loading configuration from command line arguments")
         config = ConfigManager.from_args(args)
     
     # Initialize agent
+    logger.info("Initializing agent...")
     agent = Agent(config)
     interface = TelegramInterface(agent)
     
     # Initialize bot
+    logger.info("Setting up Telegram bot...")
     application = Application.builder().token(args.telegram_token).build()
     
     # Add handlers
+    logger.info("Registering command handlers...")
+    application.add_handler(CommandHandler("ping", interface.ping_command))
     application.add_handler(CommandHandler("start", interface.start_command))
     application.add_handler(CommandHandler("help", interface.help_command))
     application.add_handler(CommandHandler("reset", interface.reset_command))
@@ -176,10 +199,13 @@ def main():
                                          interface.handle_message))
     
     try:
-        # Start the bot
+        logger.info("Starting bot polling...")
         print("Bot started successfully!")
         application.run_polling()
+    except Exception as e:
+        logger.error(f"Failed to start bot: {str(e)}", exc_info=True)
     finally:
+        logger.info("Cleaning up...")
         agent.cleanup()
 
 if __name__ == "__main__":
