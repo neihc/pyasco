@@ -26,8 +26,15 @@ from ..agent import Agent
 from ..logger_config import setup_logger
 
 # Setup logging
-logger = setup_logger(__name__)
+logger = setup_logger(__name__, log_file='telegram_bot.log', level=logging.INFO)
 console = Console()
+
+# Add file handler for detailed logging
+file_handler = logging.FileHandler('telegram_bot.log')
+file_handler.setFormatter(logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+))
+logger.addHandler(file_handler)
 
 class TelegramInterface:
     def __init__(self, agent: Agent):
@@ -112,7 +119,7 @@ class TelegramInterface:
                 )
 
         except Exception as e:
-            logger.error(f"Error processing message: {str(e)}")
+            logger.error(f"Error processing message from user {user_id}: {str(e)}", exc_info=True)
             await update.message.reply_text(
                 "Sorry, I encountered an error while processing your message. 😕"
             )
