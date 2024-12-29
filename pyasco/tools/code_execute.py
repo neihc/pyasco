@@ -295,6 +295,29 @@ class CodeExecutor:
                 except Exception as e:
                     print(f"Error killing Python server: {str(e)}")
                 
+                # Save container state with detailed logging
+                try:
+                    print("Attempting to save container state...")
+                    # List installed packages before commit
+                    pip_list = self.container.exec_run("pip list")
+                    print(f"Installed packages before commit:\n{pip_list.output.decode()}")
+                    
+                    commit_result = self.container.commit(
+                        repository=self.docker_image.split(':')[0],
+                        tag='latest_state'
+                    )
+                    print(f"Container state saved successfully. New image ID: {commit_result.id}")
+                    
+                    # Verify the commit worked
+                    try:
+                        saved_image = self.docker_client.images.get(f"{self.docker_image.split(':')[0]}:latest_state")
+                        print(f"Verified saved image exists: {saved_image.id}")
+                    except Exception as e:
+                        print(f"Error verifying saved image: {str(e)}")
+                        
+                except Exception as e:
+                    print(f"Failed to save container state: {str(e)}")
+
                 # Stop the container
                 try:
                     print("Stopping container...")
@@ -302,13 +325,6 @@ class CodeExecutor:
                     print("Container stopped successfully")
                 except Exception as e:
                     print(f"Error stopping container: {str(e)}")
-                
-                # Save container state with detailed logging
-                try:
-                    print("Attempting to save container state...")
-                    # List installed packages before commit
-                    pip_list = self.container.exec_run("pip list")
-                    print(f"Installed packages before commit:\n{pip_list.output.decode()}")
                     
                     commit_result = self.container.commit(
                         repository=self.docker_image.split(':')[0],
