@@ -25,8 +25,8 @@ from ..config import ConfigManager
 from ..agent import Agent
 from ..logger_config import setup_logger
 
-# Setup logging
-logger = setup_logger(__name__, log_file='telegram_bot.log', level=logging.INFO)
+# Setup logging will be done in main() after parsing args
+logger = logging.getLogger(__name__)
 console = Console()
 
 # Add file handler for detailed logging
@@ -158,11 +158,18 @@ def parse_args():
                        help="LLM model to use for responses")
     parser.add_argument("--skills-path", default="skills",
                        help="Path to skills directory")
+    parser.add_argument("--log-level", default="INFO",
+                       choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                       help="Set the logging level")
     return parser.parse_args()
 
 def main():
     """Main function to run the Telegram bot"""
     args = parse_args()
+    
+    # Setup logging with command line specified level
+    log_level = getattr(logging, args.log_level.upper())
+    logger = setup_logger(__name__, log_file='telegram_bot.log', level=log_level)
     
     if not args.telegram_token:
         logger.error("Telegram token is missing!")
