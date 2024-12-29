@@ -269,28 +269,44 @@ class CodeExecutor:
                     self.kc = None
                 except Exception as e:
                     print(f"Error stopping kernel channels: {str(e)}")
-                
+            
             if hasattr(self, 'km'):
                 try:
                     self.km.shutdown_kernel(now=True)
                     self.km = None
                 except Exception as e:
                     print(f"Error shutting down kernel: {str(e)}")
-        
+    
         # Clean up Docker resources
         if self.use_docker and hasattr(self, 'container'):
             try:
-                # Save current state as new image
-                if self.container.status == 'running':
-                    self.container.commit(
-                        repository=self.docker_image.split(':')[0],
-                        tag='latest_state'
-                    )
-                    
-                    # Stop and remove container
+                # Reload container state
+                self.container.reload()
+                
+                container_status = self.container.status
+                print(f"Container status during cleanup: {container_status}")
+                
+                if container_status == 'running':
+                    try:
+                        self.container.commit(
+                            repository=self.docker_image.split(':')[0],
+                            tag='latest_state'
+                        )
+                    except Exception as e:
+                        print(f"Error committing container state: {str(e)}")
+                
+                # Stop and remove container regardless of status
+                try:
                     self.container.stop(timeout=2)
+                except Exception as e:
+                    print(f"Error stopping container: {str(e)}")
+                    
+                try:
                     self.container.remove(force=True)
-                    self.container = None
+                except Exception as e:
+                    print(f"Error removing container: {str(e)}")
+                    
+                self.container = None
                     
             except Exception as e:
                 print(f"Error during Docker cleanup: {str(e)}")
