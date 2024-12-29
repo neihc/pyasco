@@ -295,24 +295,33 @@ class CodeExecutor:
                 except Exception as e:
                     print(f"Error killing Python server: {str(e)}")
                 
+                # Verify container still exists and is running
+                try:
+                    self.container.reload()
+                except docker.errors.NotFound:
+                    print("Container no longer exists, skipping state save")
+                    return
+                
                 # Save container state with detailed logging
                 try:
                     print("Attempting to save container state...")
-                    # List installed packages before commit
-                    pip_list = self.container.exec_run("pip list")
-                    print(f"Installed packages before commit:\n{pip_list.output.decode()}")
                     
                     # Remove old state image if it exists
+                    old_image_tag = f"{self.docker_image.split(':')[0]}:latest_state"
                     try:
-                        old_image_tag = f"{self.docker_image.split(':')[0]}:latest_state"
                         old_image = self.docker_client.images.get(old_image_tag)
                         
                         # Find and stop containers using this image
                         for container in self.docker_client.containers.list(all=True):
                             if container.image.id == old_image.id:
                                 print(f"Stopping container {container.short_id} using old image")
-                                container.stop(timeout=2)
-                                container.remove(force=True)
+                                try:
+                                    container.stop(timeout=2)
+                                    container.remove(force=True)
+                                except docker.errors.NotFound:
+                                    print(f"Container {container.short_id} already removed")
+                                except Exception as e:
+                                    print(f"Error cleaning up container {container.short_id}: {str(e)}")
                         
                         # Now try to remove the image
                         try:
@@ -320,10 +329,12 @@ class CodeExecutor:
                             print("Removed old state image")
                         except docker.errors.APIError as e:
                             print(f"Warning: Could not remove old image: {str(e)}")
-                            # Continue anyway since we'll overwrite the tag
                     except docker.errors.ImageNotFound:
-                        pass
+                        print("No existing state image found")
 
+                    # Verify container still exists before committing
+                    self.container.reload()
+                    
                     # Commit new state
                     commit_result = self.container.commit(
                         repository=self.docker_image.split(':')[0],
@@ -346,22 +357,22 @@ class CodeExecutor:
                 except Exception as e:
                     print(f"Failed to save container state: {str(e)}")
 
-                # Stop the container
+                # Stop and remove the container if it still exists
                 try:
+                    self.container.reload()
                     print("Stopping container...")
                     self.container.stop(timeout=2)
                     print("Container stopped successfully")
-                except Exception as e:
-                    print(f"Error stopping container: {str(e)}")
-                
-                # Remove container
-                try:
+                    
                     print("Removing container...")
                     self.container.remove(force=True)
                     print("Container removed successfully")
-                    self.container = None
+                except docker.errors.NotFound:
+                    print("Container already removed")
                 except Exception as e:
-                    print(f"Error removing container: {str(e)}")
+                    print(f"Error during container cleanup: {str(e)}")
+                finally:
+                    self.container = None
                     
             except Exception as e:
                 print(f"Unexpected error during Docker cleanup: {str(e)}")
