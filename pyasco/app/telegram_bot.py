@@ -43,6 +43,7 @@ class TelegramInterface:
     
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Send a message when the command /start is issued."""
+        print('recevie start')
         welcome_message = (
             "Welcome to PyAsco Bot! 🤖\n\n"
             "I can help you with Python programming and execute code.\n\n"
