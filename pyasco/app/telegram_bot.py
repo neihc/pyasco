@@ -16,14 +16,16 @@ Options:
 import argparse
 import os
 import logging
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 import asyncio
-from telegram import Update
+from telegram import Update, InputFile
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler
 from rich.console import Console
 from ..config import ConfigManager
 from ..agent import Agent
 from ..logger_config import setup_logger
+from ..services.code_to_image import CodeToImage
+from ..services.code_snippet_extractor import CodeSnippetExtractor
 
 # Setup logging will be done in main() after parsing args
 logger = logging.getLogger(__name__)
@@ -40,6 +42,8 @@ class TelegramInterface:
     def __init__(self, agent: Agent):
         self.agent = agent
         self.user_states: Dict[int, dict] = {}
+        self.code_to_image = CodeToImage()
+        self.code_extractor = CodeSnippetExtractor()
     
     async def ping_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Simple command to test if bot is responsive"""
@@ -181,8 +185,35 @@ class TelegramInterface:
             response = self.agent.get_response(user_input, stream=False)
             logger.debug(f"Got response from agent: {response.content}")
             
-            # Send the response
-            await update.message.reply_text(response.content)
+            # Extract code snippets and convert to images
+            snippets = self.code_extractor.extract_snippets(response.content)
+            
+            if snippets:
+                # Send text response with code placeholders removed
+                text_response = response.content
+                for snippet in snippets:
+                    # Remove the code block from text response
+                    marker = f"```{snippet.language or ''}\n{snippet.content}\n```"
+                    text_response = text_response.replace(marker, "")
+                
+                # Send cleaned text response if not empty
+                if text_response.strip():
+                    await update.message.reply_text(text_response.strip())
+                
+                # Send code snippets as images
+                for snippet in snippets:
+                    image_bytes = self.code_to_image.convert(
+                        snippet.content,
+                        snippet.language
+                    )
+                    await update.message.reply_photo(
+                        InputFile(image_bytes, filename='code.png'),
+                        caption=f"Code snippet ({snippet.language or 'unknown language'})"
+                    )
+            else:
+                # No code snippets, send regular text response
+                await update.message.reply_text(response.content)
+                
             logger.debug("Sent response to user")
 
             # If there's code to execute, ask user
