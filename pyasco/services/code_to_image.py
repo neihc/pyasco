@@ -65,7 +65,8 @@ class CodeToImage:
         # Calculate base image dimensions
         max_line_width = max(self.font.getlength(line) for line in lines)
         base_width = int(max_line_width + 2 * self.padding)
-        base_height = len(lines) * self.line_height + 2 * self.padding
+        # Adjust height calculation to account for actual text lines
+        base_height = (len(lines) - 1) * self.line_height + self.font_size + 2 * self.padding
         
         # Scale dimensions
         width = base_width * self.scale_factor
