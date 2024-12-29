@@ -190,36 +190,50 @@ class TelegramInterface:
             response = self.agent.get_response(user_input, stream=False)
             logger.debug(f"Got response from agent: {response.content}")
             
+            # Prepare all messages to send
+            messages_to_send = []
+            
             # Extract code snippets and convert to images
             snippets = self.code_extractor.extract_snippets(response.content)
             
             if snippets:
-                # Send text response with code placeholders removed
+                # Prepare text response with code placeholders removed
                 text_response = response.content
                 for snippet in snippets:
                     # Remove the code block from text response
                     marker = f"```{snippet.language or ''}\n{snippet.content}\n```"
                     text_response = text_response.replace(marker, "")
                 
-                # Send cleaned text response if not empty
+                # Add cleaned text response if not empty
                 if text_response.strip():
-                    await update.message.reply_text(text_response.strip())
+                    messages_to_send.append(("text", text_response.strip(), None))
                 
-                # Send code snippets as images
+                # Prepare code snippets as images
                 for snippet in snippets:
                     image_bytes = self.code_to_image.convert(
                         snippet.content,
                         snippet.language
                     )
-                    await update.message.reply_photo(
-                        InputFile(image_bytes, filename='code.png'),
-                        caption=f"Code snippet ({snippet.language or 'unknown language'})"
+                    messages_to_send.append(
+                        ("photo", 
+                         image_bytes, 
+                         f"Code snippet ({snippet.language or 'unknown language'})")
                     )
             else:
-                # No code snippets, send regular text response
-                await update.message.reply_text(response.content)
-                
-            logger.debug("Sent response to user")
+                # No code snippets, just text response
+                messages_to_send.append(("text", response.content, None))
+            
+            # Send all messages at once
+            for msg_type, content, caption in messages_to_send:
+                if msg_type == "text":
+                    await update.message.reply_text(content)
+                elif msg_type == "photo":
+                    await update.message.reply_photo(
+                        InputFile(content, filename='code.png'),
+                        caption=caption
+                    )
+            
+            logger.debug(f"Sent {len(messages_to_send)} messages to user")
 
             # If there's code to execute, ask user
             if self.agent.should_ask_user():
