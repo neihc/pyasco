@@ -286,23 +286,34 @@ class CodeExecutor:
                 container_info = self.container.attrs
                 print(f"Container status: {container_info['State']['Status']}")
                 
-                # Kill the Python server process
+                # Kill the Python server process using ps and kill
                 try:
-                    kill_result = self.container.exec_run(
-                        ["pkill", "-f", "python /tmp/server.py"]
+                    # Find PID of Python server
+                    ps_result = self.container.exec_run(
+                        ["ps", "-ef", "|", "grep", "python /tmp/server.py", "|", "grep", "-v", "grep"]
                     )
-                    print(f"Kill server result: {kill_result.output.decode()}")
+                    if ps_result.exit_code == 0:
+                        pid = ps_result.output.decode().split()[1]
+                        kill_result = self.container.exec_run(["kill", pid])
+                        print(f"Kill server result: {kill_result.output.decode()}")
                 except Exception as e:
                     print(f"Error killing Python server: {str(e)}")
                 
-                # Verify container still exists and is running
+                # Verify container exists and is in proper state
                 try:
                     self.container.reload()
+                    if self.container.status not in ['running', 'created']:
+                        print(f"Container in invalid state: {self.container.status}")
+                        return
                 except docker.errors.NotFound:
                     print("Container no longer exists, skipping state save")
                     return
-                
+                except Exception as e:
+                    print(f"Error checking container state: {str(e)}")
+                    return
+
                 # Save container state with detailed logging
+                print(f"Container {self.container.short_id} is in state: {self.container.status}")
                 try:
                     print("Attempting to save container state...")
                     
@@ -332,10 +343,18 @@ class CodeExecutor:
                     except docker.errors.ImageNotFound:
                         print("No existing state image found")
 
-                    # Verify container still exists before committing
-                    self.container.reload()
+                    # Start container if not running
+                    if self.container.status == 'created':
+                        print("Starting container before commit...")
+                        self.container.start()
+                        time.sleep(2)  # Give it time to start
+                        self.container.reload()
                     
+                    if self.container.status != 'running':
+                        raise Exception(f"Container in invalid state for commit: {self.container.status}")
+
                     # Commit new state
+                    print("Committing container state...")
                     commit_result = self.container.commit(
                         repository=self.docker_image.split(':')[0],
                         tag='latest_state',
