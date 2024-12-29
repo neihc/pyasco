@@ -27,13 +27,23 @@ class CodeToImage:
         
         # Syntax highlighting colors
         self.syntax_colors = {
-            Token.Keyword: (198, 120, 221),    # Purple for keywords
-            Token.String: (152, 195, 121),     # Green for strings
-            Token.Name.Function: (97, 175, 239),  # Blue for functions
-            Token.Name.Class: (229, 192, 123),    # Yellow for classes
-            Token.Number: (209, 154, 102),     # Orange for numbers
-            Token.Comment: (92, 99, 112),      # Gray for comments
-            Token.Operator: (171, 178, 191),   # Light gray for operators
+            Token.Keyword: (198, 120, 221),      # Purple for keywords
+            Token.Keyword.Constant: (198, 120, 221),  # Purple for True, False, None
+            Token.Keyword.Declaration: (198, 120, 221),  # Purple for def, class
+            Token.String: (152, 195, 121),       # Green for strings
+            Token.String.Doc: (152, 195, 121),   # Green for docstrings
+            Token.Name.Function: (97, 175, 239),    # Blue for functions
+            Token.Name.Class: (229, 192, 123),      # Yellow for classes
+            Token.Name.Builtin: (229, 192, 123),    # Yellow for built-in functions
+            Token.Name.Builtin.Pseudo: (198, 120, 221),  # Purple for self, cls
+            Token.Number: (209, 154, 102),       # Orange for numbers
+            Token.Number.Float: (209, 154, 102),  # Orange for floats
+            Token.Number.Integer: (209, 154, 102),  # Orange for integers
+            Token.Comment: (92, 99, 112),        # Gray for comments
+            Token.Comment.Single: (92, 99, 112),  # Gray for single-line comments
+            Token.Operator: (171, 178, 191),     # Light gray for operators
+            Token.Punctuation: (171, 178, 191),  # Light gray for punctuation
+            Token.Name.Variable: (171, 178, 191),  # Light gray for variables
         }
 
     def convert(self, code: str, language: Optional[str] = None) -> bytes:
@@ -72,7 +82,10 @@ class CodeToImage:
         x = self.padding
         
         for token, text in lexer.get_tokens(code):
-            color = self.syntax_colors.get(token.parent, self.text_color)
+            # Try exact token match first, then parent token
+            color = self.syntax_colors.get(token, None)
+            if color is None:
+                color = self.syntax_colors.get(token.parent, self.text_color)
             
             # Handle newlines
             if '\n' in text:
