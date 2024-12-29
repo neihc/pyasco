@@ -172,8 +172,8 @@ async def main():
         await application.initialize()
         await application.start()
         print("Bot started successfully!")
-        await application.updater.start_polling()
-        await application.updater.idle()
+        await application.start_polling()
+        await application.idle()
     finally:
         await application.stop()
         agent.cleanup()
