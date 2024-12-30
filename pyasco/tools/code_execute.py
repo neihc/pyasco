@@ -5,6 +5,7 @@ import jupyter_client
 import os
 import json
 from typing import Optional, Tuple, Dict
+from ..logger_config import setup_logger
 
 class CodeExecutor:
     """A class to execute Python and Bash code using Jupyter kernel or Docker"""
@@ -15,6 +16,7 @@ class CodeExecutor:
                  bash_shell: str = '/bin/bash',
                  python_command: str = 'python',
                  env_file: Optional[str] = None):
+        self.logger = setup_logger('code_executor')
         """
         Initialize a new Jupyter kernel connection
         
@@ -164,38 +166,57 @@ class CodeExecutor:
         try:
             # Generate unique execution ID
             exec_id = str(time.time())
+            self.logger.info(f"Starting Docker execution with ID: {exec_id}")
+            self.logger.debug(f"Code to execute:\n{code}")
             
             # Clean up old files and verify cleanup
+            self.logger.debug("Cleaning up previous execution files")
             cleanup_result = self.container.exec_run(
                 ['rm', '-f', '/tmp/pyasco/output.json', '/tmp/pyasco/done', '/tmp/pyasco/exec_id'])
             if cleanup_result.exit_code != 0:
+                self.logger.error("Failed to cleanup previous execution files")
                 return None, "Failed to cleanup previous execution files"
 
             # Write execution ID and code
+            self.logger.debug("Writing execution ID and code files")
             write_result = self.container.exec_run(['bash', '-c', 
                 f'echo "{exec_id}" > /tmp/pyasco/exec_id && '
                 f'cat > /tmp/pyasco/input.py << EOL\n{code}\nEOL'])
             if write_result.exit_code != 0:
+                self.logger.error("Failed to write input files")
                 return None, "Failed to write input files"
             
             # Wait for execution
-            for _ in range(1200):
+            self.logger.debug("Waiting for code execution to complete")
+            for attempt in range(1200):
                 if self.container.exec_run(['test', '-f', '/tmp/pyasco/done']).exit_code == 0:
                     # Verify it's our execution
                     id_check = self.container.exec_run(['cat', '/tmp/pyasco/exec_id'])
                     if id_check.exit_code == 0 and id_check.output.decode('utf-8').strip() == exec_id:
+                        self.logger.info(f"Execution completed after {attempt} checks")
                         break
                 time.sleep(0.1)
             else:
+                self.logger.error("Execution timed out")
                 return None, "Execution timeout"
             
+            self.logger.debug("Reading execution output")
             output = self.container.exec_run(['cat', '/tmp/pyasco/output.json'])
             if output.exit_code != 0:
+                self.logger.error("Failed to read output file")
                 return None, "Failed to read output"
                 
-            result = json.loads(output.output.decode('utf-8'))
-            return result['stdout'], result['stderr']
+            try:
+                result = json.loads(output.output.decode('utf-8'))
+                self.logger.info("Successfully parsed execution output")
+                self.logger.debug(f"Stdout length: {len(result['stdout']) if result['stdout'] else 0}")
+                self.logger.debug(f"Stderr length: {len(result['stderr']) if result['stderr'] else 0}")
+                return result['stdout'], result['stderr']
+            except json.JSONDecodeError as e:
+                self.logger.error(f"Failed to parse output JSON: {e}")
+                return None, f"Failed to parse output: {str(e)}"
         except Exception as e:
+            self.logger.error(f"Docker execution error: {str(e)}", exc_info=True)
             return None, str(e)
                     
     def _start_container(self):
