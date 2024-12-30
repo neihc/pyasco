@@ -219,6 +219,7 @@ Environment Variables:
             "Selected skills:"
         )
         
+        self.logger.info(f"Asking LLM to select relevant skills for input: {user_input[:100]}...")
         skill_response = get_openai_response([{
             "role": "user",
             "content": skill_prompt
@@ -226,10 +227,15 @@ Environment Variables:
         
         # Parse selected skill names and get the actual skill objects
         selected_skill_names = [name.strip() for name in skill_response.split('\n') if name.strip()]
+        self.logger.info(f"LLM selected skills: {selected_skill_names}")
+        
         relevant_skills = []
         for name in selected_skill_names:
             if name.lower() != 'none' and name in self.skill_manager.skills:
+                self.logger.info(f"Found matching skill: {name}")
                 relevant_skills.append(self.skill_manager.skills[name])
+            else:
+                self.logger.warning(f"Skill not found or 'none': {name}")
         
         # Check for existing skills in previous messages
         existing_skills = set()
@@ -248,11 +254,13 @@ Environment Variables:
                 
                 # Install requirements if any
                 if skill.requirements:
+                    self.logger.info(f"Installing requirements for skill {skill.name}: {skill.requirements}")
                     req_install = f"pip install {' '.join(skill.requirements)}"
                     stdout, stderr = self.python_executor.execute(req_install, 'bash')
                     if stderr and "ERROR:" in stderr:
                         self.logger.error(f"Error installing requirements for {skill.name}: {stderr}")
                         continue
+                    self.logger.info(f"Successfully installed requirements for {skill.name}")
                 
                 # Execute the skill code to make functions available
                 stdout, stderr = self.python_executor.execute(skill_code)
