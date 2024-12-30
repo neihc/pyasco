@@ -207,10 +207,15 @@ class CodeExecutor:
                 return None, "Failed to read output"
                 
             try:
-                result = json.loads(output.output.decode('utf-8'))
+                raw_output = output.output.decode('utf-8')
+                self.logger.debug(f"Raw output from container: {raw_output}")
+                result = json.loads(raw_output)
                 self.logger.info("Successfully parsed execution output")
+                self.logger.debug(f"Full execution result: {result}")
                 self.logger.debug(f"Stdout length: {len(result['stdout']) if result['stdout'] else 0}")
                 self.logger.debug(f"Stderr length: {len(result['stderr']) if result['stderr'] else 0}")
+                self.logger.debug(f"Stdout content: {result['stdout']}")
+                self.logger.debug(f"Stderr content: {result['stderr']}")
                 return result['stdout'], result['stderr']
             except json.JSONDecodeError as e:
                 self.logger.error(f"Failed to parse output JSON: {e}")
