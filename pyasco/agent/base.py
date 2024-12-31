@@ -2,6 +2,7 @@ from typing import List, Dict, Optional, Generator, Union, Any
 import re
 
 from ..logger_config import setup_logger
+from ..services.skill_manager import Skill
 from .prompt import DEFAULT_SYSTEM_PROMPT, FOLLOW_UP_PROMPT
 from .types import AgentResponse
 from ..config import Config
