@@ -216,18 +216,7 @@ class Agent:
                         "\n- CODE section with ```python code block (required)"
                     )
                 
-                prompt = (
-                    "Based on our conversation above, please consolidate the key functionality "
-                    "into a reusable skill. You MUST include ALL of these sections in your response:"
-                    "\n\nSKILL NAME: <name of the skill>"
-                    "\nUSAGE: <brief description of what the skill does and how to use it>"
-                    "\nREQUIREMENTS: <comma-separated list of pip packages, or 'none' if no requirements>"
-                    "\nCODE:\n"
-                    "```python\n"
-                    "<the actual Python code for the skill>\n"
-                    "```"
-                    f"{error_feedback}"
-                )
+                prompt = LEARN_SKILL_PROMPT.format(error_feedback=error_feedback)
         
                 response = self.get_response(prompt)
                 if isinstance(response, Generator):
@@ -289,11 +278,13 @@ class Agent:
                     conversation = "\n".join(f"{msg['role']}: {msg['content']}" 
                                         for msg in self.messages[1:])
                     
-                    identify_prompt = (
-                        f"{conversation}\n"
-                        "Based on our conversation above, which of these existing skills would be most "
-                        "appropriate to improve? Reply with JUST the skill name, nothing else.\n\n"
-                        "Available skills:\n"
+                    available_skills = "\n".join(
+                        f"- {name}: {skill.usage}"
+                        for name, skill in self.skill_handler.skill_manager.skills.items()
+                    )
+                    identify_prompt = IDENTIFY_SKILL_PROMPT.format(
+                        conversation=conversation,
+                        available_skills=available_skills
                     )
                     
                     # Add available skills to prompt
@@ -328,21 +319,11 @@ class Agent:
                         f"Attempt {i+1}: {err}" for i, err in enumerate(error_context)
                     ) + "\nPlease address these issues in your improvement."
                 
-                prompt = (
-                    f"{conversation}\n"
-                    f"Based on our conversation above and the existing skill below, please improve "
-                    f"the skill by updating its usage description and code as needed. You may need to put more information on usage to avoid mistake this time{error_info}\n\n"
-                    f"EXISTING SKILL:\n"
-                    f"NAME: {skill.name}\n"
-                    f"USAGE: {skill.usage}\n"
-                    f"Please provide the improved version in this format, Do not change SKILL NAME:\n"
-                    f"SKILL NAME: {skill.name}\n"
-                    f"USAGE: <improved description of what the skill does and how to use it>\n"
-                    f"REQUIREMENTS: <comma-separated list of pip packages, or 'none' if no requirements>\n"
-                    f"CODE:\n"
-                    f"```python\n"
-                    f"<improved Python code for the skill>\n"
-                    f"```\n"
+                prompt = IMPROVE_SKILL_PROMPT.format(
+                    conversation=conversation,
+                    error_info=error_info,
+                    skill_name=skill.name,
+                    skill_usage=skill.usage
                 )
                 
                 response = self.get_response(prompt)
