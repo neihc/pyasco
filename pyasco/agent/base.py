@@ -1,4 +1,5 @@
-from typing import List, Dict, Optional, Generator, Union
+from typing import List, Dict, Optional, Generator, Union, Any
+import re
 
 from ..logger_config import setup_logger
 from .prompt import DEFAULT_SYSTEM_PROMPT, FOLLOW_UP_PROMPT
@@ -135,6 +136,244 @@ class Agent:
     def cleanup(self):
         self.logger.info("Cleaning up agent resources")
         self.python_executor.cleanup()
+
+    def parse_skill_response(self, response_content: str) -> Dict[str, Any]:
+        """Parse a skill learning response into components.
+        
+        Args:
+            response_content: The LLM response content
+            
+        Returns:
+            Dict containing name, usage, code, and requirements
+            
+        Raises:
+            ValueError: If response format is invalid
+        """
+        try:
+            # Extract skill name
+            name_match = re.search(r"SKILL NAME:\s*(.+?)(?=\n|$)", response_content)
+            name = name_match.group(1).strip() if name_match else None
+
+            # Extract usage
+            usage_match = re.search(r"USAGE:\s*(.+?)(?=\n|$)", response_content)
+            usage = usage_match.group(1).strip() if usage_match else None
+
+            # Extract requirements
+            req_match = re.search(r"REQUIREMENTS:\s*(.+?)(?=\n|$)", response_content)
+            requirements_str = req_match.group(1).strip() if req_match else "none"
+            requirements = [r.strip() for r in requirements_str.split(",")] if requirements_str.lower() != "none" else []
+
+            # Extract code
+            code_snippets = self.code_extractor.extract_snippets(response_content)
+            code = code_snippets[0].content if code_snippets else None
+
+            if not all([name, usage, code]):
+                raise ValueError("Missing required skill components")
+
+            return {
+                "name": name,
+                "usage": usage,
+                "file_path": f"{name.lower().replace(' ', '_')}.py",
+                "requirements": requirements,
+                "code": code
+            }
+        except (AttributeError, IndexError) as e:
+            raise ValueError(f"Invalid skill response format: {str(e)}")
+
+    def learn_that_skill(self) -> 'Skill':
+        """Convert the current conversation into a reusable skill.
+        Takes the conversation history and asks the LLM to consolidate it
+        into a skill in the correct format.
+        
+        Returns:
+            Skill: The newly learned skill
+            
+        Raises:
+            ValueError: If skill response is invalid or no messages to learn from
+        """
+        if len(self.messages) < 2:  # Need at least system + 1 interaction
+            raise ValueError("Not enough conversation history to learn from")
+            
+        max_retries = 3
+        retry_count = 0
+        last_error = None
+        
+        while retry_count < max_retries:
+            try:
+                # Create prompt to consolidate conversation into skill
+                conversation = "\n".join(f"{msg['role']}: {msg['content']}" 
+                                    for msg in self.messages[1:])  # Skip system message
+                
+                error_feedback = ""
+                if last_error:
+                    error_feedback = (
+                        f"\n\nPrevious attempt failed with error: {last_error}"
+                        "\nPlease ensure your response includes ALL required sections:"
+                        "\n- SKILL NAME (required)"
+                        "\n- USAGE (required)"
+                        "\n- REQUIREMENTS (required, use 'none' if no requirements)"
+                        "\n- CODE section with ```python code block (required)"
+                    )
+                
+                prompt = (
+                    "Based on our conversation above, please consolidate the key functionality "
+                    "into a reusable skill. You MUST include ALL of these sections in your response:"
+                    "\n\nSKILL NAME: <name of the skill>"
+                    "\nUSAGE: <brief description of what the skill does and how to use it>"
+                    "\nREQUIREMENTS: <comma-separated list of pip packages, or 'none' if no requirements>"
+                    "\nCODE:\n"
+                    "```python\n"
+                    "<the actual Python code for the skill>\n"
+                    "```"
+                    f"{error_feedback}"
+                )
+        
+                response = self.get_response(prompt)
+                if isinstance(response, Generator):
+                    # Handle streaming response
+                    content = ""
+                    for chunk in response:
+                        content += chunk.content
+                    response_content = content
+                else:
+                    response_content = response.content
+                    
+                skill_data = self.parse_skill_response(response_content)
+                
+                return self.skill_handler.skill_manager.learn(
+                    name=skill_data["name"],
+                    usage=skill_data["usage"],
+                    code=skill_data["code"],
+                    requirements=skill_data["requirements"]
+                )
+                
+            except ValueError as e:
+                last_error = str(e)
+                retry_count += 1
+                self.logger.warning(f"Attempt {retry_count} failed: {last_error}")
+                
+                if retry_count >= max_retries:
+                    raise ValueError(
+                        f"Failed to learn skill after {max_retries} attempts. "
+                        f"Last error: {last_error}"
+                    )
+                
+                continue
+
+    def improve_that_skill(self, skill_name: Optional[str] = None) -> Optional['Skill']:
+        """Improve an existing skill based on the current conversation.
+        Takes the conversation history and asks the LLM to improve the specified skill.
+        If no skill_name is provided, automatically determines which skill to improve.
+        
+        Args:
+            skill_name: Optional name of the skill to improve. If None, auto-determines from conversation.
+            
+        Returns:
+            Skill: The improved skill or None if skill not found
+            
+        Raises:
+            ValueError: If skill response is invalid or no messages to learn from
+        """
+        if len(self.messages) < 2:
+            raise ValueError("Not enough conversation history to learn from")
+            
+        error_context = []
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                if skill_name is None:
+                    # Create prompt to identify skill from conversation
+                    conversation = "\n".join(f"{msg['role']}: {msg['content']}" 
+                                        for msg in self.messages[1:])
+                    
+                    identify_prompt = (
+                        f"{conversation}\n"
+                        "Based on our conversation above, which of these existing skills would be most "
+                        "appropriate to improve? Reply with JUST the skill name, nothing else.\n\n"
+                        "Available skills:\n"
+                    )
+                    
+                    # Add available skills to prompt
+                    for name, skill in self.skill_handler.skill_manager.skills.items():
+                        identify_prompt += f"- {name}: {skill.usage}\n"
+                    
+                    response = self.get_response(identify_prompt)
+                    if isinstance(response, Generator):
+                        content = ""
+                        for chunk in response:
+                            content += chunk.content
+                        skill_name = content.strip()
+                    else:
+                        skill_name = response.content.strip()
+                    
+                # Get existing skill
+                skill = self.skill_handler.skill_manager.get_skill(skill_name)
+                if not skill:
+                    raise ValueError(f"Skill '{skill_name}' not found")
+                    
+                # Get existing code
+                existing_code = self.skill_handler.skill_manager.get_skill_code(skill)
+                    
+                # Create prompt to improve skill
+                conversation = "\n".join(f"{msg['role']}: {msg['content']}" 
+                                    for msg in self.messages[1:])
+                
+                # Add error context if any previous attempts failed
+                error_info = ""
+                if error_context:
+                    error_info = "\nPrevious attempts failed with these errors:\n" + "\n".join(
+                        f"Attempt {i+1}: {err}" for i, err in enumerate(error_context)
+                    ) + "\nPlease address these issues in your improvement."
+                
+                prompt = (
+                    f"{conversation}\n"
+                    f"Based on our conversation above and the existing skill below, please improve "
+                    f"the skill by updating its usage description and code as needed. You may need to put more information on usage to avoid mistake this time{error_info}\n\n"
+                    f"EXISTING SKILL:\n"
+                    f"NAME: {skill.name}\n"
+                    f"USAGE: {skill.usage}\n"
+                    f"Please provide the improved version in this format, Do not change SKILL NAME:\n"
+                    f"SKILL NAME: {skill.name}\n"
+                    f"USAGE: <improved description of what the skill does and how to use it>\n"
+                    f"REQUIREMENTS: <comma-separated list of pip packages, or 'none' if no requirements>\n"
+                    f"CODE:\n"
+                    f"```python\n"
+                    f"<improved Python code for the skill>\n"
+                    f"```\n"
+                )
+                
+                response = self.get_response(prompt)
+                if isinstance(response, Generator):
+                    content = ""
+                    for chunk in response:
+                        content += chunk.content
+                    response_content = content
+                else:
+                    response_content = response.content
+                    
+                skill_data = self.parse_skill_response(response_content)
+                
+                # Verify the skill name matches
+                if skill_data["name"] != skill_name:
+                    raise ValueError(f"Skill name mismatch: expected {skill_name}, got {skill_data['name']}")
+                
+                return self.skill_handler.skill_manager.improve_skill(
+                    name=skill_data["name"],
+                    usage=skill_data["usage"],
+                    code=skill_data["code"],
+                    requirements=skill_data["requirements"]
+                )
+                
+            except Exception as e:
+                self.logger.error(f"Attempt {retry_count + 1} failed: {str(e)}")
+                error_context.append(str(e))
+                retry_count += 1
+                
+                if retry_count >= max_retries:
+                    self.logger.error(f"Failed to improve skill after {max_retries} attempts")
+                    raise ValueError(f"Failed to improve skill after {max_retries} attempts. Errors: {error_context}")
 
     def should_stop_follow_up(self, loop_count: int, max_loops: int = 5) -> bool:
         """Determine if we should stop the follow-up loop"""
