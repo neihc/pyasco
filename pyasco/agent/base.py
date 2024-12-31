@@ -83,11 +83,12 @@ class Agent:
     def get_response(self, user_input: str, stream: bool = False) -> Union[AgentResponse, Generator[AgentResponse, None, None]]:
         self.logger.info(f"Getting response for user input (stream={stream})")
         
-        # Get relevant skills using skill handler
-        relevant_skills = self.skill_handler.get_relevant_skills(user_input, self.model)
+        # Get relevant skills based on conversation
+        relevant_skills = self.skill_handler.get_relevant_skills(self.messages, self.model)
         
-        # Process skills and update input
-        user_input = self.skill_handler.process_skills(user_input, relevant_skills, self.messages)
+        # Process skills and update input if needed
+        if relevant_skills:
+            user_input = self.skill_handler.process_skills(user_input, relevant_skills, self.messages)
         
         # Add message to history
         self.messages.append({

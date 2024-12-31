@@ -8,24 +8,27 @@ class SkillHandler:
         self.skill_manager = skill_manager
         self.executor = executor
 
-    def get_relevant_skills(self, user_input: str, model: str) -> List[Skill]:
-        """Get relevant skills for the given user input"""
+    def get_relevant_skills(self, messages: List[dict], model: str) -> List[Skill]:
+        """Get relevant skills based on conversation history"""
         available_skills = list(self.skill_manager.skills.keys())
         if not available_skills:
             return []
 
-        skill_list = "\n".join(f"- {skill}" for skill in available_skills)
+        # Get last few messages for context
+        recent_msgs = messages[-3:] if len(messages) > 3 else messages[1:]  # Skip system message
+        conversation = "\n".join(f"{msg['role']}: {msg['content']}" for msg in recent_msgs)
+
+        skill_list = "\n".join(f"{skill}: {self.skill_manager.skills[skill].usage}" 
+                              for skill in available_skills)
+        
         skill_prompt = (
-            "Based on the following user input, select which of these skills would be most relevant. "
-            "Reply with ONLY the exact skill names, one per line, maximum 3 skills. "
-            "If no skills are relevant, reply with 'none'.\n\n"
-            f"User input: {user_input}\n\n"
-            f"Available skills:\n{skill_list}\n\n"
-            "Selected skills:"
+            f"Skills:\n{skill_list}\n\n"
+            f"Conversation:\n{conversation}\n\n"
+            "List relevant skill names (max 3) or 'none':"
         )
 
         skill_response = get_openai_response([{
-            "role": "user",
+            "role": "user", 
             "content": skill_prompt
         }], model=model)
 
