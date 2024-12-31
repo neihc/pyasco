@@ -17,7 +17,10 @@ class SkillHandler:
         # Get last few messages for context, excluding system message
         user_msgs = [msg for msg in messages if msg['role'] != 'system']
         recent_msgs = user_msgs[-3:] if len(user_msgs) > 3 else user_msgs
-        conversation = "\n".join(f"{msg['role']}: {msg['content']}" for msg in recent_msgs)
+        conversation = "\n\n".join(
+            f"{msg['role'].upper()}:\n{msg['content']}" 
+            for msg in recent_msgs
+        )
 
         skill_list = "\n".join(f"{skill}: {self.skill_manager.skills[skill].usage}" 
                               for skill in available_skills)
@@ -81,7 +84,11 @@ class SkillHandler:
             skills_info += f"### {skill.name}\n"
             skills_info += f"**Usage:** {skill.usage}\n"
             skills_info += f"**Code:**\n```python\n{skill_code}\n```\n\n"
-            skills_info += f"**Note:** This code has been executed in current notebook with this output:\n{stdout}\n\n{stderr}\n\n"
-            skills_info += f"Do not redefine them unless you need to modify their behavior.\n"
+            skills_info += "**Execution Results:**\n"
+            if stdout:
+                skills_info += f"Output:\n```\n{stdout}\n```\n"
+            if stderr:
+                skills_info += f"Errors:\n```\n{stderr}\n```\n"
+            skills_info += "**Note:** These functions are now loaded and ready to use. Do not redefine them unless you need to modify their behavior.\n\n"
 
         return user_input + skills_info
