@@ -218,16 +218,12 @@ class TelegramInterface:
             snippets = self.code_extractor.extract_snippets(response.content)
             
             if snippets:
-                # Prepare text response with code placeholders removed
-                text_response = response.content
-                for snippet in snippets:
-                    # Remove the code block from text response
-                    marker = f"```{snippet.language or ''}\n{snippet.content}\n```"
-                    text_response = text_response.replace(marker, "")
+                # Get text response with code blocks removed
+                text_response = self.code_extractor.omit_snippets(response.content)
                 
                 # Add cleaned text response if not empty
-                if text_response.strip():
-                    messages_to_send.append(("text", text_response.strip(), None))
+                if text_response:
+                    messages_to_send.append(("text", text_response, None))
                 
                 # Prepare code snippets as images
                 for snippet in snippets:
