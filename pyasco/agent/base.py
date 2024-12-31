@@ -84,7 +84,7 @@ class Agent:
         self.logger.info(f"Getting response for user input (stream={stream})")
         
         # Get relevant skills based on conversation
-        relevant_skills = self.skill_handler.get_relevant_skills(self.messages, self.model)
+        relevant_skills = self.skill_handler.get_relevant_skills(self.messages, self.model, user_input)
         
         # Process skills and update input if needed
         if relevant_skills:
