@@ -1,7 +1,7 @@
 from typing import List, Dict, Generator, Any, Union
 from ..services.llm import get_openai_response
 from ..services.code_snippet_extractor import CodeSnippetExtractor
-from .base import AgentResponse
+from .types import AgentResponse
 
 class ResponseHandler:
     def __init__(self, code_extractor: CodeSnippetExtractor):

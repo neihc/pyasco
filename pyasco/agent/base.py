@@ -1,8 +1,8 @@
 from typing import List, Dict, Optional, Generator, Union
 import textwrap
-from dataclasses import dataclass
 
 from ..logger_config import setup_logger
+from .types import AgentResponse
 from ..config import Config
 from ..services.llm import configure_client
 from ..services.code_snippet_extractor import CodeSnippetExtractor
@@ -13,17 +13,6 @@ from .response_handler import ResponseHandler
 from .tool_handler import ToolHandler
 from .utils import get_system_info
 
-@dataclass
-class AgentResponse:
-    """Represents a response from the agent"""
-    role: str = "assistant"
-    content: str = ""
-    tools: List[Dict] = None
-    done: bool = True
-
-    def __post_init__(self):
-        if self.tools is None:
-            self.tools = []
 
 class Agent:
     DEFAULT_SYSTEM_PROMPT = textwrap.dedent("""
