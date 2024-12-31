@@ -74,8 +74,8 @@ class SkillHandler:
 
             skills_info += f"### {skill.name}\n"
             skills_info += f"**Usage:** {skill.usage}\n"
-            skills_info += f"**Note:** This skill's functions are now loaded and ready to use. "
-            skills_info += f"Do not redefine them unless you need to modify their behavior.\n"
             skills_info += f"**Code:**\n```python\n{skill_code}\n```\n\n"
+            skills_info += f"**Note:** This code has been executed in current notebook with this output:\n{stdout}\n\n{stderr}\n\n"
+            skills_info += f"Do not redefine them unless you need to modify their behavior.\n"
 
         return user_input + skills_info
