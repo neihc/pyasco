@@ -64,7 +64,7 @@ class Agent:
     def _initialize_chat(self) -> None:
         system_info = get_system_info(self.python_executor.use_docker,
                                     self.python_executor.docker_image)
-        base_prompt = f"{self.DEFAULT_SYSTEM_PROMPT}\n\n{system_info}"
+        base_prompt = f"{DEFAULT_SYSTEM_PROMPT}\n\n{system_info}"
         system_content = f"{base_prompt}\n\n{self.custom_instructions}" if self.custom_instructions else base_prompt
         self.messages.append({
             "role": "system",
