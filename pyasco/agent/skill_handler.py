@@ -8,7 +8,7 @@ class SkillHandler:
         self.skill_manager = skill_manager
         self.executor = executor
 
-    def get_relevant_skills(self, messages: List[dict], model: str) -> List[Skill]:
+    def get_relevant_skills(self, messages: List[dict], model: str, user_input: str) -> List[Skill]:
         """Get relevant skills based on conversation history"""
         available_skills = list(self.skill_manager.skills.keys())
         if not available_skills:
