@@ -1,4 +1,4 @@
-from code2image.code2image import Code2Image
+from code2image.cls import Code2Image
 from typing import Optional
 from io import BytesIO
 from PIL import Image
