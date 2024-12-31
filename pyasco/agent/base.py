@@ -150,3 +150,14 @@ class Agent:
     def cleanup(self):
         self.logger.info("Cleaning up agent resources")
         self.python_executor.cleanup()
+
+    def confirm(self) -> List[str] | None:
+        """Execute any pending tools and return their results"""
+        if not self.messages:
+            return None
+            
+        last_message = self.messages[-1]
+        if not last_message.get("tools"):
+            return None
+            
+        return self.tool_handler.execute_tools(last_message["tools"])
