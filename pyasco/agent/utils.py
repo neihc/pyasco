@@ -2,9 +2,9 @@ import platform
 import os
 import psutil
 
-def get_system_info(use_docker: bool = False, docker_image: str = None) -> str:
+def get_system_info(executor=None) -> str:
     """Get current system information including environment variables"""
-    if use_docker:
+    if executor and executor.use_docker:
         # Execute code inside Docker to get container system info
         docker_code = """
 import platform
@@ -20,11 +20,7 @@ print(f'''System Information:
 Environment Variables:
 {env_vars}''')
 """
-        # Execute the code in Docker and capture output
-        from ..tools.code_execute import CodeExecutor
-        executor = CodeExecutor(use_docker=True, docker_image=docker_image)
         output, error = executor.execute(docker_code)
-        executor.cleanup()
         return output if output else "Failed to get Docker container system info"
     else:
         # Get host system info
