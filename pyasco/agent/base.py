@@ -74,6 +74,8 @@ class Agent:
                                     self.python_executor.docker_image)
         base_prompt = f"{DEFAULT_SYSTEM_PROMPT}\n\n{system_info}"
         system_content = f"{base_prompt}\n\n{self.custom_instructions}" if self.custom_instructions else base_prompt
+        self.logger.info(system_content)
+        
         self.messages.append({
             "role": "system",
             "content": system_content
