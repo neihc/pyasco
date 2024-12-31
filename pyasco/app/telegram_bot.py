@@ -186,10 +186,16 @@ class TelegramInterface:
 
         user_input = update.message.text
         try:
+            # Send processing message
+            processing_message = await update.message.reply_text("Processing your message... 🤔")
+            
             # Get response from agent
             logger.debug("Sending request to agent")
             response = self.agent.ask(user_input, stream=False, auto=self.auto)
             logger.debug(f"Got response from agent: {response.content}")
+            
+            # Delete processing message
+            await processing_message.delete()
             
             # Prepare all messages to send
             messages_to_send = []
