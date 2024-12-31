@@ -336,7 +336,15 @@ Environment Variables:
         Returns:
             Dict: Assistant response with content and tools, and stream if enabled
         """
-        response = self.get_response(new_input, stream=stream)
+        # Get relevant skills first
+        skill_handler = SkillHandler(self.skill_manager, self.python_executor)
+        relevant_skills = skill_handler.get_relevant_skills(self.messages, self.model, new_input)
+        
+        # Process skills and update input if needed
+        enhanced_input = skill_handler.process_skills(new_input, relevant_skills, self.messages)
+        
+        # Get response with enhanced input
+        response = self.get_response(enhanced_input, stream=stream)
         
         if not auto:
             return response
