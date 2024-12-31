@@ -151,6 +151,21 @@ class Agent:
         self.logger.info("Cleaning up agent resources")
         self.python_executor.cleanup()
 
+    def should_stop_follow_up(self, loop_count: int, max_loops: int = 5) -> bool:
+        """Determine if we should stop the follow-up loop"""
+        if loop_count >= max_loops:
+            self.logger.warning(f"Reached maximum follow-up iterations ({max_loops})")
+            return True
+            
+        if not self.messages:
+            return True
+            
+        last_message = self.messages[-1]
+        if not last_message.get("tools"):
+            return True
+            
+        return False
+
     def confirm(self) -> List[str] | None:
         """Execute any pending tools and return their results"""
         if not self.messages:
