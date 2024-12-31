@@ -17,6 +17,7 @@ import argparse
 import os
 import logging
 from typing import Optional, Dict, List
+from io import BytesIO
 import asyncio
 from telegram import Update, InputFile
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler
@@ -26,6 +27,9 @@ from ..agent import Agent
 from ..logger_config import setup_logger
 from ..services.code_to_image import CodeToImage
 from ..services.code_snippet_extractor import CodeSnippetExtractor
+
+# Maximum length for telegram messages
+MAX_MESSAGE_LENGTH = 4096
 
 # Setup logging will be done in main() after parsing args
 logger = logging.getLogger(__name__)
@@ -141,7 +145,17 @@ class TelegramInterface:
                 output_message = "Execution Output:\n"
                 for result in results:
                     output_message += f"{result}\n"
-                await query.message.reply_text(output_message)
+                
+                # If output is too long, send as file
+                if len(output_message) > MAX_MESSAGE_LENGTH:
+                    # Create file-like object
+                    output_file = BytesIO(output_message.encode('utf-8'))
+                    await query.message.reply_document(
+                        document=InputFile(output_file, filename='output.txt'),
+                        caption="Execution output (sent as file due to length)"
+                    )
+                else:
+                    await query.message.reply_text(output_message)
                 
                 # Handle follow-up if needed
                 follow_up = self.agent.get_follow_up(results)
