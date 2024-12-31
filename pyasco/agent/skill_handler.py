@@ -14,8 +14,9 @@ class SkillHandler:
         if not available_skills:
             return []
 
-        # Get last few messages for context
-        recent_msgs = messages[-3:] if len(messages) > 3 else messages[1:]  # Skip system message
+        # Get last few messages for context, excluding system message
+        user_msgs = [msg for msg in messages if msg['role'] != 'system']
+        recent_msgs = user_msgs[-3:] if len(user_msgs) > 3 else user_msgs
         conversation = "\n".join(f"{msg['role']}: {msg['content']}" for msg in recent_msgs)
 
         skill_list = "\n".join(f"{skill}: {self.skill_manager.skills[skill].usage}" 
