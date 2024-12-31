@@ -1,7 +1,7 @@
 from typing import List, Dict, Optional, Generator, Union
 
 from ..logger_config import setup_logger
-from .prompt import DEFAULT_SYSTEM_PROMPT
+from .prompt import DEFAULT_SYSTEM_PROMPT, FOLLOW_UP_PROMPT
 from .types import AgentResponse
 from ..config import Config
 from ..services.llm import configure_client
@@ -118,7 +118,7 @@ class Agent:
         return current_response
 
     def get_follow_up(self, results: List[str]) -> str:
-        return f"""I executed that code. This was the output::\n{chr(10).join(results)}\nWhat code needs to be run next (if anything, or are we done)? I can't replace any placeholders. In case we're done, let based on the output and give me the answer I need (remember I can't read the output)."""
+        return FOLLOW_UP_PROMPT.format(output=chr(10).join(results))
 
     def should_ask_user(self) -> bool:
         if not self.messages:
