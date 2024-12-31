@@ -12,6 +12,7 @@ from .services.llm import get_openai_response
 from .services.code_snippet_extractor import CodeSnippetExtractor
 from .services.skill_manager import SkillManager, Skill
 from .tools.code_execute import CodeExecutor
+from .agent.skill_handler import SkillHandler
 
 @dataclass
 class AgentResponse:
