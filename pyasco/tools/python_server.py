@@ -2,50 +2,69 @@ import os
 import json
 import time
 from pathlib import Path
-import io
-import contextlib
 import traceback
 import sys
+from jupyter_client import KernelManager
+import queue
 
-def run_code_in_main():
-    """Monitor for input files and execute code in __main__ context"""
+def run_kernel_server():
+    """Monitor for input files and execute code using a persistent Jupyter kernel"""
     base_dir = Path("/tmp/pyasco")
     input_file = base_dir / "input.py"
     output_file = base_dir / "output.json"
     done_file = base_dir / "done"
     error_log = base_dir / "error.log"
     
-    print("Python server started and monitoring for input files...")
+    # Initialize kernel
+    km = KernelManager(kernel_name='python3')
+    km.start_kernel()
+    kc = km.client()
+    kc.start_channels()
+    kc.wait_for_ready()
+    
+    print("Python kernel server started and monitoring for input files...")
     sys.stdout.flush()
     
     while True:
         if input_file.exists():
             try:
-                # Create a new module to run the code
-                module = types.ModuleType("__main__")
-                module.__file__ = "__main__.py"
-                sys.modules["__main__"] = module
+                code = input_file.read_text()
+                with open(error_log, 'a') as f:
+                    f.write(f"\nExecuting code:\n{code}\n")
                 
-                # Capture output
-                stdout = io.StringIO()
-                stderr = io.StringIO()
+                # Execute code using kernel
+                msg_id = kc.execute(code)
                 
-                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                # Collect outputs
+                stdout_content = []
+                stderr_content = []
+                
+                while True:
                     try:
-                        code = input_file.read_text()
-                        with open(error_log, 'a') as f:
-                            f.write(f"\nExecuting code:\n{code}\n")
+                        msg = kc.get_iopub_msg(timeout=10)
+                        msg_type = msg['msg_type']
+                        content = msg['content']
                         
-                        exec(code, module.__dict__)
-                        
-                    except Exception as e:
-                        with open(error_log, 'a') as f:
-                            f.write(f"Exception occurred: {e}\n")
-                        stderr.write(traceback.format_exc())
+                        if msg_type == 'stream':
+                            if content['name'] == 'stdout':
+                                stdout_content.append(content['text'])
+                            elif content['name'] == 'stderr':
+                                stderr_content.append(content['text'])
+                        elif msg_type == 'error':
+                            stderr_content.extend([
+                                '\n'.join(content['traceback']),
+                                f"{content['ename']}: {content['evalue']}"
+                            ])
+                        elif msg_type == 'status' and content['execution_state'] == 'idle':
+                            break
+                            
+                    except queue.Empty:
+                        stderr_content.append("Execution timed out")
+                        break
                 
                 # Get output values
-                stdout_value = stdout.getvalue()
-                stderr_value = stderr.getvalue()
+                stdout_value = ''.join(stdout_content)
+                stderr_value = ''.join(stderr_content)
                 
                 # Log captured output for debugging
                 with open(error_log, 'a') as f:
@@ -78,5 +97,4 @@ def run_code_in_main():
         time.sleep(0.1)
 
 if __name__ == "__main__":
-    import types  # Import here to avoid potential circular imports
-    run_code_in_main()
+    run_kernel_server()

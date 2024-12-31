@@ -266,11 +266,12 @@ class CodeExecutor:
             **container_options
         )
         
-        # Install required packages
+        # Install required packages and setup kernel
         print("Setting up IPython kernel in container...")
         setup_cmd = """
         pip install jupyter_client ipykernel > /dev/null 2>&1
         python -m ipykernel install --user
+        mkdir -p /root/.local/share/jupyter/runtime
         """
         self.container.exec_run(['bash', '-c', setup_cmd])
         print("IPython kernel setup completed")
@@ -278,7 +279,7 @@ class CodeExecutor:
         # Create directories for communication
         self.container.exec_run(['mkdir', '-p', '/tmp/pyasco'])
         
-        # Start Python server
+        # Start Python server with kernel
         server_path = os.path.join(os.path.dirname(__file__), 'python_server.py')
         with open(server_path, 'r') as f:
             server_code = f.read()
