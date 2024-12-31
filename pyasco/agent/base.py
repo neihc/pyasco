@@ -3,7 +3,13 @@ import re
 
 from ..logger_config import setup_logger
 from ..services.skill_manager import Skill
-from .prompt import DEFAULT_SYSTEM_PROMPT, FOLLOW_UP_PROMPT
+from .prompt import (
+    DEFAULT_SYSTEM_PROMPT,
+    FOLLOW_UP_PROMPT,
+    LEARN_SKILL_PROMPT,
+    IMPROVE_SKILL_PROMPT,
+    IDENTIFY_SKILL_PROMPT
+)
 from .types import AgentResponse
 from ..config import Config
 from ..services.llm import configure_client
