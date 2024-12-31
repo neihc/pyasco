@@ -22,9 +22,14 @@ class SkillHandler:
                               for skill in available_skills)
         
         skill_prompt = (
-            f"Skills:\n{skill_list}\n\n"
-            f"Conversation:\n{conversation}\n\n"
-            "List relevant skill names (max 3) or 'none':"
+            f"Available Skills:\n{skill_list}\n\n"
+            f"Recent Conversation:\n{conversation}\n\n"
+            "Based on the conversation, list up to 3 most relevant skills that would be helpful.\n"
+            "Format your response as a numbered list with one skill name per line:\n"
+            "1. skill_name\n"
+            "2. skill_name\n"
+            "3. skill_name\n\n"
+            "If no skills are relevant, just respond with: none"
         )
 
         skill_response = get_openai_response([{
