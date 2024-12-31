@@ -17,9 +17,12 @@ class SkillHandler:
         # Get last few messages for context, excluding system message
         user_msgs = [msg for msg in messages if msg['role'] != 'system']
         recent_msgs = user_msgs[-3:] if len(user_msgs) > 3 else user_msgs
+        
+        # Include current user input in conversation context
+        conversation_msgs = recent_msgs + [{"role": "user", "content": user_input}]
         conversation = "\n\n".join(
             f"{msg['role'].upper()}:\n{msg['content']}" 
-            for msg in recent_msgs
+            for msg in conversation_msgs
         )
 
         skill_list = "\n".join(f"{skill}: {self.skill_manager.skills[skill].usage}" 
