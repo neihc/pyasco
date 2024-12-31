@@ -339,7 +339,7 @@ Environment Variables:
         """
         # Get relevant skills first
         skill_handler = SkillHandler(self.skill_manager, self.python_executor)
-        relevant_skills = skill_handler.get_relevant_skills(self.messages, self.model, new_input)
+        relevant_skills = skill_handler.get_relevant_skills(self.messages, self.model, enhanced_input)
         
         # Process skills and update input if needed
         enhanced_input = skill_handler.process_skills(new_input, relevant_skills, self.messages)
