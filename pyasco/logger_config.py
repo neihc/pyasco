@@ -2,7 +2,7 @@ import logging
 import os
 from logging.handlers import RotatingFileHandler
 
-def setup_logger(name, log_file='agent.log', level=logging.INFO, verbose=False):
+def setup_logger(name, log_file='agent.log', level=logging.INFO, verbose=True):
     """Set up logger with file and console handlers"""
     
     # Create logs directory if it doesn't exist

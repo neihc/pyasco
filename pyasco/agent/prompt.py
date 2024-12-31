@@ -24,7 +24,7 @@ USAGE: <brief description of what the skill does and how to use it>
 REQUIREMENTS: <comma-separated list of pip packages, or 'none' if no requirements>
 CODE:
 ```python
-<the actual Python code for the skill>
+<the actual Python code for the skill, just define the function/class and do not contain example call here>
 ```{error_feedback}"""
 
 IMPROVE_SKILL_PROMPT = """{conversation}
