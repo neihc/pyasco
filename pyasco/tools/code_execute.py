@@ -94,32 +94,44 @@ class CodeExecutor:
                 return self._execute_local(code)
             
     def _execute_local(self, code: str) -> Tuple[Optional[str], Optional[str]]:
-        """Execute code in __main__ context"""
-        import tempfile
-        import subprocess
-        import json
-        import os
-
-        runner_path = os.path.join(os.path.dirname(__file__), 'code_runner.py')
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py') as f:
-            f.write(code)
-            f.flush()
+        """Execute code using Jupyter kernel"""
+        try:
+            # Execute code
+            msg_id = self.kc.execute(code)
             
-            try:
-                result = subprocess.run(
-                    [self.python_command, runner_path, f.name],
-                    capture_output=True,
-                    text=True
-                )
-                
-                if result.returncode == 0:
-                    output = json.loads(result.stdout)
-                    return (output.get('stdout'), output.get('stderr'))
-                else:
-                    return None, result.stderr
-            except Exception as e:
-                return None, str(e)
+            # Collect outputs
+            stdout_parts = []
+            stderr_parts = []
+            
+            while True:
+                try:
+                    msg = self.kc.get_iopub_msg(timeout=10)
+                    msg_type = msg['msg_type']
+                    content = msg['content']
+                    
+                    if msg_type == 'stream':
+                        if content['name'] == 'stdout':
+                            stdout_parts.append(content['text'])
+                        elif content['name'] == 'stderr':
+                            stderr_parts.append(content['text'])
+                    elif msg_type == 'error':
+                        stderr_parts.extend([
+                            '\n'.join(content['traceback']),
+                            f"{content['ename']}: {content['evalue']}"
+                        ])
+                    elif msg_type == 'status' and content['execution_state'] == 'idle':
+                        break
+                        
+                except queue.Empty:
+                    break
+            
+            stdout = ''.join(stdout_parts) if stdout_parts else None
+            stderr = ''.join(stderr_parts) if stderr_parts else None
+            
+            return stdout, stderr
+            
+        except Exception as e:
+            return None, str(e)
 
     def _execute_bash_local(self, code: str) -> Tuple[Optional[str], Optional[str]]:
         """Execute bash code locally"""
