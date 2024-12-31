@@ -11,7 +11,8 @@ class CodeToImage:
             font_size=16,
             line_pad=20,  # This is the padding
             code="#2C2C2C",  # Code background color
-            line_numbers=False
+            line_numbers=False,
+            font_family="Courier New"
         )
 
     def convert(self, code: str, language: Optional[str] = None) -> bytes:
