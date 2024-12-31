@@ -10,7 +10,7 @@ class CodeToImage:
         self.converter = Code2Image(
             font_size=16,
             line_pad=20,  # This is the padding
-            code="#1E1E1E",  # Code background color (dark gray)
+            code_bg="#1E1E1E",  # Code background color (dark gray)
             line_numbers=False,
             font_name="Monaco"
         )
