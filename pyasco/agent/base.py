@@ -41,7 +41,7 @@ class Agent:
         
         # Initialize handlers
         self.skill_handler = SkillHandler(self.skill_manager, self.python_executor, self.llm_service)
-        self.response_handler = ResponseHandler(self.code_extractor)
+        self.response_handler = ResponseHandler(self.code_extractor, self.llm_service)
         self.tool_handler = ToolHandler(self.python_executor)
         
         self._initialize_chat()

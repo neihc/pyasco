@@ -1,11 +1,12 @@
 from typing import List, Dict, Generator, Any, Union
-from ..services.llm import get_openai_response
+from ..services.llm import LLMService
 from ..services.code_snippet_extractor import CodeSnippetExtractor
 from .types import AgentResponse
 
 class ResponseHandler:
-    def __init__(self, code_extractor: CodeSnippetExtractor):
+    def __init__(self, code_extractor: CodeSnippetExtractor, llm_service: LLMService):
         self.code_extractor = code_extractor
+        self.llm_service = llm_service
 
     def handle_response(
         self, 
@@ -15,7 +16,7 @@ class ResponseHandler:
     ) -> Union[AgentResponse, Generator[AgentResponse, None, None]]:
         """Handle LLM response and create appropriate AgentResponse"""
         filtered_messages = self._prepare_messages(messages)
-        llm_response = get_openai_response(filtered_messages, model=model, stream=stream)
+        llm_response = self.llm_service.get_response(filtered_messages, model=model, stream=stream)
 
         if stream:
             return self._handle_streaming_response(llm_response, messages)
