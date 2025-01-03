@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 from .logger_config import setup_logger
 from .config import Config
-from .services.llm import get_openai_response
+from .services.llm import LLMService
 from .services.code_snippet_extractor import CodeSnippetExtractor
 from .services.skill_manager import SkillManager, Skill
 from .tools.code_execute import CodeExecutor
@@ -90,9 +90,12 @@ class Agent:
         
         self.custom_instructions = config.custom_instructions or ""
         self.model = config.llm.model
-        # Configure LLM client
-        from .services.llm import configure_client
-        configure_client(api_key=config.llm.api_key, base_url=config.llm.base_url)
+        # Initialize LLM service
+        self.llm_service = LLMService(
+            api_key=config.llm.api_key,
+            base_url=config.llm.base_url,
+            model=self.model
+        )
         self.skill_manager = SkillManager(config.skills_path)
         
         # Install requirements in Docker container during initialization
@@ -221,7 +224,7 @@ Environment Variables:
         )
         
         self.logger.info(f"Asking LLM to select relevant skills for input: {user_input[:100]}...")
-        skill_response = get_openai_response([{
+        skill_response = self.llm_service.get_response([{
             "role": "user",
             "content": skill_prompt
         }], model=self.model)
@@ -582,7 +585,7 @@ Environment Variables:
                     for name, skill in self.skill_manager.skills.items():
                         identify_prompt += f"- {name}: {skill.usage}\n"
                     
-                    response = get_openai_response([{
+                    response = self.llm_service.get_response([{
                         "role": "user",
                         "content": identify_prompt
                     }], model=self.model)
