@@ -1,18 +1,21 @@
 from typing import Dict, Any, List, Optional
-from ..services import graphdb, llm
+from ..services import graphdb
+from ..services.llm import LLMService
 from ..logger_config import setup_logger
 
 class MemoryHandler:
     """Handler for processing and storing memories using LLM and graph database"""
     
-    def __init__(self, memory_instructions: str):
+    def __init__(self, memory_instructions: str, llm_service: Optional[LLMService] = None):
         """
         Initialize the memory handler
         Args:
             memory_instructions (str): Instructions for how to process and structure memories
+            llm_service (LLMService): LLM service instance for processing memories
         """
         self.logger = setup_logger('memory_handler')
         self.memory_instructions = memory_instructions
+        self.llm_service = llm_service or LLMService()
 
     def remember(self, content: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
@@ -67,7 +70,7 @@ class MemoryHandler:
 
         # Get structured memory from LLM
         try:
-            memory_structure = llm.get_openai_response([{
+            memory_structure = self.llm_service.get_response([{
                 "role": "user",
                 "content": prompt
             }])
