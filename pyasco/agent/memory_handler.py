@@ -1,21 +1,24 @@
 from typing import Dict, Any, List, Optional
-from ..services import graphdb
+from ..services.graphdb import GraphDB
 from ..services.llm import LLMService
 from ..logger_config import setup_logger
 
 class MemoryHandler:
     """Handler for processing and storing memories using LLM and graph database"""
     
-    def __init__(self, memory_instructions: str, llm_service: Optional[LLMService] = None):
+    def __init__(self, memory_instructions: str, llm_service: Optional[LLMService] = None,
+                 graph_db: Optional[GraphDB] = None):
         """
         Initialize the memory handler
         Args:
             memory_instructions (str): Instructions for how to process and structure memories
             llm_service (LLMService): LLM service instance for processing memories
+            graph_db (GraphDB): GraphDB instance for storing memories
         """
         self.logger = setup_logger('memory_handler')
         self.memory_instructions = memory_instructions
         self.llm_service = llm_service or LLMService()
+        self.graph_db = graph_db or GraphDB()
 
     def remember(self, content: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
@@ -84,7 +87,7 @@ class MemoryHandler:
                     if context:
                         node_spec["properties"].update(context)
                 
-                node = graphdb.create_node(
+                node = self.graph_db.create_node(
                     node_spec["label"],
                     node_spec["properties"]
                 )
@@ -92,7 +95,7 @@ class MemoryHandler:
             
             # Create relationships between nodes
             for rel in memory_structure["relationships"]:
-                graphdb.create_relationship(
+                self.graph_db.create_relationship(
                     rel["from_node_id"],
                     rel["to_node_id"],
                     rel["type"],
