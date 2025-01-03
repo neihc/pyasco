@@ -1,6 +1,7 @@
 from typing import Dict, Any, List, Optional
 from ..services.graphdb import GraphDB
 from ..services.llm import LLMService
+from ..services.code_snippet_extractor import CodeSnippetExtractor
 from ..logger_config import setup_logger
 
 class MemoryHandler:
@@ -19,6 +20,7 @@ class MemoryHandler:
         self.memory_instructions = memory_instructions
         self.llm_service = llm_service or LLMService()
         self.graph_db = graph_db or GraphDB()
+        self.code_extractor = CodeSnippetExtractor()
 
     def remember(self, content: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
@@ -46,37 +48,46 @@ class MemoryHandler:
         You should:
         1. Determine appropriate node types and their properties
         2. Identify any relationships that should be created
-        3. Return a JSON object with this structure:
-        {{
+        3. Return a JSON object wrapped in a code block like this:
+        ```json
+        {
             "nodes": [
-                {{
+                {
                     "label": "node type from schema",
-                    "properties": {{
+                    "properties": {
                         "property1": "value1",
                         ...
-                    }}
-                }}
+                    }
+                }
             ],
             "relationships": [
-                {{
+                {
                     "from_node_id": "unique_id_1",
-                    "to_node_id": "unique_id_2",
+                    "to_node_id": "unique_id_2", 
                     "type": "RELATIONSHIP_TYPE",
-                    "properties": {{
+                    "properties": {
                         "property1": "value1",
                         ...
-                    }}
-                }}
+                    }
+                }
             ]
-        }}
+        }
+        ```
         """
 
         # Get structured memory from LLM
         try:
-            memory_structure = self.llm_service.get_response([{
+            response = self.llm_service.get_response([{
                 "role": "user",
                 "content": prompt
             }])
+            
+            # Extract JSON from code block
+            snippets = self.code_extractor.extract_snippets(response)
+            if not snippets or not snippets[0].content:
+                raise ValueError("No JSON structure found in LLM response")
+                
+            memory_structure = eval(snippets[0].content)
             
             # Create all nodes first
             created_nodes = []
