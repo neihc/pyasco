@@ -36,17 +36,30 @@ class MemoryHandler:
         INSTRUCTIONS:
         {self.memory_instructions}
         
-        Format your response as a JSON object with these fields:
+        Based on the provided schema in the instructions, structure this content as a JSON object.
+        You should:
+        1. Determine appropriate node types and their properties
+        2. Identify any relationships that should be created
+        3. Return a JSON object with this structure:
         {{
-            "type": "memory type (conversation, fact, skill, etc)",
-            "summary": "brief summary of the memory",
-            "details": "detailed content of the memory",
-            "tags": ["relevant", "tags", "for", "categorization"],
+            "nodes": [
+                {{
+                    "label": "node type from schema",
+                    "properties": {{
+                        "property1": "value1",
+                        ...
+                    }}
+                }}
+            ],
             "relationships": [
                 {{
-                    "type": "relationship type",
-                    "target": "related memory or concept",
-                    "properties": {{}}
+                    "from_node_index": 0,
+                    "to_node_index": 1,
+                    "type": "RELATIONSHIP_TYPE",
+                    "properties": {{
+                        "property1": "value1",
+                        ...
+                    }}
                 }}
             ]
         }}
