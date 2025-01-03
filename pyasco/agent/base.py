@@ -40,7 +40,7 @@ class Agent:
         self.skill_manager = SkillManager(config.skills_path)
         
         # Initialize handlers
-        self.skill_handler = SkillHandler(self.skill_manager, self.python_executor)
+        self.skill_handler = SkillHandler(self.skill_manager, self.python_executor, self.llm_service)
         self.response_handler = ResponseHandler(self.code_extractor)
         self.tool_handler = ToolHandler(self.python_executor)
         

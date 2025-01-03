@@ -1,12 +1,13 @@
 from typing import List, Optional
 from ..services.skill_manager import SkillManager, Skill
-from ..services.llm import get_openai_response
+from ..services.llm import LLMService
 from ..tools.code_execute import CodeExecutor
 
 class SkillHandler:
-    def __init__(self, skill_manager: SkillManager, executor: CodeExecutor):
+    def __init__(self, skill_manager: SkillManager, executor: CodeExecutor, llm_service: LLMService):
         self.skill_manager = skill_manager
         self.executor = executor
+        self.llm_service = llm_service
 
     def get_relevant_skills(self, messages: List[dict], model: str, user_input: str) -> List[Skill]:
         """Get relevant skills based on conversation history"""
@@ -39,10 +40,11 @@ class SkillHandler:
             "If no skills are relevant, just respond with: none"
         )
 
-        skill_response = get_openai_response([{
+        response = self.llm_service.get_response([{
             "role": "user", 
             "content": skill_prompt
         }], model=model)
+        skill_response = response.content if hasattr(response, 'content') else response
 
         selected_skill_names = [name.strip() for name in skill_response.split('\n') if name.strip()]
         relevant_skills = []
