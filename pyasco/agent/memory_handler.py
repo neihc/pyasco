@@ -50,28 +50,28 @@ class MemoryHandler:
         2. Identify any relationships that should be created
         3. Return a JSON object wrapped in a code block like this:
         ```json
-        {
+        {{
             "nodes": [
-                {
+                {{
                     "label": "node type from schema",
-                    "properties": {
+                    "properties": {{
                         "property1": "value1",
                         ...
-                    }
-                }
+                    }}
+                }}
             ],
             "relationships": [
-                {
+                {{
                     "from_node_id": "unique_id_1",
                     "to_node_id": "unique_id_2", 
                     "type": "RELATIONSHIP_TYPE",
-                    "properties": {
+                    "properties": {{
                         "property1": "value1",
                         ...
-                    }
-                }
+                    }}
+                }}
             ]
-        }
+        }}
         ```
         """
 
