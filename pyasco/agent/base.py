@@ -12,7 +12,7 @@ from .prompt import (
 )
 from .types import AgentResponse
 from ..config import Config
-from ..services.llm import configure_client
+from ..services.llm import LLMService
 from ..services.code_snippet_extractor import CodeSnippetExtractor
 from ..services.skill_manager import SkillManager
 from ..tools.code_execute import CodeExecutor
@@ -32,7 +32,11 @@ class Agent:
         self.custom_instructions = config.custom_instructions or ""
         self.model = config.llm.model
         
-        configure_client(api_key=config.llm.api_key, base_url=config.llm.base_url)
+        self.llm_service = LLMService(
+            api_key=config.llm.api_key,
+            base_url=config.llm.base_url,
+            model=self.model
+        )
         self.skill_manager = SkillManager(config.skills_path)
         
         # Initialize handlers
