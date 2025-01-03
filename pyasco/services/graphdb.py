@@ -55,9 +55,9 @@ class GraphDB:
                 self.logger.debug(f"Parameters: {parameters}")
 
             with self.driver.session() as session:
-            result = session.run(query, parameters or {})
-            records = [dict(record) for record in result]
-            
+                result = session.run(query, parameters or {})
+                records = [dict(record) for record in result]
+                
                 # Log response details
                 self.logger.debug("=" * 80)
                 self.logger.debug("GRAPH DB RESPONSE")
