@@ -5,9 +5,9 @@ from pyasco.agent.memory_handler import MemoryHandler
 def main():
     # Initialize services
     graph_db = GraphDB(
-        uri="bolt://localhost:7687",
+        uri="neo4j+s://61e1f96d.databases.neo4j.io",
         username="neo4j",
-        password="your-password"  # Replace with actual password
+        password="pEBDsNRqWZvwTI2IooyrQRuNX__vYmmgqcef9MPOY0g"  # Replace with actual password
     )
     
     llm_service = LLMService()  # Using default configuration
@@ -62,5 +62,4 @@ def main():
         # Clean up connections
         graph_db.close()
 
-if __name__ == "__main__":
-    main()
+main()
