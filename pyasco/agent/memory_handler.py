@@ -59,37 +59,35 @@ class MemoryHandler:
                 "content": prompt
             }])
             
-            # Create memory node in graph database
-            # Prepare node properties
-            node_properties = {
-                "content": content,
-                "structured_data": memory_structure
-            }
-            if context:
-                node_properties.update(context)
+            # Create all nodes first
+            created_nodes = []
+            for node_spec in memory_structure["nodes"]:
+                # Add original content to first node's properties
+                if not created_nodes:
+                    node_spec["properties"]["original_content"] = content
+                    if context:
+                        node_spec["properties"].update(context)
                 
-            memory_node = graphdb.create_node("Memory", node_properties)
+                node = graphdb.create_node(
+                    node_spec["label"],
+                    node_spec["properties"]
+                )
+                created_nodes.append(node)
             
-            # Process relationships if any
-            if memory_node and "relationships" in memory_structure:
-                for rel in memory_structure["relationships"]:
-                    # Create or find target node
-                    target_node = graphdb.create_node(
-                        rel["type"].capitalize(),
-                        {"name": rel["target"]}
-                    )
-                    
-                    # Create relationship
-                    if target_node:
-                        graphdb.create_relationship(
-                            memory_node["id"],
-                            target_node["id"],
-                            rel["type"].upper(),
-                            rel.get("properties", {})
-                        )
+            # Create relationships between nodes
+            for rel in memory_structure["relationships"]:
+                from_node = created_nodes[rel["from_node_index"]]
+                to_node = created_nodes[rel["to_node_index"]]
+                
+                graphdb.create_relationship(
+                    from_node["id"],
+                    to_node["id"],
+                    rel["type"],
+                    rel.get("properties", {})
+                )
 
-            self.logger.info(f"Successfully stored memory: {memory_structure['summary']}")
-            return memory_node
+            self.logger.info(f"Successfully stored memory with {len(created_nodes)} nodes")
+            return created_nodes[0]  # Return the primary node
 
         except Exception as e:
             self.logger.error(f"Failed to process memory: {str(e)}")
