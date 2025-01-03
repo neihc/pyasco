@@ -23,6 +23,7 @@ dependencies = [
     "pyyaml>=6.0.2",
     "psutil>=6.1.0",
     "python-telegram-bot>=21.9",
+    "code2image>=0.0.3",
 ]
 
 [project.scripts]

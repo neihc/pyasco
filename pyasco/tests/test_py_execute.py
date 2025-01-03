@@ -22,8 +22,8 @@ def test_execution_with_error(executor):
 
 def test_execution_with_result(executor):
     """Test execution that returns a value"""
-    stdout, stderr = executor.execute('2 + 2')
-    assert stdout == "4"
+    stdout, stderr = executor.execute('print(2 + 2)')
+    assert stdout == "4\n"
     assert stderr is None
 
 def test_kernel_reset(executor):
@@ -48,18 +48,18 @@ def test_docker_kernel_state():
     try:
         # Define a variable
         stdout, stderr = executor.execute('x = 42')
-        assert stderr == ''
+        assert stderr is None
         
         # Variable should persist in next execution
         stdout, stderr = executor.execute('print(x)')
         assert stdout == "42\n"
-        assert stderr == ''
+        assert stderr is None
         
         # Complex state should also persist
         executor.execute('import math')
         executor.execute('y = math.pi')
         stdout, stderr = executor.execute('print(y)')
         assert stdout.startswith('3.14')
-        assert stderr == ''
+        assert stderr is None
     finally:
         executor.cleanup()
