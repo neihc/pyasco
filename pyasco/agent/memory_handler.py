@@ -53,8 +53,8 @@ class MemoryHandler:
             ],
             "relationships": [
                 {{
-                    "from_node_index": 0,
-                    "to_node_index": 1,
+                    "from_node_id": "unique_id_1",
+                    "to_node_id": "unique_id_2",
                     "type": "RELATIONSHIP_TYPE",
                     "properties": {{
                         "property1": "value1",
@@ -89,12 +89,9 @@ class MemoryHandler:
             
             # Create relationships between nodes
             for rel in memory_structure["relationships"]:
-                from_node = created_nodes[rel["from_node_index"]]
-                to_node = created_nodes[rel["to_node_index"]]
-                
                 graphdb.create_relationship(
-                    from_node["id"],
-                    to_node["id"],
+                    rel["from_node_id"],
+                    rel["to_node_id"],
                     rel["type"],
                     rel.get("properties", {})
                 )
