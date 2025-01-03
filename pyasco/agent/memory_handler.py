@@ -60,11 +60,15 @@ class MemoryHandler:
             }])
             
             # Create memory node in graph database
-            memory_node = graphdb.create_node("Memory", {
+            # Prepare node properties
+            node_properties = {
                 "content": content,
-                "structured_data": memory_structure,
-                **context if context else {}
-            })
+                "structured_data": memory_structure
+            }
+            if context:
+                node_properties.update(context)
+                
+            memory_node = graphdb.create_node("Memory", node_properties)
             
             # Process relationships if any
             if memory_node and "relationships" in memory_structure:
