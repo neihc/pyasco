@@ -566,61 +566,95 @@ class MemoryHandler:
                         'path': [node_info]
                     })
 
-            # Explore neighborhoods using BFS
-            max_depth = 3
+            # Explore neighborhoods using BFS with improved error handling
+            max_depth = 2  # Reduced max depth for better focus
             while exploration_queue:
-                current = exploration_queue.pop(0)
-                if current['depth'] >= max_depth:
-                    continue
-
-                # Get all neighbors
-                neighbors = self.graph_db.get_node_neighbors(current['node_id'])
-                
-                for neighbor in neighbors:
-                    neighbor_node = neighbor['neighbor']
-                    neighbor_id = neighbor_node.element_id
+                try:
+                    current = exploration_queue.pop(0)
+                    current_depth = current['depth']
                     
-                    if neighbor_id in seen_ids:
+                    if current_depth >= max_depth:
+                        self.logger.debug(f"Reached max depth {max_depth} for node {current['node_id']}")
+                        continue
+
+                    self.logger.debug(f"Exploring neighbors for node {current['node_id']} at depth {current_depth}")
+                    
+                    # Get all neighbors with error handling
+                    try:
+                        neighbors = self.graph_db.get_node_neighbors(current['node_id'])
+                        self.logger.debug(f"Found {len(neighbors)} neighbors for node {current['node_id']}")
+                    except Exception as e:
+                        self.logger.error(f"Failed to get neighbors for node {current['node_id']}: {str(e)}")
                         continue
                     
-                    # Calculate decaying score based on depth and relationship
-                    base_score = current.get('score', 1.0)  # Get score from parent node
-                    depth_penalty = 0.7 ** current['depth']  # Exponential decay with depth
-                    depth_score = base_score * depth_penalty
+                    for neighbor in neighbors:
+                        try:
+                            if not neighbor.get('neighbor'):
+                                self.logger.warning("Skipping invalid neighbor without node data")
+                                continue
+                                
+                            neighbor_node = neighbor['neighbor']
+                            neighbor_id = neighbor_node.element_id
+                            
+                            if neighbor_id in seen_ids:
+                                self.logger.debug(f"Skipping already seen neighbor {neighbor_id}")
+                                continue
+                            
+                            # Calculate decaying score with improved weighting
+                            base_score = current.get('score', 1.0)
+                            depth_penalty = 0.8 ** current_depth  # Slightly reduced penalty
+                            relationship_bonus = 1.2 if current_depth == 0 else 1.0  # Bonus for direct neighbors
+                            depth_score = base_score * depth_penalty * relationship_bonus
+                            
+                            # Create neighbor info with more context
+                            neighbor_info = {
+                                'n': neighbor_node,
+                                'score': depth_score,
+                                'match_type': 'neighbor',
+                                'relationship': neighbor['relationship_type'],
+                                'labels': list(neighbor_node.labels),
+                                'properties': dict(neighbor_node),
+                                'depth': current_depth + 1,
+                                'path_from_source': current['path'],
+                                'parent_node': current['node_id']
+                            }
+                            
+                            self.logger.debug(
+                                f"Evaluating neighbor {neighbor_id} "
+                                f"(depth: {current_depth + 1}, score: {depth_score:.3f})"
+                            )
                     
-                    # Create neighbor info with more context
-                    neighbor_info = {
-                        'n': neighbor_node,
-                        'score': depth_score,
-                        'match_type': 'neighbor',
-                        'relationship': neighbor['relationship_type'],
-                        'labels': list(neighbor_node.labels),
-                        'properties': dict(neighbor_node),
-                        'depth': current['depth'] + 1,
-                        'path_from_source': current['path'],
-                        'parent_node': current['node_id']
-                    }
-                    
-                    print(
-                        f"Exploring neighbor: {neighbor_node.element_id} "
-                        f"(depth: {current['depth'] + 1}, score: {depth_score:.3f})"
-                    )
-                    
-                    # Ask LLM if we should explore this neighbor
-                    if self._should_explore_node(
-                        neighbor_info,
-                        query_text,
-                        current['path']
-                    ):
-                        seen_ids.add(neighbor_id)
-                        final_results.append(neighbor_info)
-                        
-                        # Add to exploration queue for further traversal
-                        exploration_queue.append({
-                            'node_id': neighbor_id,
-                            'depth': current['depth'] + 1,
-                            'path': current['path'] + [neighbor_info]
-                        })
+                            # More selective neighbor exploration
+                            if depth_score >= similarity_threshold * 0.8:  # Adjusted threshold for neighbors
+                                if self._should_explore_node(
+                                    neighbor_info,
+                                    query_text,
+                                    current['path']
+                                ):
+                                    self.logger.debug(f"Adding neighbor {neighbor_id} to exploration")
+                                    seen_ids.add(neighbor_id)
+                                    final_results.append(neighbor_info)
+                                    
+                                    # Add to exploration queue with updated path
+                                    new_path = current['path'] + [neighbor_info]
+                                    exploration_queue.append({
+                                        'node_id': neighbor_id,
+                                        'depth': current_depth + 1,
+                                        'path': new_path,
+                                        'score': depth_score
+                                    })
+                                else:
+                                    self.logger.debug(f"Neighbor {neighbor_id} excluded by relevance check")
+                            else:
+                                self.logger.debug(f"Neighbor {neighbor_id} score too low: {depth_score:.3f}")
+                                
+                        except Exception as e:
+                            self.logger.error(f"Error processing neighbor: {str(e)}")
+                            continue
+                            
+                except Exception as e:
+                    self.logger.error(f"Error in neighborhood exploration: {str(e)}")
+                    continue
 
             self.logger.info(f"Found {len(final_results)} total results through neighborhood exploration")
             return final_results
