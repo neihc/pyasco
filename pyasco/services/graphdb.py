@@ -211,6 +211,12 @@ class GraphDB:
             "limit": limit
         })
         
+        results = self.execute_query(cypher_query, {
+            "query": query,
+            "threshold": similarity_threshold,
+            "limit": limit
+        })
+        
         print("Query Results:")
         print(results)
         return [{
