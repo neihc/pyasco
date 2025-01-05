@@ -442,19 +442,37 @@ class MemoryHandler:
             # Generate embedding for query
             query_embedding = self.embedding_service.get_embedding(query_text).tolist()[0]
             
-            # First phase: Vector search to find semantically similar nodes
-            vector_results = self.graph_db.execute_query("""
-            CALL db.index.vector.queryNodes($index_name, $k, $query) 
-            YIELD node, score
-            WHERE score >= $threshold
-            RETURN node, score
-            ORDER BY score DESC
-            """, {
-                "index_name": "memory_embeddings",
-                "k": 10,  # Increased number of initial results
-                "query": query_embedding,
-                "threshold": similarity_threshold
-            })
+            # First phase: Vector search to find semantically similar nodes across all labels
+            vector_results = []
+            # Get all labels that have vector indexes
+            index_query = """
+            SHOW INDEXES
+            YIELD name, type, labelsOrTypes
+            WHERE type = 'VECTOR'
+            RETURN distinct labelsOrTypes[0] as label
+            """
+            labels_with_indexes = self.graph_db.execute_query(index_query)
+            
+            # Query each indexed label
+            for label_result in labels_with_indexes:
+                label = label_result['label']
+                label_results = self.graph_db.execute_query(f"""
+                MATCH (n:{label})
+                WHERE n.embedding IS NOT NULL
+                WITH n, gds.similarity.cosine(n.embedding, $query) AS score
+                WHERE score >= $threshold
+                RETURN n as node, score
+                ORDER BY score DESC
+                LIMIT $k
+                """, {
+                    "k": 10,  # Results per label
+                    "query": query_embedding,
+                    "threshold": similarity_threshold
+                })
+                vector_results.extend(label_results)
+            
+            # Sort combined results by score
+            vector_results.sort(key=lambda x: x['score'], reverse=True)
             
             if not vector_results:
                 self.logger.info("No similar nodes found via vector search")
