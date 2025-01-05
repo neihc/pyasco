@@ -150,7 +150,7 @@ class GraphDB:
             return False
 
     def semantic_search(self, query: str, node_labels: Optional[List[str]] = None,
-                       limit: int = 5, similarity_threshold: float = 0.3) -> List[Dict]:
+                        limit: int = 5, similarity_threshold: float = 0.3) -> List[Dict]:
         """
         Execute a semantic search query against the graph database using similarity matching
         Args:
@@ -196,29 +196,29 @@ class GraphDB:
                 WHEN any(word IN split($query, ' ') WHERE nodeText CONTAINS word) THEN 0.5
                 ELSE 0.0
              END as similarity
-        WHERE similarity >= $threshold
+        WHERE similarity >= $similarity_threshold
         RETURN n AS node, similarity AS score
-        ORDER BY similarity DESC
+        ORDER BY score DESC
         LIMIT $limit
         """
         
-        print("Executing Cypher Query:")
-        print(cypher_query)
-        print("With Parameters:")
-        print({
+        self.logger.debug("Executing Cypher Query:")
+        self.logger.debug(cypher_query)
+        self.logger.debug("With Parameters:")
+        self.logger.debug({
             "query": query,
-            "threshold": similarity_threshold,
+            "similarity_threshold": similarity_threshold,
             "limit": limit
         })
         
         results = self.execute_query(cypher_query, {
             "query": query,
-            "threshold": similarity_threshold,
+            "similarity_threshold": similarity_threshold,
             "limit": limit
         })
         
-        print("Query Results:")
-        print(results)
+        self.logger.debug("Query Results:")
+        self.logger.debug(results)
         return [{
             'node': result['node'], 
             'score': result['score']
