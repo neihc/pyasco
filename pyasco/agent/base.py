@@ -133,15 +133,16 @@ class Agent:
                         node = result.get('n')
                         if node and hasattr(node, 'get'):
                             node_dict = {k: v for k, v in dict(node).items() if k != 'embeddings'}
-                            node_type = node_dict.get('type', 'unknown')
-                            if node_type not in nodes_by_type:
-                                nodes_by_type[node_type] = []
-                            nodes_by_type[node_type].append((node_dict, result.get('score', 0.0)))
+                            node_labels = node.get('labels', ['Unknown'])
+                            label = node_labels[0] if node_labels else 'Unknown'
+                            if label not in nodes_by_type:
+                                nodes_by_type[label] = []
+                            nodes_by_type[label].append((node_dict, result.get('score', 0.0)))
                     
                     if nodes_by_type:
                         context_parts = ["Recall context (from graphdb - your brain)\n"]
-                        for node_type, nodes in nodes_by_type.items():
-                            context_parts.append(f"Node {node_type}:")
+                        for label, nodes in nodes_by_type.items():
+                            context_parts.append(f"Node {label}:")
                             for node_dict, score in nodes:
                                 context_parts.append(str(node_dict))
                                 context_parts.append(f"relevant score: {score:.3f}\n")
