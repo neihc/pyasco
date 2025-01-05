@@ -202,13 +202,17 @@ class GraphDB:
         LIMIT $limit
         """
         
-        results = self.execute_query(cypher_query, {
+        print("Executing Cypher Query:")
+        print(cypher_query)
+        print("With Parameters:")
+        print({
             "query": query,
             "threshold": similarity_threshold,
             "limit": limit
         })
         
-        # Transform results to match expected format
+        print("Query Results:")
+        print(results)
         return [{
             'n': result['n'], 
             'score': result['similarity']
