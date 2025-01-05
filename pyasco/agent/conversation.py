@@ -34,6 +34,19 @@ class Conversation:
         """Convert conversation to format expected by LLM"""
         return [msg.to_llm_format() for msg in self.messages]
 
+    def to_text_format(self, skip_system: bool = True) -> str:
+        """Convert conversation to plain text format
+        
+        Args:
+            skip_system: Whether to skip the system message (default: True)
+            
+        Returns:
+            String representation of the conversation with each message
+            formatted as "{role}: {content}"
+        """
+        messages = self.messages[1:] if skip_system and self.messages else self.messages
+        return "\n".join(f"{msg.role}: {msg.content}" for msg in messages)
+
     @property
     def last_message(self) -> Message:
         """Get the last message in the conversation"""
