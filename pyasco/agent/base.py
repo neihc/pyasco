@@ -131,8 +131,8 @@ class Agent:
                     for result in recalled_context:
                         node = result.get('n')
                         if node and hasattr(node, 'get'):
-                            # Convert node to dictionary and add similarity score
-                            node_dict = dict(node)
+                            # Convert node to dictionary, exclude embeddings, and add similarity score
+                            node_dict = {k: v for k, v in dict(node).items() if k != 'embeddings'}
                             node_dict['similarity_score'] = result.get('score', 0.0)
                             related_nodes.append(node_dict)
                     
