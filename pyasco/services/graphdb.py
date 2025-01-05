@@ -253,7 +253,7 @@ class GraphDB:
             CALL {
                 WITH label
                 MATCH (n)
-                WHERE n:`${label}`
+                WHERE label in labels(n)
                 WITH label, n
                 LIMIT 1
                 RETURN collect(keys(n)) as properties
