@@ -127,17 +127,26 @@ class Agent:
             try:
                 recalled_context = self.memory_handler.recall(user_input)
                 if recalled_context:
-                    related_nodes = []
-                    for result in recalled_context:
+                    # Group nodes by type
+                    nodes_by_type = {}
+                    for result in recalled_context[:3]:  # Limit to 3 nodes
                         node = result.get('n')
                         if node and hasattr(node, 'get'):
-                            # Convert node to dictionary, exclude embeddings, and add similarity score
                             node_dict = {k: v for k, v in dict(node).items() if k != 'embeddings'}
-                            node_dict['similarity_score'] = result.get('score', 0.0)
-                            related_nodes.append(node_dict)
+                            node_type = node_dict.get('type', 'unknown')
+                            if node_type not in nodes_by_type:
+                                nodes_by_type[node_type] = []
+                            nodes_by_type[node_type].append((node_dict, result.get('score', 0.0)))
                     
-                    if related_nodes:
-                        context_prefix = f"Related context (JSON format):\n{str(related_nodes)}\n\n"
+                    if nodes_by_type:
+                        context_parts = ["Recall context (from graphdb - your brain)\n"]
+                        for node_type, nodes in nodes_by_type.items():
+                            context_parts.append(f"Node {node_type}:")
+                            for node_dict, score in nodes:
+                                context_parts.append(str(node_dict))
+                                context_parts.append(f"relevant score: {score:.3f}\n")
+                        
+                        context_prefix = "\n".join(context_parts) + "\n"
             except Exception as e:
                 self.logger.error(f"Failed to recall context: {str(e)}")
 
