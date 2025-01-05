@@ -60,7 +60,10 @@ def main():
             print(json.dumps(conv_dict, indent=2))
         else:  # If it's already a dict
             print(json.dumps(conversation, indent=2))
-    
+    except Exception as e:
+        print(f"Error storing memory: {e}")
+        return
+
     # Demonstrate memory recall
     print("\nRecalling memories about transformers:")
     transformer_memories = memory_handler.recall(
