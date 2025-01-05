@@ -220,6 +220,6 @@ class GraphDB:
         print("Query Results:")
         print(results)
         return [{
-            'n': result['n'], 
-            'score': result['similarity']
+            'node': result['node'], 
+            'score': result['score']
         } for result in results]
