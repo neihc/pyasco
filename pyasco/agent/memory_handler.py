@@ -383,7 +383,7 @@ class MemoryHandler:
         try:
             response = self.llm_service.get_response([{
                 "role": "user",
-                "content": prompt
+                "content": prompt.format(self=self)
             }])
             
             snippets = self.code_extractor.extract_snippets(response)
