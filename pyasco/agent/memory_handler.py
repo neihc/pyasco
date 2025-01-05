@@ -549,7 +549,9 @@ class MemoryHandler:
                     node_info = {
                         'n': node,
                         'score': result['score'],
-                        'match_type': 'vector'
+                        'match_type': 'vector',
+                        'labels': list(node.labels),
+                        'properties': dict(node)
                     }
                     final_results.append(node_info)
                     nodes_to_explore.append({
@@ -601,7 +603,15 @@ class MemoryHandler:
                                 current['path']
                             ):
                                 seen_ids.add(neighbor_id)
-                                final_results.append(neighbor_info['path'][-1])
+                                # Properly format neighbor node info
+                                final_results.append({
+                                    'n': neighbor_node,
+                                    'score': 0.5,  # Base score for neighbors
+                                    'match_type': 'neighbor',
+                                    'relationship': neighbor['relationship_type'],
+                                    'labels': list(neighbor_node.labels),
+                                    'properties': dict(neighbor_node)
+                                })
                                 next_level.append(neighbor_info)
                     
                     nodes_at_depth = next_level
