@@ -5,36 +5,6 @@ from ..services.code_snippet_extractor import CodeSnippetExtractor
 from ..services.embedding import EmbeddingService
 from ..logger_config import setup_logger
 
-DOMAIN_SCHEMA_INSTRUCTIONS = """
-Core domain schema for AI agent memory:
-
-User nodes:
-- Label: "User"
-- Properties:
-  - user_id: unique identifier
-  - last_interaction: timestamp
-  - interaction_count: number of interactions
-
-Conversation nodes:
-- Label: "Conversation"
-- Properties:
-  - conversation_id: unique identifier
-  - timestamp: when the conversation occurred
-  - summary: brief summary of the conversation
-  - content: full conversation content
-
-Message nodes:
-- Label: "Message"
-- Properties:
-  - role: who sent the message (user/assistant)
-  - content: message content
-  - timestamp: when the message was sent
-
-Relationships:
-- USER_PARTICIPATED -> between User and Conversation
-- CONTAINS_MESSAGE -> between Conversation and Message
-- SENT_MESSAGE -> between User and Message
-"""
 
 class MemoryHandler:
     """Handler for processing and storing memories using LLM and graph database"""
@@ -49,7 +19,7 @@ class MemoryHandler:
             graph_db (GraphDB): GraphDB instance for storing memories
         """
         self.logger = setup_logger('memory_handler')
-        self.memory_instructions = f"{DOMAIN_SCHEMA_INSTRUCTIONS}\n\nAdditional Schema:\n{memory_instructions}"
+        self.memory_instructions = memory_instructions
         self.llm_service = llm_service or LLMService()
         self.graph_db = graph_db or GraphDB()
         self.code_extractor = CodeSnippetExtractor()
@@ -854,9 +824,6 @@ class MemoryHandler:
             
             # Format complete schema with domain context
             schema = "Database Schema:\n\n"
-            
-            # Add domain schema first
-            schema += "Domain Schema:\n" + DOMAIN_SCHEMA_INSTRUCTIONS + "\n\n"
             
             # Add actual database state
             schema += "Current Database State:\n\n" + db_schema
