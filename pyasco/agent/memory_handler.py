@@ -239,7 +239,8 @@ class MemoryHandler:
         query = f"""
         MATCH (n)
         {label_filter}
-        WHERE any(prop IN keys(n) WHERE n[prop] CONTAINS $entity)
+        WITH n, [prop IN keys(n) WHERE n[prop] CONTAINS $entity] AS matches
+        WHERE size(matches) > 0
         RETURN n AS node
         LIMIT $limit
         """
