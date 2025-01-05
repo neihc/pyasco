@@ -178,9 +178,10 @@ class Agent:
             stream
         )
 
-    def ask(self, new_input: str, stream: bool = False, auto: bool = False, max_loops: int = 5) -> Dict:
-        # Initial response uses recall
-        response = self._get_response_with_recall(new_input, stream=stream)
+    def ask(self, user_input: str, stream: bool = False, auto: bool = False, max_loops: int = 5) -> Dict:
+        """Process user input and handle any follow-up interactions"""
+        # Initial response always uses recall for user messages
+        response = self._get_response_with_recall(user_input, stream=stream)
         
         if not auto:
             return response
@@ -202,7 +203,7 @@ class Agent:
                 break
                 
             follow_up = self.get_follow_up(results)
-            # Follow-up responses don't use recall
+            # Follow-up responses don't use recall since they're system-generated
             current_response = self.get_response(follow_up, stream=stream)
             loop_count += 1
             
