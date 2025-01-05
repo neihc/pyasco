@@ -121,6 +121,56 @@ class MemoryHandler:
         except Exception as e:
             self.logger.error(f"Failed to create nodes: {str(e)}")
             raise
+            
+    def recall(self, query: str, node_types: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        """
+        Recall memories based on a semantic query
+        Args:
+            query (str): Natural language query to search memories
+            node_types (list): Optional list of node types to search within
+        Returns:
+            list: List of relevant memory nodes
+        """
+        try:
+            # Use LLM to enhance the search query
+            prompt = f"""
+            Given this natural language query about memories:
+            "{query}"
+            
+            Based on this schema:
+            {self.memory_instructions}
+            
+            Enhance this query for semantic search. Focus on key terms and concepts.
+            Return only the enhanced search terms in a code block, no explanation.
+            ```
+            <enhanced search terms>
+            ```
+            """
+            
+            response = self.llm_service.get_response([{
+                "role": "user",
+                "content": prompt
+            }])
+            
+            snippets = self.code_extractor.extract_snippets(response)
+            if not snippets or not snippets[0].content:
+                raise ValueError("No enhanced query found in LLM response")
+            
+            enhanced_query = snippets[0].content.strip()
+            self.logger.debug(f"Enhanced query: {enhanced_query}")
+            
+            # Execute semantic search
+            results = self.graph_db.semantic_search(
+                enhanced_query,
+                node_labels=node_types
+            )
+            
+            self.logger.info(f"Found {len(results)} matching memories")
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"Failed to recall memories: {str(e)}")
+            raise
 
     def _create_relationships(self, nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """

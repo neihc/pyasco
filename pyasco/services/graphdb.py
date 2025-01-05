@@ -81,7 +81,7 @@ class GraphDB:
         result = self.execute_query(query, {"props": properties})
         return result[0]['n'] if result else None
 
-    def create_relationship(self, from_node_id: int, to_node_id: int, 
+    def create_relationship(self, from_node_id: int, to_node_id: int,
                           relationship_type: str, properties: Dict[str, Any] = None) -> Dict:
         """
         Create a relationship between two nodes.
@@ -109,3 +109,33 @@ class GraphDB:
         
         result = self.execute_query(query, params)
         return result[0]['r'] if result else None
+
+    def semantic_search(self, query: str, node_labels: Optional[List[str]] = None,
+                       limit: int = 5) -> List[Dict]:
+        """
+        Execute a semantic search query against the graph database
+        Args:
+            query (str): The semantic search query
+            node_labels (list): Optional list of node labels to search within
+            limit (int): Maximum number of results to return
+        Returns:
+            list: List of matching nodes with their properties
+        """
+        label_filter = ""
+        if node_labels:
+            label_filter = f"WHERE any(label IN labels(n) WHERE label IN {node_labels})"
+
+        cypher_query = f"""
+        MATCH (n)
+        {label_filter}
+        WITH n, properties(n) as props
+        WHERE any(value IN [value IN props WHERE value IS NOT NULL] 
+                 WHERE toString(value) CONTAINS $query)
+        RETURN n
+        LIMIT $limit
+        """
+        
+        return self.execute_query(cypher_query, {
+            "query": query,
+            "limit": limit
+        })
