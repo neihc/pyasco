@@ -172,34 +172,32 @@ class GraphDB:
         MATCH (n)
         {label_filter}
         WITH n, properties(n) as props
-        UNWIND keys(props) as prop
-        WITH n, prop, props[prop] as value
-        WHERE (value IS NOT NULL) AND (
-            CASE 
-                WHEN value IS STRING THEN true
-                WHEN value IS LIST THEN size([x IN value WHERE x IS STRING]) > 0
-                ELSE false
-            END
-        )
-        WITH n, collect({{
-            prop: prop,
-            value: CASE
-                WHEN value IS LIST 
-                THEN reduce(s = '', x IN [x IN value WHERE x IS STRING] | s + ' ' + toString(x))
-                ELSE toString(value)
-            END
-        }}) as textProps
-        UNWIND textProps as textProp
-        WITH n, textProp,
+        WITH n, 
+             [prop IN keys(props) WHERE 
+                (props[prop] IS NOT NULL) AND 
+                (
+                    (props[prop] IS STRING) OR 
+                    (props[prop] IS LIST AND size([x IN props[prop] WHERE x IS STRING]) > 0)
+                )
+             ] as validProps,
+             props
+        WITH n,
+             reduce(text = '', prop IN validProps |
+                text + ' ' + CASE
+                    WHEN props[prop] IS LIST 
+                    THEN reduce(s = '', x IN [x IN props[prop] WHERE x IS STRING] | s + ' ' + toString(x))
+                    ELSE toString(props[prop])
+                END
+             ) as nodeText
+        WITH n, nodeText,
              CASE
-                WHEN textProp.value CONTAINS $query THEN 1.0
-                WHEN size($query) > 3 AND textProp.value CONTAINS substring($query, 0, size($query)-1) THEN 0.8
-                WHEN any(word IN split($query, ' ') WHERE textProp.value CONTAINS word) THEN 0.5
+                WHEN nodeText CONTAINS $query THEN 1.0
+                WHEN size($query) > 3 AND nodeText CONTAINS substring($query, 0, size($query)-1) THEN 0.8
+                WHEN any(word IN split($query, ' ') WHERE nodeText CONTAINS word) THEN 0.5
                 ELSE 0.0
              END as similarity
         WHERE similarity >= $threshold
-        WITH DISTINCT n, max(similarity) as maxSimilarity
-        RETURN {{node: n, score: maxSimilarity}} as result
+        RETURN {node: n, score: similarity} as result
         ORDER BY result.score DESC
         LIMIT $limit
         """
