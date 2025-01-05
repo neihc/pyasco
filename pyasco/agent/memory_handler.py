@@ -527,6 +527,7 @@ class MemoryHandler:
                     for i, msg in enumerate(conversation_history)
                 ])
                 
+                history_section = f'Previous attempts and errors:\n{history_context}' if history_context else ''
                 prompt = f"""
                 Given this database schema and natural language query, create a Cypher query.
                 
@@ -534,7 +535,7 @@ class MemoryHandler:
                 
                 {db_schema}
                 
-                {f'Previous attempts and errors:\\n{history_context}' if history_context else ''}
+                {history_section}
                 
                 Requirements:
                 1. Use only node labels and relationship types that exist in the schema
