@@ -123,56 +123,66 @@ class MemoryHandler:
             self.logger.error(f"Failed to create nodes: {str(e)}")
             raise
             
-    def recall(self, query: str, node_types: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    def recall(self, query: str, node_types: Optional[List[str]] = None, max_retries: int = 3) -> List[Dict[str, Any]]:
         """
-        Recall memories based on a semantic query
+        Recall memories based on a semantic query with retry mechanism
         Args:
             query (str): Natural language query to search memories
             node_types (list): Optional list of node types to search within
+            max_retries (int): Maximum number of retry attempts
         Returns:
             list: List of relevant memory nodes
         """
-        try:
-            # Use LLM to enhance the search query
-            prompt = f"""
-            Given this natural language query about memories:
-            "{query}"
-            
-            Based on this schema:
-            {self.memory_instructions}
-            
-            Enhance this query for semantic search. Focus on key terms and concepts.
-            Return only the enhanced search terms in a code block, no explanation.
-            ```
-            <enhanced search terms>
-            ```
-            """
-            
-            response = self.llm_service.get_response([{
-                "role": "user",
-                "content": prompt
-            }])
-            
-            snippets = self.code_extractor.extract_snippets(response)
-            print(snippets)
-            if not snippets or not snippets[0].content:
-                raise ValueError("No enhanced query found in LLM response")
-            
-            enhanced_query = snippets[0].content.strip()
-            self.logger.debug(f"Enhanced query: {enhanced_query}")
-            
-            # Execute semantic search
-            results = self.graph_db.semantic_search(
-                enhanced_query,
-                node_labels=node_types
-            )
-            
-            self.logger.info(f"Found {len(results)} matching memories")
-            return results
-            
-        except Exception as e:
-            self.logger.error(f"Failed to recall memories: {str(e)}")
-            raise
+        attempt = 0
+        last_error = None
+        conversation_history = []
+
+        while attempt < max_retries:
+            try:
+                # Build prompt based on previous attempts
+                base_prompt = f"""
+                Natural language query: "{query}"
+                
+                Schema:
+                {self.memory_instructions}
+                """
+                
+                if last_error:
+                    base_prompt += f"\nPrevious attempt failed with error: {last_error}\nPlease adjust the query accordingly."
+                
+                if conversation_history:
+                    base_prompt += "\nPrevious attempts:\n" + "\n".join(conversation_history)
+                
+                base_prompt += "\nWrite a Neo4j compatible search query that will work with our semantic_search method."
+                
+                response = self.llm_service.get_response([{
+                    "role": "user",
+                    "content": base_prompt
+                }])
+                
+                snippets = self.code_extractor.extract_snippets(response)
+                if not snippets or not snippets[0].content:
+                    raise ValueError("No query found in LLM response")
+                
+                search_query = snippets[0].content.strip()
+                self.logger.debug(f"Attempt {attempt + 1} query: {search_query}")
+                
+                # Execute semantic search
+                results = self.graph_db.semantic_search(
+                    search_query,
+                    node_labels=node_types
+                )
+                
+                self.logger.info(f"Found {len(results)} matching memories")
+                return results
+                
+            except Exception as e:
+                last_error = str(e)
+                conversation_history.append(f"Attempt {attempt + 1} failed: {last_error}")
+                self.logger.warning(f"Recall attempt {attempt + 1} failed: {last_error}")
+                attempt += 1
+                
+        raise Exception(f"Failed to recall memories after {max_retries} attempts. Last error: {last_error}")
 
     def _create_relationships(self, nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
