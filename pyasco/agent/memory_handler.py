@@ -479,28 +479,17 @@ class MemoryHandler:
             
                 # Search with current query embedding
                 current_results = []
-                labels_with_indexes = self.graph_db.execute_query("""
-            SHOW INDEXES
-            YIELD name, type, labelsOrTypes
-            WHERE type = 'VECTOR'
-            RETURN distinct labelsOrTypes[0] as label
-            """)
-            
-            # Query each indexed label
-            for label_result in labels_with_indexes:
-                label = label_result['label']
-                label_results = self.graph_db.execute_query(f"""
-                CALL db.index.vector.queryNodes($index_name, $k, $query)
-                YIELD node, score 
-                WHERE score >= $threshold
-                RETURN node, score
-                ORDER BY score DESC
-                """, {
-                    "index_name": f"{label.lower()}_embeddings",
-                    "k": 5,  # Reduced initial results per label
-                    "query": query_embedding,
-                    "threshold": similarity_threshold
-                })
+                
+                # Get all labels with vector indexes
+                indexed_labels = self.graph_db.get_indexed_labels()
+                
+                # Query each indexed label
+                for label in indexed_labels:
+                    label_results = self.graph_db.get_vector_search_results(
+                        label,
+                        query_embedding,
+                        similarity_threshold
+                    )
                 # Only add results for nodes we haven't seen yet
                 for result in label_results:
                     node_id = result['node'].element_id
