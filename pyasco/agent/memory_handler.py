@@ -505,8 +505,8 @@ class MemoryHandler:
             FOR (n:Memory) ON n.embedding
             OPTIONS {
                 indexConfig: {
-                    'vector.dimensions': 1536,
-                    'vector.similarity_function': 'cosine'
+                    vector_dimensions: 1536,
+                    vector_similarity_function: "cosine"
                 }
             }
             """)
