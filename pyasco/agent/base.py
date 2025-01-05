@@ -118,16 +118,15 @@ class Agent:
             content=system_content
         )
 
-    def get_response(self, user_input: str, stream: bool = False) -> Union[Message, Generator[Message, None, None]]:
-        self.logger.info(f"Getting response for user input (stream={stream})")
+    def _get_response_with_recall(self, user_input: str, stream: bool = False) -> Union[Message, Generator[Message, None, None]]:
+        """Get response with memory recall for initial messages"""
+        self.logger.info(f"Getting response with recall for user input (stream={stream})")
         
-        # First recall relevant context
         context_prefix = ""
         if self.memory_handler:
             try:
                 recalled_context = self.memory_handler.recall(user_input)
                 if recalled_context:
-                    # Group nodes by type
                     nodes_by_type = {}
                     for result in recalled_context[:3]:  # Limit to 3 nodes
                         node = result.get('n')
@@ -151,22 +150,37 @@ class Agent:
             except Exception as e:
                 self.logger.error(f"Failed to recall context: {str(e)}")
 
-        # Add message to history with context prefixed
         self.conversation.add_message(
             role="user",
             content=context_prefix + user_input
         )
         
-        # Get LLM response through response handler
         return self.response_handler.handle_response(
-            self.conversation.to_llm_format(), 
+            self.conversation.to_llm_format(),
+            self.model,
+            self.conversation,
+            stream
+        )
+
+    def get_response(self, user_input: str, stream: bool = False) -> Union[Message, Generator[Message, None, None]]:
+        """Get response without recall for follow-up messages"""
+        self.logger.info(f"Getting response for user input (stream={stream})")
+        
+        self.conversation.add_message(
+            role="user",
+            content=user_input
+        )
+        
+        return self.response_handler.handle_response(
+            self.conversation.to_llm_format(),
             self.model,
             self.conversation,
             stream
         )
 
     def ask(self, new_input: str, stream: bool = False, auto: bool = False, max_loops: int = 5) -> Dict:
-        response = self.get_response(new_input, stream=stream)
+        # Initial response uses recall
+        response = self._get_response_with_recall(new_input, stream=stream)
         
         if not auto:
             return response
@@ -188,6 +202,7 @@ class Agent:
                 break
                 
             follow_up = self.get_follow_up(results)
+            # Follow-up responses don't use recall
             current_response = self.get_response(follow_up, stream=stream)
             loop_count += 1
             
