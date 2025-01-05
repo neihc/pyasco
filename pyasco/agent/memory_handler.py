@@ -140,9 +140,9 @@ class MemoryHandler:
                     CREATE VECTOR INDEX {node_spec['label'].lower()}_embeddings IF NOT EXISTS 
                     FOR (n:{node_spec['label']}) ON (n.embedding)
                     OPTIONS {{
-                        vector: {{
-                            dimensions: 1536,
-                            similarity_function: 'cosine'
+                        indexConfig: {{
+                            `vector.dimensions`: 1536,
+                            `vector.similarity_function`: 'cosine'
                         }}
                     }}
                     """)
@@ -515,12 +515,12 @@ class MemoryHandler:
         try:
             # Create vector index for embeddings if it doesn't exist
             self.graph_db.execute_query("""
-            CREATE VECTOR INDEX memory_embeddings IF NOT EXISTS 
+            CREATE VECTOR INDEX memory_embeddings IF NOT EXISTS
             FOR (n:Memory) ON (n.embedding)
             OPTIONS {
-                vector: {
-                    dimensions: 1536,
-                    similarity_function: 'cosine'
+                indexConfig: {
+                    `vector.dimensions`: 1536,
+                    `vector.similarity_function`: 'cosine'
                 }
             }
             """)
