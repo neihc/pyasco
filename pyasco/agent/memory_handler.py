@@ -24,8 +24,6 @@ class MemoryHandler:
         self.graph_db = graph_db or GraphDB()
         self.code_extractor = CodeSnippetExtractor()
         self.embedding_service = embedding_service or EmbeddingService()
-        self._setup_indexes()
-        self._setup_vector_indexes()
 
     def _generate_node_embedding(self, node_data: Dict[str, Any]) -> str:
         """
@@ -132,106 +130,6 @@ class MemoryHandler:
             self.logger.error(f"Failed to create nodes: {str(e)}")
             raise
             
-    def _extract_entities(self, query: str) -> List[str]:
-        """
-        Extract key entities from the query using LLM
-        """
-        prompt = f"""
-        Extract key entities and concepts from this query:
-        "{query}"
-        
-        Return a JSON array of entities in a code block. Include:
-        - Important nouns and noun phrases
-        - Technical terms
-        - Action verbs
-        - Time references
-        - Any specific identifiers
-        
-        Example:
-        ```json
-        ["python code", "error handling", "last week", "database connection"]
-        ```
-        """
-        
-        try:
-            response = self.llm_service.get_response([{
-                "role": "user", 
-                "content": prompt
-            }])
-            
-            snippets = self.code_extractor.extract_snippets(response)
-            if not snippets or not snippets[0].content:
-                raise ValueError("No entities found in LLM response")
-                
-            return eval(snippets[0].content)
-            
-        except Exception as e:
-            self.logger.error(f"Failed to extract entities: {str(e)}")
-            return []
-
-    def _should_expand_search(self, query: str, current_results: List[Dict]) -> bool:
-        """
-        Ask LLM if search should be expanded based on current results
-        """
-        results_summary = "\n".join([
-            f"- Node type: {r['n'].labels}, Properties: {dict(r['n'])}, Score: {r['score']}"
-            for r in current_results[:3]  # Summarize top 3 results
-        ])
-        
-        prompt = f"""
-        Query: "{query}"
-        
-        Current top results:
-        {results_summary}
-        
-        Should we expand the search to find more related nodes? Consider:
-        1. Are the current results directly relevant to the query?
-        2. Would exploring connected nodes add valuable context?
-        3. Are there missing aspects of the query not covered by current results?
-        
-        Return only "yes" or "no".
-        """
-        
-        try:
-            response = self.llm_service.get_response([{
-                "role": "user",
-                "content": prompt
-            }]).strip().lower()
-            
-            return response == "yes"
-            
-        except Exception as e:
-            self.logger.error(f"Failed to determine search expansion: {str(e)}")
-            return False
-
-    def _search_entity(self, entity: str, node_types: Optional[List[str]], limit: int) -> List[Dict[str, Any]]:
-        """
-        Search for an entity in the graph database
-        """
-        label_filter = ""
-        if node_types:
-            labels_list = [f"'{label}'" for label in node_types]
-            label_filter = f"WHERE any(label IN labels(n) WHERE label IN [{', '.join(labels_list)}])"
-        
-        query = f"""
-        MATCH (n)
-        {label_filter}
-        WITH n, [prop IN keys(n) WHERE n[prop] CONTAINS $entity] AS matches
-        WHERE size(matches) > 0
-        RETURN n AS node
-        LIMIT $limit
-        """
-        
-        results = self.graph_db.execute_query(query, {"entity": entity, "limit": limit})
-        return [{'node': result['node']} for result in results]
-
-    def _expand_entity(self, entity: str) -> str:
-        """
-        Expand the entity for broader search
-        """
-        # Placeholder for entity expansion logic
-        return entity + " expanded"
-
     def _create_relationships(self, nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Second phase: Create relationships between nodes
@@ -319,84 +217,6 @@ class MemoryHandler:
         except Exception as e:
             self.logger.error(f"Failed to process memory: {str(e)}")
             raise
-
-    def _build_query(self, query_text: str) -> str:
-        """
-        Use LLM to build a Cypher query based on the natural language query
-        """
-        prompt = f"""
-        Convert this natural language query into a Cypher query for Neo4j:
-        "{query_text}"
-
-        Use this schema:
-        {self.memory_instructions}
-
-        Return only the Cypher query in a code block, nothing else.
-        The query should:
-        - Use appropriate node labels and relationship types from the schema
-        - Include relevant property filters
-        - Return nodes and relationships that best match the query intent
-        - Limit results to 5 most relevant matches
-        """
-        
-        try:
-            response = self.llm_service.get_response([{
-                "role": "user",
-                "content": prompt
-            }])
-            
-            snippets = self.code_extractor.extract_snippets(response)
-            if not snippets or not snippets[0].content:
-                raise ValueError("No Cypher query found in LLM response")
-                
-            return snippets[0].content.strip()
-            
-        except Exception as e:
-            self.logger.error(f"Failed to build query: {str(e)}")
-            raise
-
-    def _evaluate_results(self, query_text: str, results: List[Dict]) -> Dict[str, Any]:
-        """
-        Use LLM to evaluate query results and suggest improvements
-        """
-        results_summary = "\n".join([
-            f"- Node: {r.get('n', {}).get('properties', {})} Score: {r.get('score', 'N/A')}"
-            for r in results[:3]
-        ])
-        
-        prompt = f"""
-        Evaluate these query results:
-        
-        Original query: "{query_text}"
-        
-        Results:
-        {results_summary}
-        
-        Return a JSON object in a code block with this structure:
-        ```json
-        {{
-            "sufficient": true/false,
-            "reason": "explanation of why results are sufficient or not",
-            "improved_query": "suggested improved cypher query if needed"
-        }}
-        ```
-        """
-        
-        try:
-            response = self.llm_service.get_response([{
-                "role": "user",
-                "content": prompt
-            }])
-            
-            snippets = self.code_extractor.extract_snippets(response)
-            if not snippets or not snippets[0].content:
-                raise ValueError("No evaluation found in LLM response")
-                
-            return eval(snippets[0].content)
-            
-        except Exception as e:
-            self.logger.error(f"Failed to evaluate results: {str(e)}")
-            return {"sufficient": True, "reason": "Error in evaluation"}
 
     def _enhance_search_query(self, query_text: str) -> List[str]:
         """Use LLM to generate multiple enhanced search queries for better semantic matching"""
@@ -797,25 +617,6 @@ class MemoryHandler:
             self.logger.error(f"Error during recall: {str(e)}")
             raise
 
-    def _setup_vector_indexes(self):
-        """Set up vector indexes for embedding search"""
-        try:
-            # Create vector index for embeddings if it doesn't exist
-            self.graph_db.execute_query("""
-            CREATE VECTOR INDEX memory_embeddings IF NOT EXISTS
-            FOR (n:Memory) ON (n.embedding)
-            OPTIONS {
-                indexConfig: {
-                    `vector.dimensions`: 1024,
-                    `vector.similarity_function`: 'cosine'
-                }
-            }
-            """)
-            self.logger.info("Vector index created/verified for embeddings")
-        except Exception as e:
-            self.logger.error(f"Failed to create vector index: {str(e)}")
-            raise
-
     def _get_db_schema(self) -> str:
         """Get the actual schema from the database and combine with domain schema"""
         try:
@@ -850,45 +651,3 @@ class MemoryHandler:
         except Exception as e:
             self.logger.error(f"Failed to check vector index: {str(e)}")
             return False
-
-    def _setup_indexes(self):
-        """Set up text indexes for searchable fields"""
-        prompt = """
-        Based on the schema below, determine which fields should be indexed for text search.
-        Return a JSON object in a code block with index configurations per node label.
-        Only include fields that would be useful for semantic search.
-
-        Schema:
-        {self.memory_instructions}
-
-        Return format:
-        ```json
-        {
-            "indexes": [
-                {
-                    "label": "NodeLabel",
-                    "properties": ["field1", "field2"]
-                }
-            ]
-        }
-        ```
-        """
-        
-        try:
-            response = self.llm_service.get_response([{
-                "role": "user",
-                "content": prompt.format(self=self)
-            }])
-            
-            snippets = self.code_extractor.extract_snippets(response)
-            if snippets and snippets[0].content:
-                index_config = eval(snippets[0].content)
-                
-                for idx in index_config["indexes"]:
-                    self.graph_db.create_text_index(
-                        idx["label"],
-                        idx["properties"]
-                    )
-                    
-        except Exception as e:
-            self.logger.error(f"Failed to setup indexes: {str(e)}")
