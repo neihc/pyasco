@@ -540,12 +540,12 @@ class MemoryHandler:
                     "query": query_embedding,
                     "threshold": similarity_threshold
                 })
-                    # Only add results for nodes we haven't seen yet
-                    for result in label_results:
-                        node_id = result['node'].element_id
-                        if node_id not in seen_node_ids:
-                            seen_node_ids.add(node_id)
-                            current_results.append(result)
+                # Only add results for nodes we haven't seen yet
+                for result in label_results:
+                    node_id = result['node'].element_id
+                    if node_id not in seen_node_ids:
+                        seen_node_ids.add(node_id)
+                        current_results.append(result)
                 
                 vector_results.extend(current_results)
             
