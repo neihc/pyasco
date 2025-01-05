@@ -196,13 +196,12 @@ class MemoryHandler:
             return False
 
     def recall(self, query: str, node_types: Optional[List[str]] = None,
-               similarity_threshold: float = 0.3, limit: int = 5) -> List[Dict[str, Any]]:
+               limit: int = 5) -> List[Dict[str, Any]]:
         """
         Recall memories using entity extraction and iterative expansion
         Args:
             query (str): Natural language query to search memories
             node_types (list): Optional list of node types to search within
-            similarity_threshold (float): Minimum similarity score (0-1) for matches
             limit (int): Maximum number of results to return
         Returns:
             list: List of relevant memory nodes with similarity scores
@@ -212,56 +211,14 @@ class MemoryHandler:
             entities = self._extract_entities(query)
             self.logger.debug(f"Extracted entities: {entities}")
             
-            # Phase 2: Initial search using entities
-            all_results = []
+            # Phase 2: Iteratively expand search until results are found
+            results = []
             for entity in entities:
-                results = self.graph_db.semantic_search(
-                    entity,
-                    node_labels=node_types,
-                    similarity_threshold=similarity_threshold,
-                    limit=limit
-                )
-                all_results.extend(results)
-            
-            # Deduplicate results based on node ID
-            unique_results = {}
-            for result in all_results:
-                node_id = result['n'].id
-                if node_id not in unique_results or result['score'] > unique_results[node_id]['score']:
-                    unique_results[node_id] = result
-            
-            initial_results = list(unique_results.values())
-            
-            # Phase 3: Decide whether to expand search
-            if initial_results and self._should_expand_search(query, initial_results):
-                # Get connected nodes for top results
-                expanded_results = []
-                for result in initial_results[:3]:  # Expand from top 3 results
-                    node_id = result['n'].id
-                    connected = self.graph_db.execute_query("""
-                    MATCH (n)-[r]-(connected)
-                    WHERE elementId(n) = $node_id
-                    RETURN connected, 0.7 * $original_score as score
-                    LIMIT 5
-                    """, {"node_id": node_id, "original_score": result['score']})
-                    expanded_results.extend(connected)
-                
-                # Combine and deduplicate all results
-                all_results = initial_results + expanded_results
-                final_results = {}
-                for result in all_results:
-                    node_id = result['n'].id if 'n' in result else result['connected'].id
-                    node = result.get('n', result.get('connected'))
-                    if node_id not in final_results or result['score'] > final_results[node_id]['score']:
-                        final_results[node_id] = {'n': node, 'score': result['score']}
-                
-                results = list(final_results.values())
-            else:
-                results = initial_results
-            
-            # Sort by score and limit results
-            results.sort(key=lambda x: x['score'], reverse=True)
-            results = results[:limit]
+                while not results:
+                    results = self._search_entity(entity, node_types, limit)
+                    if not results:
+                        self.logger.debug(f"No results for entity '{entity}', expanding search...")
+                        entity = self._expand_entity(entity)
             
             self.logger.info(f"Found {len(results)} memories after processing")
             return results
@@ -269,6 +226,33 @@ class MemoryHandler:
         except Exception as e:
             self.logger.error(f"Failed to recall memories: {str(e)}")
             raise
+
+    def _search_entity(self, entity: str, node_types: Optional[List[str]], limit: int) -> List[Dict[str, Any]]:
+        """
+        Search for an entity in the graph database
+        """
+        label_filter = ""
+        if node_types:
+            labels_list = [f"'{label}'" for label in node_types]
+            label_filter = f"WHERE any(label IN labels(n) WHERE label IN [{', '.join(labels_list)}])"
+        
+        query = f"""
+        MATCH (n)
+        {label_filter}
+        WHERE any(prop IN keys(n) WHERE n[prop] CONTAINS $entity)
+        RETURN n AS node
+        LIMIT $limit
+        """
+        
+        results = self.graph_db.execute_query(query, {"entity": entity, "limit": limit})
+        return [{'node': result['node']} for result in results]
+
+    def _expand_entity(self, entity: str) -> str:
+        """
+        Expand the entity for broader search
+        """
+        # Placeholder for entity expansion logic
+        return entity + " expanded"
 
     def _create_relationships(self, nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
