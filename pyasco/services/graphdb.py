@@ -198,15 +198,23 @@ class GraphDB:
                 ELSE 0.0
              END as similarity
         WHERE similarity >= $threshold
-        WITH n, max(similarity) as maxSimilarity
-        RETURN n,
-               maxSimilarity as score
+        WITH DISTINCT n, max(similarity) as maxSimilarity
+        RETURN {
+            node: n,
+            score: maxSimilarity
+        } as result
         ORDER BY score DESC
         LIMIT $limit
         """
         
-        return self.execute_query(cypher_query, {
+        results = self.execute_query(cypher_query, {
             "query": query,
             "threshold": similarity_threshold,
             "limit": limit
         })
+        
+        # Transform results to match expected format
+        return [{
+            'n': result['result']['node'], 
+            'score': result['result']['score']
+        } for result in results]
