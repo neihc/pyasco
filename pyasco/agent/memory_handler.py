@@ -571,11 +571,12 @@ class MemoryHandler:
         """
         Retrieve memories using schema-based Cypher query generation with iterative refinement
         """
+        db_schema = self._get_db_schema()
+        attempt = 0
+        conversation_history = []
+        results = []
+        
         try:
-            db_schema = self._get_db_schema()
-            attempt = 0
-            conversation_history = []
-            
             while attempt < max_attempts:
                 attempt += 1
                 self.logger.info(f"Schema-based recall attempt {attempt}/{max_attempts}")
@@ -639,44 +640,47 @@ class MemoryHandler:
                 self.logger.info(f"Generated Cypher query (attempt {attempt}): {cypher_query}")
                 
                 try:
-                    # Execute the generated query
-                    results = self.graph_db.execute_query(cypher_query)
-                    # If we get here, query executed successfully
-                    break
+                    try:
+                        # Execute the generated query
+                        results = self.graph_db.execute_query(cypher_query)
+                        # If we get here, query executed successfully
+                        break
                     
-                except Exception as e:
-                    error_msg = str(e)
-                    self.logger.warning(f"Query execution failed (attempt {attempt}): {error_msg}")
+                    except Exception as e:
+                        error_msg = str(e)
+                        self.logger.warning(f"Query execution failed (attempt {attempt}): {error_msg}")
                     
-                    # Add error feedback to conversation history
-                    conversation_history.append({
-                        "role": "assistant",
-                        "content": f"Generated query:\n```cypher\n{cypher_query}\n```\n\nError: {error_msg}\n\nPlease fix the query considering the schema constraints and error message."
-                    })
-                    
-                    if attempt == max_attempts:
-                        raise ValueError(f"Failed to generate valid query after {max_attempts} attempts. Last error: {error_msg}")
-                    continue
-            
-            # Format results
-            formatted_results = []
-            for result in results:
-                # Extract node information from each result
-                for key, value in result.items():
-                    if hasattr(value, 'labels'):  # It's a node
-                        formatted_results.append({
-                            'n': value,
-                            'score': 1.0,  # Default score for schema-based results
-                            'match_type': 'schema',
-                            'labels': list(value.labels),
-                            'properties': dict(value)
+                        # Add error feedback to conversation history
+                        conversation_history.append({
+                            "role": "assistant",
+                            "content": f"Generated query:\n```cypher\n{cypher_query}\n```\n\nError: {error_msg}\n\nPlease fix the query considering the schema constraints and error message."
                         })
+                    
+                        if attempt == max_attempts:
+                            self.logger.error(f"Failed to generate valid query after {max_attempts} attempts. Last error: {error_msg}")
+                            return []  # Return empty list instead of raising error
+                        continue
             
-            return formatted_results
+            # Format results if we have any
+            if results:
+                formatted_results = []
+                for result in results:
+                    # Extract node information from each result
+                    for key, value in result.items():
+                        if hasattr(value, 'labels'):  # It's a node
+                            formatted_results.append({
+                                'n': value,
+                                'score': 1.0,  # Default score for schema-based results
+                                'match_type': 'schema',
+                                'labels': list(value.labels),
+                                'properties': dict(value)
+                            })
+                return formatted_results
+            return []
             
         except Exception as e:
             self.logger.error(f"Error during schema-based recall: {str(e)}")
-            raise
+            return []  # Return empty list for any unexpected errors
             
     def _recall_vector_based(self, query_text: str, similarity_threshold: float = 0.7) -> List[Dict[str, Any]]:
         """
