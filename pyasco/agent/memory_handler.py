@@ -457,14 +457,13 @@ class MemoryHandler:
             for label_result in labels_with_indexes:
                 label = label_result['label']
                 label_results = self.graph_db.execute_query(f"""
-                MATCH (n:{label})
-                WHERE n.embedding IS NOT NULL
-                WITH n, gds.similarity.cosine(n.embedding, $query) AS score
+                CALL db.index.vector.queryNodes($index_name, $k, $query)
+                YIELD node, score 
                 WHERE score >= $threshold
-                RETURN n as node, score
+                RETURN node, score
                 ORDER BY score DESC
-                LIMIT $k
                 """, {
+                    "index_name": f"{label.lower()}_embeddings",
                     "k": 10,  # Results per label
                     "query": query_embedding,
                     "threshold": similarity_threshold
