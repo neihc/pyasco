@@ -185,7 +185,8 @@ class GraphDB:
                          WHERE (
                            CASE
                              WHEN props[prop] IS NULL THEN false  
-                             WHEN isArray(props[prop]) THEN 
+                             WHEN size([x IN [props[prop]] WHERE props[prop] IS NOT NULL]) > 0 AND 
+                                  size(props[prop]) > 0 THEN 
                                any(x IN props[prop] WHERE toString(x) CONTAINS $query)
                              ELSE toString(props[prop]) CONTAINS $query
                            END
@@ -202,7 +203,8 @@ class GraphDB:
                      WHERE (
                        CASE
                          WHEN props[prop] IS NULL THEN false
-                         WHEN isArray(props[prop]) THEN 
+                         WHEN size([x IN [props[prop]] WHERE props[prop] IS NOT NULL]) > 0 AND 
+                              size(props[prop]) > 0 THEN 
                            any(x IN props[prop] WHERE toString(x) CONTAINS $query)
                          ELSE toString(props[prop]) CONTAINS $query
                        END
