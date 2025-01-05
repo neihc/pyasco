@@ -27,6 +27,13 @@ class GraphDBConfig:
     password: Optional[str] = None
 
 @dataclass
+class EmbeddingConfig:
+    model: str = "text-embedding-ada-002"
+    dimensions: int = 1536
+    batch_size: int = 100
+    cache_dir: Optional[str] = None
+
+@dataclass
 class MemoryConfig:
     enabled: bool = False
     instructions: str = """
@@ -48,6 +55,7 @@ class Config:
     docker: DockerConfig = field(default_factory=DockerConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
+    embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
     skills_path: str = "skills"
     custom_instructions: Optional[str] = None
 
@@ -93,6 +101,16 @@ class ConfigManager:
                 enabled=yaml_config['memory'].get('enabled', False),
                 instructions=yaml_config['memory'].get('instructions', MemoryConfig.instructions),
                 graph_db=graph_db_config
+            )
+
+        # Configure embedding settings if present
+        embedding_config = None
+        if 'embedding' in yaml_config:
+            embedding_config = EmbeddingConfig(
+                model=yaml_config['embedding'].get('model', "text-embedding-ada-002"),
+                dimensions=yaml_config['embedding'].get('dimensions', 1536),
+                batch_size=yaml_config['embedding'].get('batch_size', 100),
+                cache_dir=yaml_config['embedding'].get('cache_dir')
             )
             
         return Config(
@@ -147,6 +165,16 @@ class ConfigManager:
                 enabled=args.memory_enabled,
                 instructions=args.memory_instructions if hasattr(args, 'memory_instructions') else MemoryConfig.instructions,
                 graph_db=graph_db_config
+            )
+
+        # Configure embedding if args present
+        embedding_config = None
+        if hasattr(args, 'embedding_model'):
+            embedding_config = EmbeddingConfig(
+                model=args.embedding_model,
+                dimensions=args.embedding_dimensions if hasattr(args, 'embedding_dimensions') else 1536,
+                batch_size=args.embedding_batch_size if hasattr(args, 'embedding_batch_size') else 100,
+                cache_dir=args.embedding_cache_dir if hasattr(args, 'embedding_cache_dir') else None
             )
             
         return Config(
