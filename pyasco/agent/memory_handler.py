@@ -99,7 +99,12 @@ class MemoryHandler:
                 if not created_nodes:
                     node_spec["properties"]["original_content"] = content
                     if context:
-                        node_spec["properties"].update(context)
+                        # Flatten context dictionary by prefixing keys
+                        flattened_context = {
+                            f"context_{k}": str(v) 
+                            for k, v in context.items()
+                        }
+                        node_spec["properties"].update(flattened_context)
                 
                 # Ensure vector index exists for this node label
                 self.graph_db.ensure_vector_index(node_spec["label"])
