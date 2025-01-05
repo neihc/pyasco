@@ -11,7 +11,7 @@ from .prompt import (
     IMPROVE_SKILL_PROMPT,
     IDENTIFY_SKILL_PROMPT
 )
-from .types import AgentResponse
+from .types import Message
 from ..config import Config
 from ..services.llm import LLMService
 from ..services.code_snippet_extractor import CodeSnippetExtractor
@@ -85,7 +85,7 @@ class Agent:
             content=system_content
         )
 
-    def get_response(self, user_input: str, stream: bool = False) -> Union[AgentResponse, Generator[AgentResponse, None, None]]:
+    def get_response(self, user_input: str, stream: bool = False) -> Union[Message, Generator[Message, None, None]]:
         self.logger.info(f"Getting response for user input (stream={stream})")
         
         # Get relevant skills based on conversation
