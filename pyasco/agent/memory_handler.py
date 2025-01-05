@@ -534,7 +534,7 @@ class MemoryHandler:
                 
                 {db_schema}
                 
-                {f'Previous attempts and errors:\n{history_context}' if history_context else ''}
+                {f'Previous attempts and errors:\\n{history_context}' if history_context else ''}
                 
                 Requirements:
                 1. Use only node labels and relationship types that exist in the schema
