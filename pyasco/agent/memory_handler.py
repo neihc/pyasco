@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from ..services.graphdb import GraphDB
 from ..services.llm import LLMService
 from ..services.code_snippet_extractor import CodeSnippetExtractor
