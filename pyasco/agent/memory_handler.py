@@ -502,11 +502,11 @@ class MemoryHandler:
             # Create vector index for embeddings if it doesn't exist
             self.graph_db.execute_query("""
             CREATE VECTOR INDEX memory_embeddings IF NOT EXISTS 
-            FOR (n:Memory) ON n.embedding
+            FOR (n:Memory) ON (n.embedding)
             OPTIONS {
-                indexConfig: {
-                    `vector.dimensions`: 1536,
-                    `vector.similarity_function`: 'cosine'
+                vector: {
+                    dimensions: 1536,
+                    similarity_function: 'cosine'
                 }
             }
             """)
