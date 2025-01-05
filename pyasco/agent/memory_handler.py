@@ -123,66 +123,51 @@ class MemoryHandler:
             self.logger.error(f"Failed to create nodes: {str(e)}")
             raise
             
-    def recall(self, query: str, node_types: Optional[List[str]] = None, max_retries: int = 3) -> List[Dict[str, Any]]:
+    def recall(self, query: str, node_types: Optional[List[str]] = None,
+               similarity_threshold: float = 0.3, limit: int = 5) -> List[Dict[str, Any]]:
         """
-        Recall memories based on a semantic query with retry mechanism
+        Recall memories based on semantic similarity search
         Args:
             query (str): Natural language query to search memories
             node_types (list): Optional list of node types to search within
-            max_retries (int): Maximum number of retry attempts
+            similarity_threshold (float): Minimum similarity score (0-1) for matches
+            limit (int): Maximum number of results to return
         Returns:
-            list: List of relevant memory nodes
+            list: List of relevant memory nodes with similarity scores
         """
-        attempt = 0
-        last_error = None
-        conversation_history = []
-
-        while attempt < max_retries:
-            try:
-                # Build prompt based on previous attempts
-                base_prompt = f"""
-                Natural language query: "{query}"
-                
-                Schema:
-                {self.memory_instructions}
-                """
-                
-                if last_error:
-                    base_prompt += f"\nPrevious attempt failed with error: {last_error}\nPlease adjust the query accordingly."
-                
-                if conversation_history:
-                    base_prompt += "\nPrevious attempts:\n" + "\n".join(conversation_history)
-                
-                base_prompt += "\nWrite a Neo4j compatible search query that will work with our semantic_search method."
-                
-                response = self.llm_service.get_response([{
-                    "role": "user",
-                    "content": base_prompt
-                }])
-                
-                snippets = self.code_extractor.extract_snippets(response)
-                if not snippets or not snippets[0].content:
-                    raise ValueError("No query found in LLM response")
-                
-                search_query = snippets[0].content.strip()
-                self.logger.debug(f"Attempt {attempt + 1} query: {search_query}")
-                
-                # Execute semantic search
-                results = self.graph_db.semantic_search(
-                    search_query,
-                    node_labels=node_types
-                )
-                
-                self.logger.info(f"Found {len(results)} matching memories")
-                return results
-                
-            except Exception as e:
-                last_error = str(e)
-                conversation_history.append(f"Attempt {attempt + 1} failed: {last_error}")
-                self.logger.warning(f"Recall attempt {attempt + 1} failed: {last_error}")
-                attempt += 1
-                
-        raise Exception(f"Failed to recall memories after {max_retries} attempts. Last error: {last_error}")
+        try:
+            # Process query with LLM to extract key terms and concepts
+            prompt = f"""
+            Analyze this query and extract key search terms and concepts:
+            "{query}"
+            
+            Return only the essential search terms, separated by spaces.
+            Focus on unique identifying words that would match similar content.
+            """
+            
+            response = self.llm_service.get_response([{
+                "role": "user",
+                "content": prompt
+            }])
+            
+            # Extract the processed search terms
+            search_terms = response.strip()
+            self.logger.debug(f"Processed search terms: {search_terms}")
+            
+            # Execute similarity-based search
+            results = self.graph_db.semantic_search(
+                search_terms,
+                node_labels=node_types,
+                similarity_threshold=similarity_threshold,
+                limit=limit
+            )
+            
+            self.logger.info(f"Found {len(results)} memories with similarity >= {similarity_threshold}")
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"Failed to recall memories: {str(e)}")
+            raise
 
     def _create_relationships(self, nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """

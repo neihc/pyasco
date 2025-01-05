@@ -150,77 +150,52 @@ class GraphDB:
             return False
 
     def semantic_search(self, query: str, node_labels: Optional[List[str]] = None,
-                       limit: int = 5) -> List[Dict]:
+                       limit: int = 5, similarity_threshold: float = 0.3) -> List[Dict]:
         """
-        Execute a semantic search query against the graph database
+        Execute a semantic search query against the graph database using similarity matching
         Args:
             query (str): The semantic search query
             node_labels (list): Optional list of node labels to search within
             limit (int): Maximum number of results to return
+            similarity_threshold (float): Minimum similarity score (0-1) for matches
         Returns:
-            list: List of matching nodes with their properties
+            list: List of matching nodes with their similarity scores
         """
-        # Prepare label filter if specified
+        # Prepare label filter
         label_filter = ""
         if node_labels:
             labels_list = [f"'{label}'" for label in node_labels]
             label_filter = f"WHERE any(label IN labels(n) WHERE label IN [{', '.join(labels_list)}])"
 
-        # Check for full-text indexes
-        indexed_searches = []
-        if node_labels:
-            for label in node_labels:
-                idx = next((idx for idx in self.indexes.values() if idx['label'] == label), None)
-                if idx:
-                    indexed_searches.append(f"""
-                    CALL db.index.fulltext.queryNodes('{label.lower()}_text_idx', $query)
-                    YIELD node, score
-                    WITH node as n, score
-                    RETURN n, score, 1 as priority
-                    """)
-
-        # Build main search query with property traversal
-        main_search = f"""
+        # Build query using apoc.text.fuzzyMatch for similarity search
+        cypher_query = f"""
         MATCH (n)
         {label_filter}
         WITH n, properties(n) as props
-        WITH n, props,
-             [prop IN keys(props) WHERE 
-                CASE
-                    WHEN props[prop] IS NULL THEN false
-                    WHEN apoc.meta.type(props[prop]) = 'LIST' THEN
-                        any(item IN props[prop] WHERE 
-                            CASE
-                                WHEN item IS NULL THEN false
-                                ELSE toString(item) CONTAINS $query
-                            END
-                        )
-                    ELSE toString(props[prop]) CONTAINS $query
-                END
-             ] as matching_props
-        WHERE size(matching_props) > 0
-        RETURN n, 
-               size(matching_props) as score,
-               0 as priority
+        UNWIND keys(props) as prop
+        WITH n, prop, props[prop] as value
+        WHERE apoc.meta.type(value) IN ['STRING', 'LIST<STRING>']
+        WITH n, collect({{
+            prop: prop,
+            value: CASE
+                WHEN apoc.meta.type(value) = 'LIST<STRING>' 
+                THEN reduce(s = '', x IN value | s + ' ' + toString(x))
+                ELSE toString(value)
+            END
+        }}) as textProps
+        UNWIND textProps as textProp
+        WITH n, textProp,
+             apoc.text.fuzzyMatch(textProp.value, $query) as similarity
+        WHERE similarity >= $threshold
+        WITH n, max(similarity) as maxSimilarity
+        RETURN n,
+               maxSimilarity as score
+        ORDER BY score DESC
+        LIMIT $limit
         """
-
-        # Combine searches
-        if indexed_searches:
-            combined_query = f"""
-            {' UNION ALL '.join(indexed_searches)}
-            UNION ALL
-            {main_search}
-            ORDER BY priority DESC, score DESC
-            LIMIT $limit
-            """
-        else:
-            combined_query = f"""
-            {main_search}
-            ORDER BY score DESC
-            LIMIT $limit
-            """
         
         return self.execute_query(cypher_query, {
             "query": query,
+            "threshold": similarity_threshold,
             "limit": limit
         })
