@@ -65,7 +65,8 @@ class GraphDB:
                 self.logger.debug(f"Number of records: {len(records)}")
                 for idx, record in enumerate(records):
                     self.logger.debug(f"Record {idx}:")
-                    for key, value in record.items():
+                    filtered_record = {k: v for k, v in record.items() if k != 'embedding'}
+                    for key, value in filtered_record.items():
                         self.logger.debug(f"  {key}: {type(value)} = {value}")
                 
                 return records

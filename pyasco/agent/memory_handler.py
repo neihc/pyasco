@@ -496,7 +496,12 @@ class MemoryHandler:
                         self.logger.debug("Results structure:")
                         for idx, result in enumerate(label_results):
                             self.logger.debug(f"Result {idx}:")
-                            self.logger.debug(f"  Node: {result.get('node', 'N/A')}")
+                            node = result.get('node', 'N/A')
+                            if hasattr(node, 'items'):
+                                filtered_props = {k: v for k, v in dict(node).items() if k != 'embedding'}
+                                self.logger.debug(f"  Node properties: {filtered_props}")
+                            else:
+                                self.logger.debug(f"  Node: {node}")
                             self.logger.debug(f"  Score: {result.get('score', 'N/A')}")
                             self.logger.debug(f"  Labels: {result.get('labels', 'N/A')}")
                     except Exception as e:
