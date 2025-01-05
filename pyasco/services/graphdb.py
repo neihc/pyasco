@@ -191,7 +191,12 @@ class GraphDB:
         }}) as textProps
         UNWIND textProps as textProp
         WITH n, textProp,
-             apoc.text.fuzzyMatch(textProp.value, $query) as similarity
+             CASE
+                WHEN textProp.value CONTAINS $query THEN 1.0
+                WHEN size($query) > 3 AND textProp.value CONTAINS substring($query, 0, size($query)-1) THEN 0.8
+                WHEN any(word IN split($query, ' ') WHERE textProp.value CONTAINS word) THEN 0.5
+                ELSE 0.0
+             END as similarity
         WHERE similarity >= $threshold
         WITH n, max(similarity) as maxSimilarity
         RETURN n,
