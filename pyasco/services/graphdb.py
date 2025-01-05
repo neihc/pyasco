@@ -197,8 +197,8 @@ class GraphDB:
                 ELSE 0.0
              END as similarity
         WHERE similarity >= $threshold
-        RETURN n as node, similarity as score
-        ORDER BY score DESC
+        RETURN n, similarity
+        ORDER BY similarity DESC
         LIMIT $limit
         """
         
@@ -210,6 +210,6 @@ class GraphDB:
         
         # Transform results to match expected format
         return [{
-            'n': result['result']['node'], 
-            'score': result['result']['score']
+            'n': result['n'], 
+            'score': result['similarity']
         } for result in results]
