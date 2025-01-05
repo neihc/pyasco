@@ -247,29 +247,39 @@ class GraphDB:
     def get_schema(self) -> str:
         """Get the actual database schema including nodes, relationships and patterns"""
         try:
-            # Get node labels and their properties
+            # Get node labels
             nodes_schema = self.execute_query("""
-            CALL db.schema.nodeTypeProperties()
-            YIELD nodeType, propertyName
-            RETURN nodeType, collect(propertyName) as properties
+            CALL db.labels() YIELD label
+            CALL {
+                WITH label
+                MATCH (n:`${label}`)
+                WITH label, n
+                LIMIT 1
+                RETURN collect(keys(n)) as properties
+            }
+            RETURN label as nodeType, properties[0] as properties
             """)
             
             # Get relationship types and their properties
             rels_schema = self.execute_query("""
-            CALL db.schema.relationshipTypeProperties()
-            YIELD relationType, propertyName
-            RETURN relationType, collect(propertyName) as properties
+            CALL db.relationshipTypes() YIELD relationshipType
+            CALL {
+                WITH relationshipType
+                MATCH ()-[r:`${relationshipType}`]->()
+                WITH relationshipType, r
+                LIMIT 1
+                RETURN collect(keys(r)) as properties
+            }
+            RETURN relationshipType as relationType, properties[0] as properties
             """)
             
-            # Get relationship type patterns
+            # Get relationship patterns
             rel_patterns = self.execute_query("""
-            CALL db.schema.visualization()
-            YIELD nodes, relationships
-            UNWIND relationships as rel
+            MATCH (start)-[r]->(end)
             RETURN DISTINCT
-                rel.start.labels[0] as fromLabel,
-                rel.type as relType,
-                rel.end.labels[0] as toLabel
+                labels(start)[0] as fromLabel,
+                type(r) as relType,
+                labels(end)[0] as toLabel
             """)
             
             # Format schema as detailed string
