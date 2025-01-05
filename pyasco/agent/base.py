@@ -127,17 +127,24 @@ class Agent:
             try:
                 recalled_context = self.memory_handler.recall(user_input)
                 if recalled_context:
-                    context_summary = []
+                    related_nodes = []
                     for result in recalled_context:
                         node = result.get('n')
                         if node and hasattr(node, 'get'):
                             # Skip if this content is already in the current conversation
                             content = node.get('original_content')
                             if content and not any(msg.content == content for msg in self.conversation.messages):
-                                context_summary.append(f"Related context: {content}")
+                                node_data = {
+                                    "content": content,
+                                    "type": node.get('type', 'unknown'),
+                                    "timestamp": node.get('timestamp', ''),
+                                    "conversation_id": node.get('conversation_id', ''),
+                                    "similarity_score": result.get('score', 0.0)
+                                }
+                                related_nodes.append(node_data)
                     
-                    if context_summary:
-                        context_prefix = "\n\n".join(context_summary) + "\n\n"
+                    if related_nodes:
+                        context_prefix = f"Related context (JSON format):\n{str(related_nodes)}\n\n"
             except Exception as e:
                 self.logger.error(f"Failed to recall context: {str(e)}")
 
