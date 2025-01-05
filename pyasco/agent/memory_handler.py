@@ -453,9 +453,11 @@ class MemoryHandler:
 
     def _should_explore_node(self, node: Dict, original_query: str, path_so_far: List[Dict]) -> bool:
         """Ask LLM if we should explore this node's neighbors"""
-        node_summary = f"Labels: {node.get('labels', [])}, Properties: {node.get('properties', {})}"
+        # Filter out embedding from properties
+        properties = {k: v for k, v in node.get('properties', {}).items() if k != 'embedding'}
+        node_summary = f"Labels: {node.get('labels', [])}, Properties: {properties}"
         path_summary = "\n".join([
-            f"- {p.get('labels', [])} -> {p.get('properties', {})}"
+            f"- {p.get('labels', [])} -> {dict((k, v) for k, v in p.get('properties', {}).items() if k != 'embedding')}"
             for p in path_so_far[-3:]  # Show last 3 nodes in path
         ])
         
