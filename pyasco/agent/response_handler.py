@@ -11,13 +11,13 @@ class ResponseHandler:
 
     def handle_response(
         self, 
-        conversation: Conversation, 
-        model: str, 
+        messages: List[Dict], 
+        model: str,
+        conversation: Conversation,
         stream: bool = False
     ) -> Union[Message, Generator[Message, None, None]]:
         """Handle LLM response and create appropriate Message"""
-        filtered_messages = conversation.to_llm_format()
-        llm_response = self.llm_service.get_response(filtered_messages, model=model, stream=stream)
+        llm_response = self.llm_service.get_response(messages, model=model, stream=stream)
 
         if stream:
             return self._handle_streaming_response(llm_response, conversation)

@@ -103,7 +103,12 @@ class Agent:
         )
         
         # Get LLM response through response handler
-        return self.response_handler.handle_response(self.conversation.to_llm_format(), self.model, stream)
+        return self.response_handler.handle_response(
+            self.conversation.to_llm_format(), 
+            self.model,
+            self.conversation,
+            stream
+        )
 
     def ask(self, new_input: str, stream: bool = False, auto: bool = False, max_loops: int = 5) -> Dict:
         response = self.get_response(new_input, stream=stream)
