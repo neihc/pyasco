@@ -153,6 +153,7 @@ class MemoryHandler:
             }])
             
             snippets = self.code_extractor.extract_snippets(response)
+            print(snippets)
             if not snippets or not snippets[0].content:
                 raise ValueError("No enhanced query found in LLM response")
             
