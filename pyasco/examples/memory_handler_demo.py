@@ -4,13 +4,19 @@ from pyasco.agent.memory_handler import MemoryHandler
 from datetime import datetime
 import json
 
-def demonstrate_recall(memory_handler, query: str, similarity_threshold: float = 0.7):
+def demonstrate_recall(memory_handler, query: str, similarity_threshold: float = 0.7, debug: bool = True):
     """Helper function to demonstrate recall with detailed output"""
     print(f"\n{'='*80}")
     print(f"QUERY: {query}")
     print(f"{'='*80}")
     
     results = memory_handler.recall(query, similarity_threshold=similarity_threshold)
+    
+    if debug:
+        print("\nDEBUG: Raw results structure:")
+        for i, r in enumerate(results):
+            print(f"\nResult {i + 1} keys: {r.keys()}")
+            print(f"Result {i + 1} type: {type(r)}")
     
     print("\nRESULTS:")
     if not results:
@@ -19,10 +25,21 @@ def demonstrate_recall(memory_handler, query: str, similarity_threshold: float =
         
     for i, result in enumerate(results, 1):
         print(f"\nResult {i}:")
-        print(f"Node Type: {result.get('n', {}).get('labels', [])}")
-        print(f"Properties: {json.dumps(result.get('n', {}).get('properties', {}), indent=2)}")
+        # Handle both direct node objects and dictionary representations
+        node = result.get('n', {})
+        if hasattr(node, 'labels'):  # Neo4j node object
+            labels = list(node.labels)
+            properties = dict(node)
+        else:  # Dictionary representation
+            labels = result.get('labels', [])
+            properties = result.get('properties', {})
+            
+        print(f"Node Type: {labels}")
+        print(f"Properties: {json.dumps(properties, indent=2)}")
         if 'score' in result:
             print(f"Relevance Score: {result['score']}")
+        if 'match_type' in result:
+            print(f"Match Type: {result['match_type']}")
         print("-" * 40)
 
 def main():
