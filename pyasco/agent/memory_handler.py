@@ -428,10 +428,68 @@ class MemoryHandler:
             self.logger.error(f"Failed to evaluate results: {str(e)}")
             return {"sufficient": True, "reason": "Error in evaluation"}
 
+    def _enhance_search_query(self, query_text: str) -> str:
+        """Use LLM to enhance the search query for better semantic matching"""
+        prompt = f"""
+        Enhance this search query to improve semantic matching:
+        "{query_text}"
+
+        Consider:
+        1. Key concepts and their synonyms
+        2. Related technical terms
+        3. Broader context that might be relevant
+        
+        Return only the enhanced query text, no explanation.
+        """
+        try:
+            response = self.llm_service.get_response([{
+                "role": "user",
+                "content": prompt
+            }])
+            return response.strip()
+        except Exception as e:
+            self.logger.warning(f"Failed to enhance query: {str(e)}")
+            return query_text
+
+    def _should_explore_node(self, node: Dict, original_query: str, path_so_far: List[Dict]) -> bool:
+        """Ask LLM if we should explore this node's neighbors"""
+        node_summary = f"Labels: {node.get('labels', [])}, Properties: {node.get('properties', {})}"
+        path_summary = "\n".join([
+            f"- {p.get('labels', [])} -> {p.get('properties', {})}"
+            for p in path_so_far[-3:]  # Show last 3 nodes in path
+        ])
+        
+        prompt = f"""
+        Should we explore the neighbors of this node?
+
+        Original query: "{original_query}"
+        Current node: {node_summary}
+        Path so far: 
+        {path_summary}
+
+        Consider:
+        1. Is this node relevant to the query?
+        2. Would its neighbors likely contain useful information?
+        3. Have we already found enough context?
+        4. Is the path getting too long or diverging?
+
+        Return only "yes" or "no".
+        """
+        
+        try:
+            response = self.llm_service.get_response([{
+                "role": "user",
+                "content": prompt
+            }]).strip().lower()
+            return response == "yes"
+        except Exception as e:
+            self.logger.warning(f"Failed to evaluate node exploration: {str(e)}")
+            return False
+
     def recall(self, query_text: str, similarity_threshold: float = 0.7) -> List[Dict[str, Any]]:
         """
         Retrieve memories based on a natural language query using vector search first,
-        then building graph queries based on the results
+        then intelligently exploring node neighborhoods
         Args:
             query_text (str): Natural language query
             similarity_threshold (float): Minimum similarity score for vector search results
@@ -439,19 +497,21 @@ class MemoryHandler:
             list: List of relevant memory nodes and their properties
         """
         try:
-            # Generate embedding for query
-            query_embedding = self.embedding_service.get_embedding(query_text).tolist()[0]
+            # Enhance the search query using LLM
+            enhanced_query = self._enhance_search_query(query_text)
+            self.logger.info(f"Enhanced query: {enhanced_query}")
             
-            # First phase: Vector search to find semantically similar nodes across all labels
+            # Generate embedding for enhanced query
+            query_embedding = self.embedding_service.get_embedding(enhanced_query).tolist()[0]
+            
+            # First phase: Vector search to find semantically similar nodes
             vector_results = []
-            # Get all labels that have vector indexes
-            index_query = """
+            labels_with_indexes = self.graph_db.execute_query("""
             SHOW INDEXES
             YIELD name, type, labelsOrTypes
             WHERE type = 'VECTOR'
             RETURN distinct labelsOrTypes[0] as label
-            """
-            labels_with_indexes = self.graph_db.execute_query(index_query)
+            """)
             
             # Query each indexed label
             for label_result in labels_with_indexes:
@@ -464,92 +524,90 @@ class MemoryHandler:
                 ORDER BY score DESC
                 """, {
                     "index_name": f"{label.lower()}_embeddings",
-                    "k": 10,  # Results per label
+                    "k": 5,  # Reduced initial results per label
                     "query": query_embedding,
                     "threshold": similarity_threshold
                 })
                 vector_results.extend(label_results)
             
-            # Sort combined results by score
-            vector_results.sort(key=lambda x: x['score'], reverse=True)
-            
             if not vector_results:
                 self.logger.info("No similar nodes found via vector search")
                 return []
-                
-            # Extract node information for query building
-            node_info = []
-            for result in vector_results:
-                node = result['node']
-                node_info.append({
-                    'labels': list(node.labels),
-                    'properties': dict(node),
-                    'id': node.id,
-                    'score': result['score']
-                })
-            
-            # Build graph query based on vector results and schema
-            prompt = f"""
-            Based on these semantically similar nodes and the schema, build a Cypher query
-            to find related information for: "{query_text}"
 
-            Similar nodes found:
-            {node_info[:3]}  # Show top 3 most similar nodes
-
-            Schema:
-            {self.memory_instructions}
-
-            Return only the Cypher query in a code block. The query should:
-            1. Start from or connect to the similar nodes found
-            2. Follow relevant relationships defined in the schema
-            3. Return a comprehensive view of the related information
-            4. Limit to most relevant results
-            """
-            
-            response = self.llm_service.get_response([{
-                "role": "user",
-                "content": prompt
-            }])
-            
-            snippets = self.code_extractor.extract_snippets(response)
-            if not snippets or not snippets[0].content:
-                self.logger.warning("Could not generate graph query, returning vector results only")
-                return [{'n': r['node'], 'score': r['score']} for r in vector_results]
-            
-            # Execute the generated graph query
-            graph_query = snippets[0].content.strip()
-            graph_results = self.graph_db.execute_query(graph_query)
-            
-            # Combine and deduplicate results
+            # Sort and prepare for neighborhood exploration
+            vector_results.sort(key=lambda x: x['score'], reverse=True)
             seen_ids = set()
             final_results = []
-            
-            # First add vector results
+            nodes_to_explore = []
+
+            # Add initial vector results
             for result in vector_results:
-                node_id = result['node'].id
+                node = result['node']
+                node_id = node.id
                 if node_id not in seen_ids:
                     seen_ids.add(node_id)
-                    final_results.append({
-                        'n': result['node'],
+                    node_info = {
+                        'n': node,
                         'score': result['score'],
                         'match_type': 'vector'
+                    }
+                    final_results.append(node_info)
+                    nodes_to_explore.append({
+                        'node_id': node_id,
+                        'labels': list(node.labels),
+                        'properties': dict(node),
+                        'path': [node_info]
                     })
-            
-            # Then add graph results
-            for result in graph_results:
-                # Assuming the graph query returns nodes with alias 'n'
-                if 'n' in result and hasattr(result['n'], 'id'):
-                    node_id = result['n'].id
-                    if node_id not in seen_ids:
-                        seen_ids.add(node_id)
-                        final_results.append({
-                            'n': result['n'],
-                            'score': 1.0,  # Direct graph matches get full score
-                            'match_type': 'graph'
-                        })
-            
-            self.logger.info(f"Found {len(final_results)} total results "
-                           f"({len(vector_results)} vector, {len(graph_results)} graph)")
+
+            # Explore neighborhoods of similar nodes
+            max_depth = 3
+            for start_node in nodes_to_explore:
+                current_depth = 0
+                nodes_at_depth = [start_node]
+                
+                while current_depth < max_depth and nodes_at_depth:
+                    next_level = []
+                    for current in nodes_at_depth:
+                        # Get all neighbors
+                        neighbors = self.graph_db.execute_query("""
+                        MATCH (n)-[r]-(neighbor)
+                        WHERE id(n) = $node_id
+                        RETURN neighbor, type(r) as relationship_type
+                        """, {"node_id": current['node_id']})
+                        
+                        for neighbor in neighbors:
+                            neighbor_node = neighbor['neighbor']
+                            neighbor_id = neighbor_node.id
+                            
+                            if neighbor_id in seen_ids:
+                                continue
+                                
+                            neighbor_info = {
+                                'node_id': neighbor_id,
+                                'labels': list(neighbor_node.labels),
+                                'properties': dict(neighbor_node),
+                                'path': current['path'] + [{
+                                    'n': neighbor_node,
+                                    'score': 0.5,  # Base score for neighbors
+                                    'match_type': 'neighbor',
+                                    'relationship': neighbor['relationship_type']
+                                }]
+                            }
+                            
+                            # Ask LLM if we should explore this neighbor
+                            if self._should_explore_node(
+                                neighbor_info,
+                                query_text,
+                                current['path']
+                            ):
+                                seen_ids.add(neighbor_id)
+                                final_results.append(neighbor_info['path'][-1])
+                                next_level.append(neighbor_info)
+                    
+                    nodes_at_depth = next_level
+                    current_depth += 1
+
+            self.logger.info(f"Found {len(final_results)} total results through neighborhood exploration")
             return final_results
             
         except Exception as e:
