@@ -200,7 +200,7 @@ class GraphDB:
         WHERE similarity >= $threshold
         WITH DISTINCT n, max(similarity) as maxSimilarity
         RETURN {{node: n, score: maxSimilarity}} as result
-        ORDER BY score DESC
+        ORDER BY result.score DESC
         LIMIT $limit
         """
         
