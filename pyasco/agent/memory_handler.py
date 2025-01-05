@@ -509,30 +509,30 @@ class MemoryHandler:
                         continue
                     
                     # Only add results for nodes we haven't seen yet
-                for result in label_results:
-                    try:
-                        if not result.get('node'):
-                            self.logger.warning(f"Skipping result without node: {result}")
+                    for result in label_results:
+                        try:
+                            if not result.get('node'):
+                                self.logger.warning(f"Skipping result without node: {result}")
+                                continue
+                                
+                            node = result['node']
+                            if not hasattr(node, 'element_id'):
+                                self.logger.warning(f"Node missing element_id: {node}")
+                                continue
+                                
+                            node_id = node.element_id
+                            if node_id not in seen_node_ids:
+                                seen_node_ids.add(node_id)
+                                self.logger.debug(f"Adding new result node_id: {node_id}")
+                                current_results.append(result)
+                            else:
+                                self.logger.debug(f"Skipping duplicate node_id: {node_id}")
+                        except Exception as e:
+                            self.logger.error(f"Error processing result: {str(e)}")
+                            self.logger.error(f"Problematic result: {result}")
                             continue
-                            
-                        node = result['node']
-                        if not hasattr(node, 'element_id'):
-                            self.logger.warning(f"Node missing element_id: {node}")
-                            continue
-                            
-                        node_id = node.element_id
-                        if node_id not in seen_node_ids:
-                            seen_node_ids.add(node_id)
-                            self.logger.debug(f"Adding new result node_id: {node_id}")
-                            current_results.append(result)
-                        else:
-                            self.logger.debug(f"Skipping duplicate node_id: {node_id}")
-                    except Exception as e:
-                        self.logger.error(f"Error processing result: {str(e)}")
-                        self.logger.error(f"Problematic result: {result}")
-                        continue
-                
-                vector_results.extend(current_results)
+                    
+                    vector_results.extend(current_results)
             
             if not vector_results:
                 self.logger.info("No similar nodes found via vector search")
