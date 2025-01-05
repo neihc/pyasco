@@ -493,18 +493,77 @@ class MemoryHandler:
             self.logger.warning(f"Failed to evaluate node exploration: {str(e)}")
             return False
 
-    def recall(self, query_text: str, similarity_threshold: float = 0.7, strategy: str = "vector") -> List[Dict[str, Any]]:
+    def _determine_search_strategy(self, query_text: str) -> Dict[str, Any]:
+        """Determine which search strategy to use based on the query"""
+        prompt = f"""
+        Analyze this query and determine the best search strategy:
+        "{query_text}"
+
+        Available strategies:
+        1. "vector" - Uses embedding similarity to find semantically similar content
+        2. "schema" - Uses graph structure and relationships to find connected information
+        3. "both" - Combines results from both strategies
+
+        Consider:
+        - Is the query looking for specific facts or relationships?
+        - Does it need semantic understanding or exact matches?
+        - Would exploring connections be valuable?
+
+        Return a JSON object in a code block:
+        ```json
+        {{
+            "strategy": "vector|schema|both",
+            "reason": "brief explanation of choice"
+        }}
+        ```
         """
-        Retrieve memories based on a natural language query using vector search first,
-        then intelligently exploring node neighborhoods
+        
+        try:
+            response = self.llm_service.get_response([{
+                "role": "user",
+                "content": prompt
+            }])
+            
+            snippets = self.code_extractor.extract_snippets(response)
+            if not snippets or not snippets[0].content:
+                raise ValueError("No strategy recommendation found")
+                
+            return eval(snippets[0].content)
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to determine strategy: {str(e)}")
+            return {"strategy": "vector", "reason": "defaulting to vector search"}
+
+    def recall(self, query_text: str, similarity_threshold: float = 0.7) -> List[Dict[str, Any]]:
+        """
+        Retrieve memories based on a natural language query using the most appropriate strategy
         Args:
             query_text (str): Natural language query
             similarity_threshold (float): Minimum similarity score for vector search results
         Returns:
             list: List of relevant memory nodes and their properties
         """
-        if strategy == "schema":
+        strategy_info = self._determine_search_strategy(query_text)
+        self.logger.info(f"Using search strategy: {strategy_info['strategy']} - {strategy_info['reason']}")
+        
+        if strategy_info['strategy'] == "schema":
             return self._recall_schema_based(query_text)
+        elif strategy_info['strategy'] == "both":
+            # Combine results from both strategies
+            vector_results = self._recall_vector_based(query_text, similarity_threshold)
+            schema_results = self._recall_schema_based(query_text)
+            
+            # Merge results, avoiding duplicates
+            seen_ids = set()
+            combined_results = []
+            
+            for result in vector_results + schema_results:
+                node_id = result['n'].element_id
+                if node_id not in seen_ids:
+                    seen_ids.add(node_id)
+                    combined_results.append(result)
+            
+            return combined_results
         else:  # Default to vector strategy
             return self._recall_vector_based(query_text, similarity_threshold)
             
