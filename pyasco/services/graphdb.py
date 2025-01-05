@@ -121,6 +121,44 @@ class GraphDB:
             "properties": dict(node)
         }
 
+    def find_similar_nodes(self, query_embedding: List[float], threshold: float = 0.7) -> List[Dict]:
+        """
+        Find nodes with similar embeddings using cosine similarity
+        Args:
+            query_embedding (list): The query embedding vector
+            threshold (float): Minimum similarity score threshold
+        Returns:
+            list: List of nodes with their similarity scores
+        """
+        # Convert query embedding to string format for Cypher
+        query_embedding_str = str(query_embedding)
+        
+        query = """
+        MATCH (n)
+        WHERE EXISTS(n.embedding)
+        WITH n, gds.similarity.cosine(n.embedding, $query_embedding) AS similarity
+        WHERE similarity >= $threshold
+        RETURN n, similarity
+        ORDER BY similarity DESC
+        LIMIT 5
+        """
+        
+        results = self.execute_query(
+            query,
+            {
+                "query_embedding": query_embedding,
+                "threshold": threshold
+            }
+        )
+        
+        return [
+            {
+                "node": record["n"],
+                "similarity": record["similarity"]
+            }
+            for record in results
+        ]
+
     def create_text_index(self, label: str, properties: List[str]) -> bool:
         """
         Create a full-text index for the specified label and properties

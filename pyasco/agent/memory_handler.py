@@ -2,6 +2,7 @@ from typing import Dict, Any, List, Optional
 from ..services.graphdb import GraphDB
 from ..services.llm import LLMService
 from ..services.code_snippet_extractor import CodeSnippetExtractor
+from ..services.embedding import EmbeddingService
 from ..logger_config import setup_logger
 
 DOMAIN_SCHEMA_INSTRUCTIONS = """
@@ -39,7 +40,7 @@ class MemoryHandler:
     """Handler for processing and storing memories using LLM and graph database"""
     
     def __init__(self, memory_instructions: str, llm_service: Optional[LLMService] = None,
-                 graph_db: Optional[GraphDB] = None):
+                 graph_db: Optional[GraphDB] = None, embedding_service: Optional[EmbeddingService] = None):
         """
         Initialize the memory handler
         Args:
@@ -52,7 +53,27 @@ class MemoryHandler:
         self.llm_service = llm_service or LLMService()
         self.graph_db = graph_db or GraphDB()
         self.code_extractor = CodeSnippetExtractor()
+        self.embedding_service = embedding_service or EmbeddingService()
         self._setup_indexes()
+
+    def _generate_node_embedding(self, node_data: Dict[str, Any]) -> str:
+        """
+        Generate embedding for node data
+        Args:
+            node_data (dict): Node properties to embed
+        Returns:
+            str: Flattened text representation of node data
+        """
+        # Flatten node data into a string representation
+        flat_text = " ".join([
+            f"{key}: {str(value)}" 
+            for key, value in node_data.items() 
+            if isinstance(value, (str, int, float, bool))
+        ])
+        
+        # Generate embedding
+        embedding = self.embedding_service.get_embedding(flat_text)
+        return embedding.tolist()[0]  # Convert numpy array to list
 
     def _create_nodes(self, content: str, context: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
@@ -110,6 +131,9 @@ class MemoryHandler:
                     node_spec["properties"]["original_content"] = content
                     if context:
                         node_spec["properties"].update(context)
+                
+                # Generate embedding for node properties
+                node_spec["properties"]["embedding"] = self._generate_node_embedding(node_spec["properties"])
                 
                 node = self.graph_db.create_node(
                     node_spec["label"],
@@ -389,7 +413,7 @@ class MemoryHandler:
             self.logger.error(f"Failed to evaluate results: {str(e)}")
             return {"sufficient": True, "reason": "Error in evaluation"}
 
-    def recall(self, query_text: str, max_iterations: int = 5) -> List[Dict[str, Any]]:
+    def recall(self, query_text: str, max_iterations: int = 5, similarity_threshold: float = 0.7) -> List[Dict[str, Any]]:
         """
         Retrieve memories based on a natural language query using iterative refinement
         Args:
@@ -407,8 +431,35 @@ class MemoryHandler:
                 if iteration == 0:
                     cypher_query = self._build_query(query_text)
                 
-                # Execute query
-                current_results = self.execute_query(cypher_query)
+                # Generate embedding for query
+                query_embedding = self.embedding_service.get_embedding(query_text).tolist()[0]
+                
+                # Execute graph query
+                graph_results = self.graph_db.execute_query(cypher_query)
+                
+                # Find semantically similar nodes
+                semantic_results = self.graph_db.find_similar_nodes(query_embedding, similarity_threshold)
+                
+                # Combine and deduplicate results
+                seen_ids = set()
+                current_results = []
+                
+                # Process graph results
+                for result in graph_results:
+                    node_id = result['n'].id
+                    if node_id not in seen_ids:
+                        seen_ids.add(node_id)
+                        current_results.append(result)
+                
+                # Add semantic results
+                for result in semantic_results:
+                    node_id = result['node'].id
+                    if node_id not in seen_ids:
+                        seen_ids.add(node_id)
+                        current_results.append({
+                            'n': result['node'],
+                            'score': result['similarity']
+                        })
                 
                 # Evaluate results
                 evaluation = self._evaluate_results(query_text, current_results)
