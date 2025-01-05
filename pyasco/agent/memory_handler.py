@@ -18,7 +18,7 @@ class MemoryHandler:
             llm_service (LLMService): LLM service instance for processing memories
             graph_db (GraphDB): GraphDB instance for storing memories
         """
-        self.logger = setup_logger('memory_handler')
+        self.logger = setup_logger('memory_handler', log_file='memory_handler.log', verbose=True)
         self.memory_instructions = memory_instructions
         self.llm_service = llm_service or LLMService()
         self.graph_db = graph_db or GraphDB()
