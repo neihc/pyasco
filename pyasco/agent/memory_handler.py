@@ -147,7 +147,15 @@ class MemoryHandler:
         Returns:
             list: List of created relationship information
         """
-        nodes_info = "\n".join([f"Node {i}: {node}" for i, node in enumerate(nodes)])
+        # Filter out embeddings from node info
+        filtered_nodes = []
+        for node in nodes:
+            filtered_node = node.copy()
+            if 'properties' in filtered_node:
+                filtered_node['properties'] = {k: v for k, v in filtered_node['properties'].items() if k != 'embedding'}
+            filtered_nodes.append(filtered_node)
+            
+        nodes_info = "\n".join([f"Node {i}: {node}" for i, node in enumerate(filtered_nodes)])
         prompt = f"""
         Create relationships between the following nodes:
         
