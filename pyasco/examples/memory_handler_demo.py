@@ -4,13 +4,13 @@ from pyasco.agent.memory_handler import MemoryHandler
 from datetime import datetime
 import json
 
-def demonstrate_recall(memory_handler, query: str, max_iterations: int = 5):
+def demonstrate_recall(memory_handler, query: str, similarity_threshold: float = 0.7):
     """Helper function to demonstrate recall with detailed output"""
     print(f"\n{'='*80}")
     print(f"QUERY: {query}")
     print(f"{'='*80}")
     
-    results = memory_handler.recall(query, max_iterations=max_iterations)
+    results = memory_handler.recall(query, similarity_threshold=similarity_threshold)
     
     print("\nRESULTS:")
     if not results:
