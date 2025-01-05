@@ -485,20 +485,47 @@ class MemoryHandler:
                 
                 # Query each indexed label
                 for label in indexed_labels:
-                    print(f"Searching vector index for label: {label}")
-                    label_results = self.graph_db.get_vector_search_results(
-                        label,
-                        query_embedding,
-                        similarity_threshold
-                    )
-                    print(f"Found {len(label_results)} results for label {label}")
+                    self.logger.debug(f"Searching vector index for label: {label}")
+                    try:
+                        label_results = self.graph_db.get_vector_search_results(
+                            label,
+                            query_embedding,
+                            similarity_threshold
+                        )
+                        self.logger.debug(f"Found {len(label_results)} results for label {label}")
+                        self.logger.debug("Results structure:")
+                        for idx, result in enumerate(label_results):
+                            self.logger.debug(f"Result {idx}:")
+                            self.logger.debug(f"  Node: {result.get('node', 'N/A')}")
+                            self.logger.debug(f"  Score: {result.get('score', 'N/A')}")
+                            self.logger.debug(f"  Labels: {result.get('labels', 'N/A')}")
+                    except Exception as e:
+                        self.logger.error(f"Error searching label {label}: {str(e)}")
+                        continue
                     
                     # Only add results for nodes we haven't seen yet
                 for result in label_results:
-                    node_id = result['node'].element_id
-                    if node_id not in seen_node_ids:
-                        seen_node_ids.add(node_id)
-                        current_results.append(result)
+                    try:
+                        if not result.get('node'):
+                            self.logger.warning(f"Skipping result without node: {result}")
+                            continue
+                            
+                        node = result['node']
+                        if not hasattr(node, 'element_id'):
+                            self.logger.warning(f"Node missing element_id: {node}")
+                            continue
+                            
+                        node_id = node.element_id
+                        if node_id not in seen_node_ids:
+                            seen_node_ids.add(node_id)
+                            self.logger.debug(f"Adding new result node_id: {node_id}")
+                            current_results.append(result)
+                        else:
+                            self.logger.debug(f"Skipping duplicate node_id: {node_id}")
+                    except Exception as e:
+                        self.logger.error(f"Error processing result: {str(e)}")
+                        self.logger.error(f"Problematic result: {result}")
+                        continue
                 
                 vector_results.extend(current_results)
             

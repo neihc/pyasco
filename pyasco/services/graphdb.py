@@ -49,20 +49,24 @@ class GraphDB:
         
         try:
             # Log query details
-            print("=" * 80)
-            print("GRAPH DB QUERY")
-            print(f"Query: {query}")
+            self.logger.debug("=" * 80)
+            self.logger.debug("GRAPH DB QUERY")
+            self.logger.debug(f"Query: {query}")
             if parameters:
-                print(f"Parameters: {parameters}")
+                self.logger.debug(f"Parameters: {parameters}")
 
             with self.driver.session() as session:
                 result = session.run(query, parameters or {})
                 records = [dict(record) for record in result]
                 
-                # Log response details
-                print("=" * 80)
-                print("GRAPH DB RESPONSE")
-                print(f"Records: {records}")
+                # Log response details with detailed structure
+                self.logger.debug("=" * 80)
+                self.logger.debug("GRAPH DB RESPONSE")
+                self.logger.debug(f"Number of records: {len(records)}")
+                for idx, record in enumerate(records):
+                    self.logger.debug(f"Record {idx}:")
+                    for key, value in record.items():
+                        self.logger.debug(f"  {key}: {type(value)} = {value}")
                 
                 return records
         except Exception as e:
