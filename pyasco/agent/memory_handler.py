@@ -516,7 +516,7 @@ class MemoryHandler:
             # Create vector index for embeddings if it doesn't exist
             self.graph_db.execute_query("""
             CREATE VECTOR INDEX memory_embeddings IF NOT EXISTS 
-            FOR (n) ON (n.embedding)
+            FOR (n:Memory) ON (n.embedding)
             OPTIONS {
                 vector: {
                     dimensions: 1536,
