@@ -35,7 +35,9 @@ def demonstrate_recall(memory_handler, query: str, similarity_threshold: float =
             properties = result.get('properties', {})
             
         print(f"Node Type: {labels}")
-        print(f"Properties: {json.dumps(properties, indent=2)}")
+        # Filter out embedding from properties display
+        display_properties = {k: v for k, v in properties.items() if k != 'embedding'}
+        print(f"Properties: {json.dumps(display_properties, indent=2)}")
         if 'score' in result:
             print(f"Relevance Score: {result['score']}")
         if 'match_type' in result:
