@@ -28,9 +28,9 @@ def demonstrate_recall(memory_handler, query: str, similarity_threshold: float =
 def main():
     # Initialize services
     graph_db = GraphDB(
-        uri="neo4j+s://61e1f96d.databases.neo4j.io",
+        uri="neo4j+s://d46bbb85.databases.neo4j.io",
         username="neo4j",
-        password="pEBDsNRqWZvwTI2IooyrQRuNX__vYmmgqcef9MPOY0g"  # Replace with actual password
+        password="HpkGcQzPITyR8bKtRFp1w7QcRXgK0hMoamJq0DyFdXs"  # Replace with actual password
     )
     
     llm_service = LLMService()
@@ -73,14 +73,14 @@ def main():
     )
     
     # Example memory creation
-    project_memory = memory_handler.remember(
-        "Started working on a new RAG implementation project using Neo4j as the vector store.",
-        context={
-            "timestamp": datetime.now().isoformat(),
-            "project_name": "graph-rag",
-            "status": "active"
-        }
-    )
+    # project_memory = memory_handler.remember(
+        # "Started working on a new RAG implementation project using Neo4j as the vector store.",
+        # context={
+            # "timestamp": datetime.now().isoformat(),
+            # "project_name": "graph-rag",
+            # "status": "active"
+        # }
+    # )
     
     # Demonstrate different types of recalls
     queries = [
