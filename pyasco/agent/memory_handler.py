@@ -101,19 +101,8 @@ class MemoryHandler:
                     if context:
                         node_spec["properties"].update(context)
                 
-                # Check if vector index exists for this node label
-                if not self._check_vector_index(node_spec["label"]):
-                    self.logger.info(f"Creating vector index for label {node_spec['label']}")
-                    self.graph_db.execute_query(f"""
-                    CREATE VECTOR INDEX {node_spec['label'].lower()}_embeddings IF NOT EXISTS 
-                    FOR (n:{node_spec['label']}) ON (n.embedding)
-                    OPTIONS {{
-                        indexConfig: {{
-                            `vector.dimensions`: 1024,
-                            `vector.similarity_function`: 'cosine'
-                        }}
-                    }}
-                    """)
+                # Ensure vector index exists for this node label
+                self.graph_db.ensure_vector_index(node_spec["label"])
 
                 # Generate embedding for node properties
                 node_spec["properties"]["embedding"] = self._generate_node_embedding(node_spec["properties"])
@@ -564,11 +553,7 @@ class MemoryHandler:
                     next_level = []
                     for current in nodes_at_depth:
                         # Get all neighbors
-                        neighbors = self.graph_db.execute_query("""
-                        MATCH (n)-[r]-(neighbor)
-                        WHERE elementId(n) = $node_id
-                        RETURN neighbor, type(r) as relationship_type
-                        """, {"node_id": current['node_id']})
+                        neighbors = self.graph_db.get_node_neighbors(current['node_id'])
                         
                         for neighbor in neighbors:
                             neighbor_node = neighbor['neighbor']
@@ -635,19 +620,3 @@ class MemoryHandler:
             self.logger.error(f"Failed to get database schema: {str(e)}")
             return ""
 
-    def _check_vector_index(self, node_label: str) -> bool:
-        """Check if vector index exists for a given node label"""
-        try:
-            result = self.graph_db.execute_query("""
-            SHOW INDEXES
-            YIELD name, type, labelsOrTypes, properties
-            WHERE type = 'VECTOR' 
-            AND $label IN labelsOrTypes
-            AND 'embedding' IN properties
-            RETURN count(*) as count
-            """, {"label": node_label})
-            
-            return result[0]['count'] > 0
-        except Exception as e:
-            self.logger.error(f"Failed to check vector index: {str(e)}")
-            return False

@@ -159,6 +159,91 @@ class GraphDB:
             for record in results
         ]
 
+    def _check_vector_index(self, node_label: str) -> bool:
+        """Check if vector index exists for a given node label"""
+        try:
+            result = self.execute_query("""
+            SHOW INDEXES
+            YIELD name, type, labelsOrTypes, properties
+            WHERE type = 'VECTOR' 
+            AND $label IN labelsOrTypes
+            AND 'embedding' IN properties
+            RETURN count(*) as count
+            """, {"label": node_label})
+            
+            return result[0]['count'] > 0
+        except Exception as e:
+            self.logger.error(f"Failed to check vector index: {str(e)}")
+            return False
+
+    def ensure_vector_index(self, node_label: str) -> bool:
+        """Ensure vector index exists for the specified node label"""
+        try:
+            if self._check_vector_index(node_label):
+                self.logger.info(f"Vector index already exists for {node_label}")
+                return True
+
+            self.execute_query(f"""
+            CREATE VECTOR INDEX {node_label.lower()}_embeddings IF NOT EXISTS 
+            FOR (n:{node_label}) ON (n.embedding)
+            OPTIONS {{
+                indexConfig: {{
+                    `vector.dimensions`: 1024,
+                    `vector.similarity_function`: 'cosine'
+                }}
+            }}
+            """)
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to create vector index: {str(e)}")
+            return False
+
+    def get_node_neighbors(self, node_id: int) -> List[Dict]:
+        """Get all neighbors of a node"""
+        try:
+            return self.execute_query("""
+            MATCH (n)-[r]-(neighbor)
+            WHERE elementId(n) = $node_id
+            RETURN neighbor, type(r) as relationship_type
+            """, {"node_id": node_id})
+        except Exception as e:
+            self.logger.error(f"Failed to get node neighbors: {str(e)}")
+            return []
+
+    def get_vector_search_results(self, label: str, query_embedding: List[float], 
+                                similarity_threshold: float, limit: int = 5) -> List[Dict]:
+        """Execute vector similarity search for a specific label"""
+        try:
+            return self.execute_query(f"""
+            CALL db.index.vector.queryNodes($index_name, $k, $query)
+            YIELD node, score 
+            WHERE score >= $threshold
+            RETURN node, score
+            ORDER BY score DESC
+            """, {
+                "index_name": f"{label.lower()}_embeddings",
+                "k": limit,
+                "query": query_embedding,
+                "threshold": similarity_threshold
+            })
+        except Exception as e:
+            self.logger.error(f"Vector search failed for label {label}: {str(e)}")
+            return []
+
+    def get_indexed_labels(self) -> List[str]:
+        """Get all labels that have vector indexes"""
+        try:
+            results = self.execute_query("""
+            SHOW INDEXES
+            YIELD name, type, labelsOrTypes
+            WHERE type = 'VECTOR'
+            RETURN distinct labelsOrTypes[0] as label
+            """)
+            return [result['label'] for result in results]
+        except Exception as e:
+            self.logger.error(f"Failed to get indexed labels: {str(e)}")
+            return []
+
     def get_schema(self) -> str:
         """Get the actual database schema including nodes, relationships and patterns"""
         try:
