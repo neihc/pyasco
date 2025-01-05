@@ -1,4 +1,5 @@
 from typing import List, Dict, Optional, Generator, Union, Any
+from datetime import datetime
 import re
 
 from ..logger_config import setup_logger
@@ -160,14 +161,49 @@ class Agent:
         last_message = self.conversation.last_message
         return bool(last_message and last_message.tools)
 
+    def remember_conversation(self):
+        """Store the current conversation in memory if memory handling is enabled"""
+        if not self.memory_handler:
+            self.logger.debug("Memory handling not enabled, skipping conversation storage")
+            return
+            
+        try:
+            # Convert conversation to storable format
+            conversation_text = "\n".join([
+                f"{msg.role}: {msg.content}" 
+                for msg in self.conversation.messages 
+                if msg.role != "system"  # Skip system messages
+            ])
+            
+            if not conversation_text.strip():
+                self.logger.debug("No conversation content to store")
+                return
+                
+            # Add context about the conversation
+            context = {
+                "type": "conversation",
+                "timestamp": str(datetime.now()),
+                "message_count": len(self.conversation.messages)
+            }
+            
+            self.logger.info("Storing conversation in memory")
+            self.memory_handler.remember(conversation_text, context)
+            
+        except Exception as e:
+            self.logger.error(f"Failed to store conversation in memory: {str(e)}")
+
     def reset(self):
         self.logger.info("Resetting agent state")
+        # Remember conversation before clearing it
+        self.remember_conversation()
         self.conversation.clear()
         self.python_executor.reset()
         self._initialize_chat()
     
     def cleanup(self):
         self.logger.info("Cleaning up agent resources")
+        # Remember conversation before cleanup
+        self.remember_conversation()
         self.python_executor.cleanup()
         if self.graph_db:
             self.graph_db.close()
