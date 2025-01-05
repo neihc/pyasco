@@ -44,6 +44,21 @@ class MemoryHandler:
         embedding = self.embedding_service.get_embedding(flat_text)
         return embedding.tolist()[0]  # Convert numpy array to list
 
+    def _flatten_dict(self, d: Dict[str, Any], prefix: str = '') -> Dict[str, Any]:
+        """Recursively flatten a nested dictionary with key prefixing"""
+        items: List[Tuple[str, Any]] = []
+        for k, v in d.items():
+            new_key = f"{prefix}_{k}" if prefix else k
+            if isinstance(v, dict):
+                items.extend(self._flatten_dict(v, new_key).items())
+            elif isinstance(v, (list, tuple)):
+                # Convert lists to strings to avoid Neo4j array type issues
+                items.append((new_key, str(v)))
+            else:
+                # Convert all values to strings to ensure primitive types
+                items.append((new_key, str(v)))
+        return dict(items)
+
     def _create_nodes(self, content: str, context: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
         First phase: Create nodes based on content
@@ -99,12 +114,12 @@ class MemoryHandler:
                 if not created_nodes:
                     node_spec["properties"]["original_content"] = content
                     if context:
-                        # Flatten context dictionary by prefixing keys
-                        flattened_context = {
-                            f"context_{k}": str(v) 
-                            for k, v in context.items()
-                        }
+                        # Recursively flatten any nested objects in context
+                        flattened_context = self._flatten_dict(context, prefix='context')
                         node_spec["properties"].update(flattened_context)
+                
+                # Also flatten any nested objects in the node properties themselves
+                node_spec["properties"] = self._flatten_dict(node_spec["properties"])
                 
                 # Ensure vector index exists for this node label
                 self.graph_db.ensure_vector_index(node_spec["label"])
