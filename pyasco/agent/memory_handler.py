@@ -493,7 +493,7 @@ class MemoryHandler:
             self.logger.warning(f"Failed to evaluate node exploration: {str(e)}")
             return False
 
-    def recall(self, query_text: str, similarity_threshold: float = 0.7) -> List[Dict[str, Any]]:
+    def recall(self, query_text: str, similarity_threshold: float = 0.7, strategy: str = "vector") -> List[Dict[str, Any]]:
         """
         Retrieve memories based on a natural language query using vector search first,
         then intelligently exploring node neighborhoods
@@ -502,6 +502,76 @@ class MemoryHandler:
             similarity_threshold (float): Minimum similarity score for vector search results
         Returns:
             list: List of relevant memory nodes and their properties
+        """
+        if strategy == "schema":
+            return self._recall_schema_based(query_text)
+        else:  # Default to vector strategy
+            return self._recall_vector_based(query_text, similarity_threshold)
+            
+    def _recall_schema_based(self, query_text: str) -> List[Dict[str, Any]]:
+        """
+        Retrieve memories using schema-based Cypher query generation
+        """
+        try:
+            # Get actual database schema
+            db_schema = self._get_db_schema()
+            
+            prompt = f"""
+            Given this database schema and natural language query, create a Cypher query.
+            
+            Query: "{query_text}"
+            
+            {db_schema}
+            
+            Requirements:
+            1. Use only node labels and relationship types that exist in the schema
+            2. Include relevant property filters based on the query
+            3. Use appropriate pattern matching and WHERE clauses
+            4. Return nodes and relationships that best match the query intent
+            5. Limit results to most relevant matches
+            6. Consider using multiple paths if needed
+            
+            Return only the Cypher query in a code block, nothing else.
+            """
+            
+            response = self.llm_service.get_response([{
+                "role": "user",
+                "content": prompt
+            }])
+            
+            snippets = self.code_extractor.extract_snippets(response)
+            if not snippets or not snippets[0].content:
+                raise ValueError("No Cypher query generated")
+                
+            cypher_query = snippets[0].content.strip()
+            self.logger.info(f"Generated Cypher query: {cypher_query}")
+            
+            # Execute the generated query
+            results = self.graph_db.execute_query(cypher_query)
+            
+            # Format results
+            formatted_results = []
+            for result in results:
+                # Extract node information from each result
+                for key, value in result.items():
+                    if hasattr(value, 'labels'):  # It's a node
+                        formatted_results.append({
+                            'n': value,
+                            'score': 1.0,  # Default score for schema-based results
+                            'match_type': 'schema',
+                            'labels': list(value.labels),
+                            'properties': dict(value)
+                        })
+            
+            return formatted_results
+            
+        except Exception as e:
+            self.logger.error(f"Error during schema-based recall: {str(e)}")
+            raise
+            
+    def _recall_vector_based(self, query_text: str, similarity_threshold: float = 0.7) -> List[Dict[str, Any]]:
+        """
+        Retrieve memories using vector similarity search
         """
         try:
             # Generate multiple enhanced queries
@@ -663,6 +733,40 @@ class MemoryHandler:
         except Exception as e:
             self.logger.error(f"Failed to create vector index: {str(e)}")
             raise
+
+    def _get_db_schema(self) -> str:
+        """Get the actual schema from the database"""
+        try:
+            # Get node labels and their properties
+            nodes_schema = self.graph_db.execute_query("""
+            CALL db.schema.nodeTypeProperties()
+            YIELD nodeType, propertyName
+            RETURN nodeType, collect(propertyName) as properties
+            """)
+            
+            # Get relationship types
+            rels_schema = self.graph_db.execute_query("""
+            CALL db.schema.relationshipTypeProperties()
+            YIELD relationType, propertyName
+            RETURN relationType, collect(propertyName) as properties
+            """)
+            
+            # Format schema as string
+            schema = "Database Schema:\n\nNodes:\n"
+            for node in nodes_schema:
+                schema += f"- Label: {node['nodeType']}\n"
+                schema += "  Properties: " + ", ".join(node['properties']) + "\n"
+            
+            schema += "\nRelationships:\n"
+            for rel in rels_schema:
+                schema += f"- Type: {rel['relationType']}\n"
+                schema += "  Properties: " + ", ".join(rel['properties']) + "\n"
+                
+            return schema
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get database schema: {str(e)}")
+            return ""
 
     def _check_vector_index(self, node_label: str) -> bool:
         """Check if vector index exists for a given node label"""
