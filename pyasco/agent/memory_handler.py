@@ -55,6 +55,7 @@ class MemoryHandler:
         self.code_extractor = CodeSnippetExtractor()
         self.embedding_service = embedding_service or EmbeddingService()
         self._setup_indexes()
+        self._setup_vector_indexes()
 
     def _generate_node_embedding(self, node_data: Dict[str, Any]) -> str:
         """
@@ -434,11 +435,19 @@ class MemoryHandler:
                 # Generate embedding for query
                 query_embedding = self.embedding_service.get_embedding(query_text).tolist()[0]
                 
-                # Execute graph query
+                # Execute graph query for exact matches
                 graph_results = self.graph_db.execute_query(cypher_query)
                 
-                # Find semantically similar nodes
-                semantic_results = self.graph_db.find_similar_nodes(query_embedding, similarity_threshold)
+                # Query vector index for semantic matches
+                vector_results = self.graph_db.execute_query("""
+                CALL db.index.vector.queryNodes($index_name, $k, $query) 
+                YIELD node, score
+                RETURN node, score
+                """, {
+                    "index_name": "memory_embeddings",
+                    "k": 5,  # Number of similar results to return
+                    "query": query_embedding
+                })
                 
                 # Combine and deduplicate results
                 seen_ids = set()
@@ -451,14 +460,14 @@ class MemoryHandler:
                         seen_ids.add(node_id)
                         current_results.append(result)
                 
-                # Add semantic results
-                for result in semantic_results:
+                # Add vector results
+                for result in vector_results:
                     node_id = result['node'].id
-                    if node_id not in seen_ids:
+                    if node_id not in seen_ids and result['score'] >= similarity_threshold:
                         seen_ids.add(node_id)
                         current_results.append({
                             'n': result['node'],
-                            'score': result['similarity']
+                            'score': result['score']
                         })
                 
                 # Evaluate results
@@ -486,6 +495,25 @@ class MemoryHandler:
                 break
         
         return best_results
+
+    def _setup_vector_indexes(self):
+        """Set up vector indexes for embedding search"""
+        try:
+            # Create vector index for embeddings if it doesn't exist
+            self.graph_db.execute_query("""
+            CREATE VECTOR INDEX memory_embeddings IF NOT EXISTS 
+            FOR (n:Memory) ON n.embedding
+            OPTIONS {
+                indexConfig: {
+                    'vector.dimensions': 1536,
+                    'vector.similarity_function': 'cosine'
+                }
+            }
+            """)
+            self.logger.info("Vector index created/verified for embeddings")
+        except Exception as e:
+            self.logger.error(f"Failed to create vector index: {str(e)}")
+            raise
 
     def _setup_indexes(self):
         """Set up text indexes for searchable fields"""
