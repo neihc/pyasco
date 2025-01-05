@@ -601,8 +601,20 @@ class MemoryHandler:
                 2. Include relevant property filters based on the query
                 3. Use appropriate pattern matching and WHERE clauses
                 4. Return nodes and relationships that best match the query intent
-                5. Limit results to most relevant matches
+                5. Limit results to most relevant matches (use LIMIT)
                 6. Consider using multiple paths if needed
+                7. IMPORTANT: When using ORDER BY, only reference variables that are in scope
+                8. If ordering by timestamp, make sure to include it in the WITH/RETURN clause
+                9. Always alias complex property references in WITH clauses before using them in ORDER BY
+                
+                Example structure:
+                ```cypher
+                MATCH (n:Label)
+                WITH n, n.timestamp as timestamp
+                ORDER BY timestamp DESC
+                RETURN n
+                LIMIT 5
+                ```
                 
                 Return only the Cypher query in a code block, nothing else.
                 """
