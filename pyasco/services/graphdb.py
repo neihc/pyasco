@@ -214,18 +214,27 @@ class GraphDB:
                                 similarity_threshold: float, limit: int = 5) -> List[Dict]:
         """Execute vector similarity search for a specific label"""
         try:
-            return self.execute_query(f"""
+            query = """
             CALL db.index.vector.queryNodes($index_name, $k, $query)
             YIELD node, score 
             WHERE score >= $threshold
-            RETURN node, score
+            WITH node, score, labels(node) as labels
+            RETURN node, score, labels
             ORDER BY score DESC
-            """, {
+            """
+            
+            params = {
                 "index_name": f"{label.lower()}_embeddings",
                 "k": limit,
                 "query": query_embedding,
                 "threshold": similarity_threshold
-            })
+            }
+            
+            self.logger.debug(f"Executing vector search query for {label} with params: {params}")
+            results = self.execute_query(query, params)
+            self.logger.debug(f"Vector search returned {len(results)} results")
+            
+            return results
         except Exception as e:
             self.logger.error(f"Vector search failed for label {label}: {str(e)}")
             return []

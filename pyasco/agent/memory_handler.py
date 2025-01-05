@@ -485,12 +485,15 @@ class MemoryHandler:
                 
                 # Query each indexed label
                 for label in indexed_labels:
+                    self.logger.debug(f"Searching vector index for label: {label}")
                     label_results = self.graph_db.get_vector_search_results(
                         label,
                         query_embedding,
                         similarity_threshold
                     )
-                # Only add results for nodes we haven't seen yet
+                    self.logger.debug(f"Found {len(label_results)} results for label {label}")
+                    
+                    # Only add results for nodes we haven't seen yet
                 for result in label_results:
                     node_id = result['node'].element_id
                     if node_id not in seen_node_ids:
@@ -548,9 +551,12 @@ class MemoryHandler:
                     if neighbor_id in seen_ids:
                         continue
                     
-                    # Calculate decaying score based on depth
-                    depth_score = 1.0 / (current['depth'] + 2)  # +2 to avoid division by zero and too high scores
+                    # Calculate decaying score based on depth and relationship
+                    base_score = current.get('score', 1.0)  # Get score from parent node
+                    depth_penalty = 0.7 ** current['depth']  # Exponential decay with depth
+                    depth_score = base_score * depth_penalty
                     
+                    # Create neighbor info with more context
                     neighbor_info = {
                         'n': neighbor_node,
                         'score': depth_score,
@@ -559,8 +565,14 @@ class MemoryHandler:
                         'labels': list(neighbor_node.labels),
                         'properties': dict(neighbor_node),
                         'depth': current['depth'] + 1,
-                        'path_from_source': current['path']
+                        'path_from_source': current['path'],
+                        'parent_node': current['node_id']
                     }
+                    
+                    self.logger.debug(
+                        f"Exploring neighbor: {neighbor_node.element_id} "
+                        f"(depth: {current['depth'] + 1}, score: {depth_score:.3f})"
+                    )
                     
                     # Ask LLM if we should explore this neighbor
                     if self._should_explore_node(
