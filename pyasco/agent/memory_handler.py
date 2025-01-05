@@ -195,38 +195,6 @@ class MemoryHandler:
             self.logger.error(f"Failed to determine search expansion: {str(e)}")
             return False
 
-    def recall(self, query: str, node_types: Optional[List[str]] = None,
-               limit: int = 5) -> List[Dict[str, Any]]:
-        """
-        Recall memories using entity extraction and iterative expansion
-        Args:
-            query (str): Natural language query to search memories
-            node_types (list): Optional list of node types to search within
-            limit (int): Maximum number of results to return
-        Returns:
-            list: List of relevant memory nodes with similarity scores
-        """
-        try:
-            # Phase 1: Extract entities
-            entities = self._extract_entities(query)
-            self.logger.debug(f"Extracted entities: {entities}")
-            
-            # Phase 2: Iteratively expand search until results are found
-            results = []
-            for entity in entities:
-                while not results:
-                    results = self._search_entity(entity, node_types, limit)
-                    if not results:
-                        self.logger.debug(f"No results for entity '{entity}', expanding search...")
-                        entity = self._expand_entity(entity)
-            
-            self.logger.info(f"Found {len(results)} memories after processing")
-            return results
-            
-        except Exception as e:
-            self.logger.error(f"Failed to recall memories: {str(e)}")
-            raise
-
     def _search_entity(self, entity: str, node_types: Optional[List[str]], limit: int) -> List[Dict[str, Any]]:
         """
         Search for an entity in the graph database
@@ -342,6 +310,7 @@ class MemoryHandler:
         except Exception as e:
             self.logger.error(f"Failed to process memory: {str(e)}")
             raise
+
     def _setup_indexes(self):
         """Set up text indexes for searchable fields"""
         prompt = """
