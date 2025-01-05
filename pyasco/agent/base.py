@@ -131,17 +131,10 @@ class Agent:
                     for result in recalled_context:
                         node = result.get('n')
                         if node and hasattr(node, 'get'):
-                            # Skip if this content is already in the current conversation
-                            content = node.get('original_content')
-                            if content and not any(msg.content == content for msg in self.conversation.messages):
-                                node_data = {
-                                    "content": content,
-                                    "type": node.get('type', 'unknown'),
-                                    "timestamp": node.get('timestamp', ''),
-                                    "conversation_id": node.get('conversation_id', ''),
-                                    "similarity_score": result.get('score', 0.0)
-                                }
-                                related_nodes.append(node_data)
+                            # Convert node to dictionary and add similarity score
+                            node_dict = dict(node)
+                            node_dict['similarity_score'] = result.get('score', 0.0)
+                            related_nodes.append(node_dict)
                     
                     if related_nodes:
                         context_prefix = f"Related context (JSON format):\n{str(related_nodes)}\n\n"
