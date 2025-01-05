@@ -139,8 +139,8 @@ class GraphDB:
         MATCH (n)
         {label_filter}
         WITH n, properties(n) as props
-        WHERE any(value IN [value IN props WHERE value IS NOT NULL] 
-                 WHERE toString(value) CONTAINS $query)
+        WHERE any(prop IN keys(props) 
+                 WHERE toString(props[prop]) CONTAINS $query)
         RETURN n
         LIMIT $limit
         """
