@@ -133,6 +133,20 @@ class MemoryHandler:
                     if context:
                         node_spec["properties"].update(context)
                 
+                # Check if vector index exists for this node label
+                if not self._check_vector_index(node_spec["label"]):
+                    self.logger.info(f"Creating vector index for label {node_spec['label']}")
+                    self.graph_db.execute_query(f"""
+                    CREATE VECTOR INDEX {node_spec['label'].lower()}_embeddings IF NOT EXISTS 
+                    FOR (n:{node_spec['label']}) ON (n.embedding)
+                    OPTIONS {{
+                        vector: {{
+                            dimensions: 1536,
+                            similarity_function: 'cosine'
+                        }}
+                    }}
+                    """)
+
                 # Generate embedding for node properties
                 node_spec["properties"]["embedding"] = self._generate_node_embedding(node_spec["properties"])
                 
@@ -502,7 +516,7 @@ class MemoryHandler:
             # Create vector index for embeddings if it doesn't exist
             self.graph_db.execute_query("""
             CREATE VECTOR INDEX memory_embeddings IF NOT EXISTS 
-            FOR (n:Memory) ON (n.embedding)
+            FOR (n) ON (n.embedding)
             OPTIONS {
                 vector: {
                     dimensions: 1536,
@@ -514,6 +528,23 @@ class MemoryHandler:
         except Exception as e:
             self.logger.error(f"Failed to create vector index: {str(e)}")
             raise
+
+    def _check_vector_index(self, node_label: str) -> bool:
+        """Check if vector index exists for a given node label"""
+        try:
+            result = self.graph_db.execute_query("""
+            SHOW INDEXES
+            YIELD name, type, labelsOrTypes, properties
+            WHERE type = 'VECTOR' 
+            AND $label IN labelsOrTypes
+            AND 'embedding' IN properties
+            RETURN count(*) as count
+            """, {"label": node_label})
+            
+            return result[0]['count'] > 0
+        except Exception as e:
+            self.logger.error(f"Failed to check vector index: {str(e)}")
+            return False
 
     def _setup_indexes(self):
         """Set up text indexes for searchable fields"""
