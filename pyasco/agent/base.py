@@ -293,8 +293,9 @@ class Agent:
             try:
                 if skill_name is None:
                     # Create prompt to identify skill from conversation
+                    messages = self.conversation.to_llm_format()
                     conversation = "\n".join(f"{msg['role']}: {msg['content']}" 
-                                        for msg in self.messages[1:])
+                                        for msg in messages[1:])
                     
                     available_skills = "\n".join(
                         f"- {name}: {skill.usage}"
