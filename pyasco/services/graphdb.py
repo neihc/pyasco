@@ -174,12 +174,18 @@ class GraphDB:
         WITH n, properties(n) as props
         UNWIND keys(props) as prop
         WITH n, prop, props[prop] as value
-        WHERE type(value) IN ['STRING'] OR (type(value) = 'LIST' AND size([x IN value WHERE type(x)='STRING']) > 0)
+        WHERE (value IS NOT NULL) AND (
+            CASE 
+                WHEN value IS STRING THEN true
+                WHEN value IS LIST THEN size([x IN value WHERE x IS STRING]) > 0
+                ELSE false
+            END
+        )
         WITH n, collect({{
             prop: prop,
             value: CASE
-                WHEN type(value) = 'LIST'
-                THEN reduce(s = '', x IN [x IN value WHERE type(x)='STRING'] | s + ' ' + toString(x))
+                WHEN value IS LIST 
+                THEN reduce(s = '', x IN [x IN value WHERE x IS STRING] | s + ' ' + toString(x))
                 ELSE toString(value)
             END
         }}) as textProps
