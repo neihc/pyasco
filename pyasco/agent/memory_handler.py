@@ -141,7 +141,7 @@ class MemoryHandler:
                     FOR (n:{node_spec['label']}) ON (n.embedding)
                     OPTIONS {{
                         indexConfig: {{
-                            `vector.dimensions`: 1536,
+                            `vector.dimensions`: 1024,
                             `vector.similarity_function`: 'cosine'
                         }}
                     }}
@@ -565,7 +565,7 @@ class MemoryHandler:
             FOR (n:Memory) ON (n.embedding)
             OPTIONS {
                 indexConfig: {
-                    `vector.dimensions`: 1536,
+                    `vector.dimensions`: 1024,
                     `vector.similarity_function`: 'cosine'
                 }
             }
