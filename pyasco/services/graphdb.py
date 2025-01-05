@@ -252,7 +252,8 @@ class GraphDB:
             CALL db.labels() YIELD label
             CALL {
                 WITH label
-                MATCH (n:`${label}`)
+                MATCH (n)
+                WHERE n:`${label}`
                 WITH label, n
                 LIMIT 1
                 RETURN collect(keys(n)) as properties
@@ -265,7 +266,8 @@ class GraphDB:
             CALL db.relationshipTypes() YIELD relationshipType
             CALL {
                 WITH relationshipType
-                MATCH ()-[r:`${relationshipType}`]->()
+                MATCH ()-[r]->()
+                WHERE type(r) = relationshipType
                 WITH relationshipType, r
                 LIMIT 1
                 RETURN collect(keys(r)) as properties
