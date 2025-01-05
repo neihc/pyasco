@@ -640,26 +640,25 @@ class MemoryHandler:
                 self.logger.info(f"Generated Cypher query (attempt {attempt}): {cypher_query}")
                 
                 try:
-                    try:
-                        # Execute the generated query
-                        results = self.graph_db.execute_query(cypher_query)
-                        # If we get here, query executed successfully
-                        break
-                    
-                    except Exception as e:
-                        error_msg = str(e)
-                        self.logger.warning(f"Query execution failed (attempt {attempt}): {error_msg}")
-                    
-                        # Add error feedback to conversation history
-                        conversation_history.append({
-                            "role": "assistant",
-                            "content": f"Generated query:\n```cypher\n{cypher_query}\n```\n\nError: {error_msg}\n\nPlease fix the query considering the schema constraints and error message."
-                        })
-                    
-                        if attempt == max_attempts:
-                            self.logger.error(f"Failed to generate valid query after {max_attempts} attempts. Last error: {error_msg}")
-                            return []  # Return empty list instead of raising error
-                        continue
+                    # Execute the generated query
+                    results = self.graph_db.execute_query(cypher_query)
+                    # If we get here, query executed successfully
+                    break
+                
+                except Exception as e:
+                    error_msg = str(e)
+                    self.logger.warning(f"Query execution failed (attempt {attempt}): {error_msg}")
+                
+                    # Add error feedback to conversation history
+                    conversation_history.append({
+                        "role": "assistant",
+                        "content": f"Generated query:\n```cypher\n{cypher_query}\n```\n\nError: {error_msg}\n\nPlease fix the query considering the schema constraints and error message."
+                    })
+                
+                    if attempt == max_attempts:
+                        self.logger.error(f"Failed to generate valid query after {max_attempts} attempts. Last error: {error_msg}")
+                        return []  # Return empty list instead of raising error
+                    continue
             
             # Format results if we have any
             if results:
