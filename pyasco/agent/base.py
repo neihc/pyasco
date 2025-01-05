@@ -23,9 +23,16 @@ from .utils import get_system_info
 
 
 class Agent:
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, user_id: str = "0", app_type: str = "console", **metadata):
         self.logger = setup_logger('agent')
         self.logger.info("Initializing Agent")
+        self.user_id = user_id
+        self.app_type = app_type
+        self.metadata = {
+            "user_id": user_id,
+            "app_type": app_type,
+            **metadata
+        }
         self.conversation = Conversation()
         self.code_extractor = CodeSnippetExtractor()
         self.python_executor = self._setup_executor(config)
@@ -183,7 +190,8 @@ class Agent:
             context = {
                 "type": "conversation",
                 "timestamp": str(datetime.now()),
-                "message_count": len(self.conversation.messages)
+                "message_count": len(self.conversation.messages),
+                **self.metadata
             }
             
             self.logger.info("Storing conversation in memory")
