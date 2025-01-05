@@ -428,87 +428,116 @@ class MemoryHandler:
             self.logger.error(f"Failed to evaluate results: {str(e)}")
             return {"sufficient": True, "reason": "Error in evaluation"}
 
-    def recall(self, query_text: str, max_iterations: int = 5, similarity_threshold: float = 0.7) -> List[Dict[str, Any]]:
+    def recall(self, query_text: str, similarity_threshold: float = 0.7) -> List[Dict[str, Any]]:
         """
-        Retrieve memories based on a natural language query using iterative refinement
+        Retrieve memories based on a natural language query using vector search first,
+        then building graph queries based on the results
         Args:
             query_text (str): Natural language query
-            max_iterations (int): Maximum number of query refinement iterations
+            similarity_threshold (float): Minimum similarity score for vector search results
         Returns:
             list: List of relevant memory nodes and their properties
         """
-        iteration = 0
-        best_results = []
-        
-        while iteration < max_iterations:
-            try:
-                # Build or use existing query
-                if iteration == 0:
-                    cypher_query = self._build_query(query_text)
+        try:
+            # Generate embedding for query
+            query_embedding = self.embedding_service.get_embedding(query_text).tolist()[0]
+            
+            # First phase: Vector search to find semantically similar nodes
+            vector_results = self.graph_db.execute_query("""
+            CALL db.index.vector.queryNodes($index_name, $k, $query) 
+            YIELD node, score
+            WHERE score >= $threshold
+            RETURN node, score
+            ORDER BY score DESC
+            """, {
+                "index_name": "memory_embeddings",
+                "k": 10,  # Increased number of initial results
+                "query": query_embedding,
+                "threshold": similarity_threshold
+            })
+            
+            if not vector_results:
+                self.logger.info("No similar nodes found via vector search")
+                return []
                 
-                # Generate embedding for query
-                query_embedding = self.embedding_service.get_embedding(query_text).tolist()[0]
-                
-                # Execute graph query for exact matches
-                graph_results = self.graph_db.execute_query(cypher_query)
-                
-                # Query vector index for semantic matches
-                vector_results = self.graph_db.execute_query("""
-                CALL db.index.vector.queryNodes($index_name, $k, $query) 
-                YIELD node, score
-                RETURN node, score
-                """, {
-                    "index_name": "memory_embeddings",
-                    "k": 5,  # Number of similar results to return
-                    "query": query_embedding
+            # Extract node information for query building
+            node_info = []
+            for result in vector_results:
+                node = result['node']
+                node_info.append({
+                    'labels': list(node.labels),
+                    'properties': dict(node),
+                    'id': node.id,
+                    'score': result['score']
                 })
-                
-                # Combine and deduplicate results
-                seen_ids = set()
-                current_results = []
-                
-                # Process graph results
-                for result in graph_results:
+            
+            # Build graph query based on vector results and schema
+            prompt = f"""
+            Based on these semantically similar nodes and the schema, build a Cypher query
+            to find related information for: "{query_text}"
+
+            Similar nodes found:
+            {node_info[:3]}  # Show top 3 most similar nodes
+
+            Schema:
+            {self.memory_instructions}
+
+            Return only the Cypher query in a code block. The query should:
+            1. Start from or connect to the similar nodes found
+            2. Follow relevant relationships defined in the schema
+            3. Return a comprehensive view of the related information
+            4. Limit to most relevant results
+            """
+            
+            response = self.llm_service.get_response([{
+                "role": "user",
+                "content": prompt
+            }])
+            
+            snippets = self.code_extractor.extract_snippets(response)
+            if not snippets or not snippets[0].content:
+                self.logger.warning("Could not generate graph query, returning vector results only")
+                return [{'n': r['node'], 'score': r['score']} for r in vector_results]
+            
+            # Execute the generated graph query
+            graph_query = snippets[0].content.strip()
+            graph_results = self.graph_db.execute_query(graph_query)
+            
+            # Combine and deduplicate results
+            seen_ids = set()
+            final_results = []
+            
+            # First add vector results
+            for result in vector_results:
+                node_id = result['node'].id
+                if node_id not in seen_ids:
+                    seen_ids.add(node_id)
+                    final_results.append({
+                        'n': result['node'],
+                        'score': result['score'],
+                        'match_type': 'vector'
+                    })
+            
+            # Then add graph results
+            for result in graph_results:
+                # Assuming the graph query returns nodes with alias 'n'
+                if 'n' in result and hasattr(result['n'], 'id'):
                     node_id = result['n'].id
                     if node_id not in seen_ids:
                         seen_ids.add(node_id)
-                        current_results.append(result)
-                
-                # Add vector results
-                for result in vector_results:
-                    node_id = result['node'].id
-                    if node_id not in seen_ids and result['score'] >= similarity_threshold:
-                        seen_ids.add(node_id)
-                        current_results.append({
-                            'n': result['node'],
-                            'score': result['score']
+                        final_results.append({
+                            'n': result['n'],
+                            'score': 1.0,  # Direct graph matches get full score
+                            'match_type': 'graph'
                         })
-                
-                # Evaluate results
-                evaluation = self._evaluate_results(query_text, current_results)
-                
-                # Update best results if current results are better
-                if current_results:
-                    best_results = current_results
-                
-                # Check if results are sufficient
-                if evaluation["sufficient"]:
-                    self.logger.info(f"Found sufficient results after {iteration + 1} iterations")
-                    break
-                
-                # Update query for next iteration
-                if "improved_query" in evaluation:
-                    cypher_query = evaluation["improved_query"]
-                else:
-                    break
-                    
-                iteration += 1
-                
-            except Exception as e:
-                self.logger.error(f"Error during recall iteration {iteration}: {str(e)}")
-                break
-        
-        return best_results
+            
+            self.logger.info(f"Found {len(final_results)} total results "
+                           f"({len(vector_results)} vector, {len(graph_results)} graph)")
+            return final_results
+            
+        except Exception as e:
+            self.logger.error(f"Error during recall: {str(e)}")
+            raise
 
     def _setup_vector_indexes(self):
         """Set up vector indexes for embedding search"""
