@@ -110,6 +110,16 @@ class GraphDB:
         result = self.execute_query(query, params)
         return result[0]['r'] if result else None
 
+    def _node_to_dict(self, node) -> Dict:
+        """Convert a Neo4j Node to a dictionary"""
+        if not node:
+            return None
+        return {
+            "id": node.id,
+            "labels": list(node.labels),
+            "properties": dict(node)
+        }
+
     def semantic_search(self, query: str, node_labels: Optional[List[str]] = None,
                        limit: int = 5) -> List[Dict]:
         """

@@ -42,19 +42,24 @@ def main():
     )
     
     # Store a conversation memory
-    conversation = memory_handler.remember(
-        """The user asked about implementing BERT for text classification. 
-        We discussed fine-tuning approaches and potential pitfalls. 
-        They showed good understanding of transformer architecture but needed 
-        guidance on handling long sequences.""",
-        {
-            "timestamp": datetime.now(),
-            "user_id": "user123",
-            "conversation_id": "conv456"
-        }
-    )
-    print("\nStored conversation memory:")
-    print(json.dumps(conversation, indent=2))
+    try:
+        conversation = memory_handler.remember(
+            """The user asked about implementing BERT for text classification. 
+            We discussed fine-tuning approaches and potential pitfalls. 
+            They showed good understanding of transformer architecture but needed 
+            guidance on handling long sequences.""",
+            {
+                "timestamp": str(datetime.now()),  # Convert datetime to string
+                "user_id": "user123",
+                "conversation_id": "conv456"
+            }
+        )
+        print("\nStored conversation memory:")
+        if hasattr(conversation, 'id'):  # If it's a Neo4j Node
+            conv_dict = graph_db._node_to_dict(conversation)
+            print(json.dumps(conv_dict, indent=2))
+        else:  # If it's already a dict
+            print(json.dumps(conversation, indent=2))
     
     # Demonstrate memory recall
     print("\nRecalling memories about transformers:")
