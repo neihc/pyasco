@@ -197,7 +197,7 @@ class GraphDB:
                 ELSE 0.0
              END as similarity
         WHERE similarity >= $threshold
-        RETURN {node: n, score: similarity} as result
+        RETURN n as node, similarity as score
         ORDER BY result.score DESC
         LIMIT $limit
         """
