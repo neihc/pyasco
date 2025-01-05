@@ -95,7 +95,7 @@ class GraphDB:
         """
         query = """
         MATCH (a), (b) 
-        WHERE id(a) = $from_id AND id(b) = $to_id
+        WHERE elementId(a) = $from_id AND elementId(b) = $to_id
         CREATE (a)-[r:`{}`]->(b)
         SET r = $props
         RETURN r
