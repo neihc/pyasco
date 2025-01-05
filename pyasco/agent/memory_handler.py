@@ -311,6 +311,131 @@ class MemoryHandler:
             self.logger.error(f"Failed to process memory: {str(e)}")
             raise
 
+    def _build_query(self, query_text: str) -> str:
+        """
+        Use LLM to build a Cypher query based on the natural language query
+        """
+        prompt = f"""
+        Convert this natural language query into a Cypher query for Neo4j:
+        "{query_text}"
+
+        Use this schema:
+        {self.memory_instructions}
+
+        Return only the Cypher query in a code block, nothing else.
+        The query should:
+        - Use appropriate node labels and relationship types from the schema
+        - Include relevant property filters
+        - Return nodes and relationships that best match the query intent
+        - Limit results to 5 most relevant matches
+        """
+        
+        try:
+            response = self.llm_service.get_response([{
+                "role": "user",
+                "content": prompt
+            }])
+            
+            snippets = self.code_extractor.extract_snippets(response)
+            if not snippets or not snippets[0].content:
+                raise ValueError("No Cypher query found in LLM response")
+                
+            return snippets[0].content.strip()
+            
+        except Exception as e:
+            self.logger.error(f"Failed to build query: {str(e)}")
+            raise
+
+    def _evaluate_results(self, query_text: str, results: List[Dict]) -> Dict[str, Any]:
+        """
+        Use LLM to evaluate query results and suggest improvements
+        """
+        results_summary = "\n".join([
+            f"- Node: {r.get('n', {}).get('properties', {})} Score: {r.get('score', 'N/A')}"
+            for r in results[:3]
+        ])
+        
+        prompt = f"""
+        Evaluate these query results:
+        
+        Original query: "{query_text}"
+        
+        Results:
+        {results_summary}
+        
+        Return a JSON object in a code block with this structure:
+        ```json
+        {{
+            "sufficient": true/false,
+            "reason": "explanation of why results are sufficient or not",
+            "improved_query": "suggested improved cypher query if needed"
+        }}
+        ```
+        """
+        
+        try:
+            response = self.llm_service.get_response([{
+                "role": "user",
+                "content": prompt
+            }])
+            
+            snippets = self.code_extractor.extract_snippets(response)
+            if not snippets or not snippets[0].content:
+                raise ValueError("No evaluation found in LLM response")
+                
+            return eval(snippets[0].content)
+            
+        except Exception as e:
+            self.logger.error(f"Failed to evaluate results: {str(e)}")
+            return {"sufficient": True, "reason": "Error in evaluation"}
+
+    def recall(self, query_text: str, max_iterations: int = 5) -> List[Dict[str, Any]]:
+        """
+        Retrieve memories based on a natural language query using iterative refinement
+        Args:
+            query_text (str): Natural language query
+            max_iterations (int): Maximum number of query refinement iterations
+        Returns:
+            list: List of relevant memory nodes and their properties
+        """
+        iteration = 0
+        best_results = []
+        
+        while iteration < max_iterations:
+            try:
+                # Build or use existing query
+                if iteration == 0:
+                    cypher_query = self._build_query(query_text)
+                
+                # Execute query
+                current_results = self.execute_query(cypher_query)
+                
+                # Evaluate results
+                evaluation = self._evaluate_results(query_text, current_results)
+                
+                # Update best results if current results are better
+                if current_results:
+                    best_results = current_results
+                
+                # Check if results are sufficient
+                if evaluation["sufficient"]:
+                    self.logger.info(f"Found sufficient results after {iteration + 1} iterations")
+                    break
+                
+                # Update query for next iteration
+                if "improved_query" in evaluation:
+                    cypher_query = evaluation["improved_query"]
+                else:
+                    break
+                    
+                iteration += 1
+                
+            except Exception as e:
+                self.logger.error(f"Error during recall iteration {iteration}: {str(e)}")
+                break
+        
+        return best_results
+
     def _setup_indexes(self):
         """Set up text indexes for searchable fields"""
         prompt = """
