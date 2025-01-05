@@ -121,6 +121,29 @@ class Agent:
     def get_response(self, user_input: str, stream: bool = False) -> Union[Message, Generator[Message, None, None]]:
         self.logger.info(f"Getting response for user input (stream={stream})")
         
+        # Recall relevant context before handling the message
+        if self.memory_handler:
+            try:
+                recalled_context = self.memory_handler.recall(user_input)
+                if recalled_context:
+                    context_summary = []
+                    for result in recalled_context:
+                        node = result.get('n')
+                        if node and hasattr(node, 'get'):
+                            # Skip if this content is already in the current conversation
+                            content = node.get('original_content')
+                            if content and not any(msg.content == content for msg in self.conversation.messages):
+                                context_summary.append(f"Related context: {content}")
+                    
+                    if context_summary:
+                        context_message = "\n\n".join(context_summary)
+                        self.conversation.add_message(
+                            role="system",
+                            content=context_message
+                        )
+            except Exception as e:
+                self.logger.error(f"Failed to recall context: {str(e)}")
+        
         # Add message to history
         self.conversation.add_message(
             role="user",
@@ -177,7 +200,7 @@ class Agent:
             return
             
         try:
-            # Convert conversation to storable format
+            # Convert conversation to storable format, excluding recalled context
             conversation_text = "\n".join([
                 f"{msg.role}: {msg.content}" 
                 for msg in self.conversation.messages 
@@ -187,6 +210,16 @@ class Agent:
             if not conversation_text.strip():
                 self.logger.debug("No conversation content to store")
                 return
+                
+            # Check if this conversation is already stored
+            if self.memory_handler and hasattr(self.memory_handler, 'graph_db'):
+                existing = self.memory_handler.graph_db.execute_query(
+                    "MATCH (n) WHERE n.conversation_id = $conv_id RETURN n",
+                    {"conv_id": self.conversation_id}
+                )
+                if existing:
+                    self.logger.debug(f"Conversation {self.conversation_id} already stored")
+                    return
                 
             # Add context about the conversation
             context = {
