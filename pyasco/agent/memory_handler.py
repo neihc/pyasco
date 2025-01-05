@@ -123,10 +123,82 @@ class MemoryHandler:
             self.logger.error(f"Failed to create nodes: {str(e)}")
             raise
             
+    def _extract_entities(self, query: str) -> List[str]:
+        """
+        Extract key entities from the query using LLM
+        """
+        prompt = f"""
+        Extract key entities and concepts from this query:
+        "{query}"
+        
+        Return a JSON array of entities in a code block. Include:
+        - Important nouns and noun phrases
+        - Technical terms
+        - Action verbs
+        - Time references
+        - Any specific identifiers
+        
+        Example:
+        ```json
+        ["python code", "error handling", "last week", "database connection"]
+        ```
+        """
+        
+        try:
+            response = self.llm_service.get_response([{
+                "role": "user", 
+                "content": prompt
+            }])
+            
+            snippets = self.code_extractor.extract_snippets(response)
+            if not snippets or not snippets[0].content:
+                raise ValueError("No entities found in LLM response")
+                
+            return eval(snippets[0].content)
+            
+        except Exception as e:
+            self.logger.error(f"Failed to extract entities: {str(e)}")
+            return []
+
+    def _should_expand_search(self, query: str, current_results: List[Dict]) -> bool:
+        """
+        Ask LLM if search should be expanded based on current results
+        """
+        results_summary = "\n".join([
+            f"- Node type: {r['n'].labels}, Properties: {dict(r['n'])}, Score: {r['score']}"
+            for r in current_results[:3]  # Summarize top 3 results
+        ])
+        
+        prompt = f"""
+        Query: "{query}"
+        
+        Current top results:
+        {results_summary}
+        
+        Should we expand the search to find more related nodes? Consider:
+        1. Are the current results directly relevant to the query?
+        2. Would exploring connected nodes add valuable context?
+        3. Are there missing aspects of the query not covered by current results?
+        
+        Return only "yes" or "no".
+        """
+        
+        try:
+            response = self.llm_service.get_response([{
+                "role": "user",
+                "content": prompt
+            }]).strip().lower()
+            
+            return response == "yes"
+            
+        except Exception as e:
+            self.logger.error(f"Failed to determine search expansion: {str(e)}")
+            return False
+
     def recall(self, query: str, node_types: Optional[List[str]] = None,
                similarity_threshold: float = 0.3, limit: int = 5) -> List[Dict[str, Any]]:
         """
-        Recall memories based on semantic similarity search
+        Recall memories using entity extraction and iterative expansion
         Args:
             query (str): Natural language query to search memories
             node_types (list): Optional list of node types to search within
@@ -136,33 +208,62 @@ class MemoryHandler:
             list: List of relevant memory nodes with similarity scores
         """
         try:
-            # Process query with LLM to extract key terms and concepts
-            prompt = f"""
-            Analyze this query and extract key search terms and concepts:
-            "{query}"
+            # Phase 1: Extract entities
+            entities = self._extract_entities(query)
+            self.logger.debug(f"Extracted entities: {entities}")
             
-            Return only the essential search terms, separated by spaces.
-            Focus on unique identifying words that would match similar content.
-            """
+            # Phase 2: Initial search using entities
+            all_results = []
+            for entity in entities:
+                results = self.graph_db.semantic_search(
+                    entity,
+                    node_labels=node_types,
+                    similarity_threshold=similarity_threshold,
+                    limit=limit
+                )
+                all_results.extend(results)
             
-            response = self.llm_service.get_response([{
-                "role": "user",
-                "content": prompt
-            }])
+            # Deduplicate results based on node ID
+            unique_results = {}
+            for result in all_results:
+                node_id = result['n'].id
+                if node_id not in unique_results or result['score'] > unique_results[node_id]['score']:
+                    unique_results[node_id] = result
             
-            # Extract the processed search terms
-            search_terms = response.strip()
-            self.logger.debug(f"Processed search terms: {search_terms}")
+            initial_results = list(unique_results.values())
             
-            # Execute similarity-based search
-            results = self.graph_db.semantic_search(
-                search_terms,
-                node_labels=node_types,
-                similarity_threshold=similarity_threshold,
-                limit=limit
-            )
+            # Phase 3: Decide whether to expand search
+            if initial_results and self._should_expand_search(query, initial_results):
+                # Get connected nodes for top results
+                expanded_results = []
+                for result in initial_results[:3]:  # Expand from top 3 results
+                    node_id = result['n'].id
+                    connected = self.graph_db.execute_query("""
+                    MATCH (n)-[r]-(connected)
+                    WHERE elementId(n) = $node_id
+                    RETURN connected, 0.7 * $original_score as score
+                    LIMIT 5
+                    """, {"node_id": node_id, "original_score": result['score']})
+                    expanded_results.extend(connected)
+                
+                # Combine and deduplicate all results
+                all_results = initial_results + expanded_results
+                final_results = {}
+                for result in all_results:
+                    node_id = result['n'].id if 'n' in result else result['connected'].id
+                    node = result.get('n', result.get('connected'))
+                    if node_id not in final_results or result['score'] > final_results[node_id]['score']:
+                        final_results[node_id] = {'n': node, 'score': result['score']}
+                
+                results = list(final_results.values())
+            else:
+                results = initial_results
             
-            self.logger.info(f"Found {len(results)} memories with similarity >= {similarity_threshold}")
+            # Sort by score and limit results
+            results.sort(key=lambda x: x['score'], reverse=True)
+            results = results[:limit]
+            
+            self.logger.info(f"Found {len(results)} memories after processing")
             return results
             
         except Exception as e:
