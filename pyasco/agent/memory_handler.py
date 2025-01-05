@@ -485,13 +485,13 @@ class MemoryHandler:
                 
                 # Query each indexed label
                 for label in indexed_labels:
-                    self.logger.debug(f"Searching vector index for label: {label}")
+                    print(f"Searching vector index for label: {label}")
                     label_results = self.graph_db.get_vector_search_results(
                         label,
                         query_embedding,
                         similarity_threshold
                     )
-                    self.logger.debug(f"Found {len(label_results)} results for label {label}")
+                    print(f"Found {len(label_results)} results for label {label}")
                     
                     # Only add results for nodes we haven't seen yet
                 for result in label_results:
@@ -569,7 +569,7 @@ class MemoryHandler:
                         'parent_node': current['node_id']
                     }
                     
-                    self.logger.debug(
+                    print(
                         f"Exploring neighbor: {neighbor_node.element_id} "
                         f"(depth: {current['depth'] + 1}, score: {depth_score:.3f})"
                     )
