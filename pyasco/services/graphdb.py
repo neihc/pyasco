@@ -174,12 +174,12 @@ class GraphDB:
         WITH n, properties(n) as props
         UNWIND keys(props) as prop
         WITH n, prop, props[prop] as value
-        WHERE apoc.meta.type(value) IN ['STRING', 'LIST<STRING>']
+        WHERE type(value) IN ['STRING'] OR (type(value) = 'LIST' AND size([x IN value WHERE type(x)='STRING']) > 0)
         WITH n, collect({{
             prop: prop,
             value: CASE
-                WHEN apoc.meta.type(value) = 'LIST<STRING>' 
-                THEN reduce(s = '', x IN value | s + ' ' + toString(x))
+                WHEN type(value) = 'LIST'
+                THEN reduce(s = '', x IN [x IN value WHERE type(x)='STRING'] | s + ' ' + toString(x))
                 ELSE toString(value)
             END
         }}) as textProps
