@@ -28,10 +28,7 @@ class GraphDBConfig:
 
 @dataclass
 class EmbeddingConfig:
-    model: str = "text-embedding-ada-002"
-    dimensions: int = 1536
-    batch_size: int = 100
-    cache_dir: Optional[str] = None
+    model: str = "jina-embeddings-v3"
 
 @dataclass
 class MemoryConfig:
@@ -107,10 +104,7 @@ class ConfigManager:
         embedding_config = None
         if 'embedding' in yaml_config:
             embedding_config = EmbeddingConfig(
-                model=yaml_config['embedding'].get('model', "text-embedding-ada-002"),
-                dimensions=yaml_config['embedding'].get('dimensions', 1536),
-                batch_size=yaml_config['embedding'].get('batch_size', 100),
-                cache_dir=yaml_config['embedding'].get('cache_dir')
+                model=yaml_config['embedding'].get('model', "jina-embeddings-v3")
             )
             
         return Config(
@@ -171,10 +165,7 @@ class ConfigManager:
         embedding_config = None
         if hasattr(args, 'embedding_model'):
             embedding_config = EmbeddingConfig(
-                model=args.embedding_model,
-                dimensions=args.embedding_dimensions if hasattr(args, 'embedding_dimensions') else 1536,
-                batch_size=args.embedding_batch_size if hasattr(args, 'embedding_batch_size') else 100,
-                cache_dir=args.embedding_cache_dir if hasattr(args, 'embedding_cache_dir') else None
+                model=args.embedding_model
             )
             
         return Config(

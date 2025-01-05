@@ -54,10 +54,7 @@ class Agent:
             self.embedding_service = EmbeddingService(
                 api_key=config.llm.api_key,
                 base_url=config.llm.base_url,
-                model=config.embedding.model,
-                dimensions=config.embedding.dimensions,
-                batch_size=config.embedding.batch_size,
-                cache_dir=config.embedding.cache_dir
+                model=config.embedding.model
             )
             
             self.memory_handler = MemoryHandler(
