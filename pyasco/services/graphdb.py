@@ -160,56 +160,63 @@ class GraphDB:
         Returns:
             list: List of matching nodes with their properties
         """
-        # Use text indexes if available
-        if node_labels and any(idx for idx in self.indexes.values() if idx['label'] in node_labels):
-            indexed_searches = []
+        # Prepare label filter if specified
+        label_filter = ""
+        if node_labels:
+            labels_list = [f"'{label}'" for label in node_labels]
+            label_filter = f"WHERE any(label IN labels(n) WHERE label IN [{', '.join(labels_list)}])"
+
+        # Check for full-text indexes
+        indexed_searches = []
+        if node_labels:
             for label in node_labels:
                 idx = next((idx for idx in self.indexes.values() if idx['label'] == label), None)
                 if idx:
                     indexed_searches.append(f"""
-                    CALL db.index.fulltext.queryNodes("{label.lower()}_text_idx", $query)
+                    CALL db.index.fulltext.queryNodes('{label.lower()}_text_idx', $query)
                     YIELD node, score
-                    RETURN node as n, score
+                    WITH node as n, score
+                    RETURN n, score, 1 as priority
                     """)
-            
-            if indexed_searches:
-                cypher_query = " UNION ALL ".join(indexed_searches) + " ORDER BY score DESC LIMIT $limit"
-            else:
-                # Fallback to regular search
-                label_filter = f"WHERE any(label IN labels(n) WHERE label IN {node_labels})"
-                cypher_query = f"""
-                MATCH (n)
-                {label_filter}
-                WITH n, properties(n) as props
-                WHERE any(prop IN keys(props) 
-                         WHERE (
-                           CASE
-                             WHEN props[prop] IS NULL THEN false  
-                             WHEN size([x IN [props[prop]] WHERE props[prop] IS NOT NULL]) > 0 AND 
-                                  size(props[prop]) > 0 THEN 
-                               any(x IN props[prop] WHERE toString(x) CONTAINS $query)
-                             ELSE toString(props[prop]) CONTAINS $query
-                           END
-                         ))
-                RETURN n
-                LIMIT $limit
-                """
+
+        # Build main search query with property traversal
+        main_search = f"""
+        MATCH (n)
+        {label_filter}
+        WITH n, properties(n) as props
+        WITH n, props,
+             [prop IN keys(props) WHERE 
+                CASE
+                    WHEN props[prop] IS NULL THEN false
+                    WHEN apoc.meta.type(props[prop]) = 'LIST' THEN
+                        any(item IN props[prop] WHERE 
+                            CASE
+                                WHEN item IS NULL THEN false
+                                ELSE toString(item) CONTAINS $query
+                            END
+                        )
+                    ELSE toString(props[prop]) CONTAINS $query
+                END
+             ] as matching_props
+        WHERE size(matching_props) > 0
+        RETURN n, 
+               size(matching_props) as score,
+               0 as priority
+        """
+
+        # Combine searches
+        if indexed_searches:
+            combined_query = f"""
+            {' UNION ALL '.join(indexed_searches)}
+            UNION ALL
+            {main_search}
+            ORDER BY priority DESC, score DESC
+            LIMIT $limit
+            """
         else:
-            # Regular search without labels
-            cypher_query = """
-            MATCH (n)
-            WITH n, properties(n) as props
-            WHERE any(prop IN keys(props) 
-                     WHERE (
-                       CASE
-                         WHEN props[prop] IS NULL THEN false
-                         WHEN size([x IN [props[prop]] WHERE props[prop] IS NOT NULL]) > 0 AND 
-                              size(props[prop]) > 0 THEN 
-                           any(x IN props[prop] WHERE toString(x) CONTAINS $query)
-                         ELSE toString(props[prop]) CONTAINS $query
-                       END
-                     ))
-            RETURN n
+            combined_query = f"""
+            {main_search}
+            ORDER BY score DESC
             LIMIT $limit
             """
         
