@@ -182,7 +182,14 @@ class GraphDB:
                 {label_filter}
                 WITH n, properties(n) as props
                 WHERE any(prop IN keys(props) 
-                         WHERE toString(props[prop]) CONTAINS $query)
+                         WHERE (
+                           CASE
+                             WHEN props[prop] IS NULL THEN false  
+                             WHEN isArray(props[prop]) THEN 
+                               any(x IN props[prop] WHERE toString(x) CONTAINS $query)
+                             ELSE toString(props[prop]) CONTAINS $query
+                           END
+                         ))
                 RETURN n
                 LIMIT $limit
                 """
@@ -192,7 +199,14 @@ class GraphDB:
             MATCH (n)
             WITH n, properties(n) as props
             WHERE any(prop IN keys(props) 
-                     WHERE toString(props[prop]) CONTAINS $query)
+                     WHERE (
+                       CASE
+                         WHEN props[prop] IS NULL THEN false
+                         WHEN isArray(props[prop]) THEN 
+                           any(x IN props[prop] WHERE toString(x) CONTAINS $query)
+                         ELSE toString(props[prop]) CONTAINS $query
+                       END
+                     ))
             RETURN n
             LIMIT $limit
             """
