@@ -3,6 +3,9 @@ import re
 
 from ..logger_config import setup_logger
 from .conversation import Conversation
+from .memory_handler import MemoryHandler
+from ..services.graphdb import GraphDB
+from ..services.embedding import EmbeddingService
 from .prompt import (
     DEFAULT_SYSTEM_PROMPT,
     FOLLOW_UP_PROMPT
@@ -33,6 +36,33 @@ class Agent:
             base_url=config.llm.base_url,
             model=self.model
         )
+        
+        # Initialize memory services if configured
+        self.graph_db = None
+        self.embedding_service = None
+        self.memory_handler = None
+        
+        if hasattr(config, 'memory') and config.memory.enabled:
+            self.graph_db = GraphDB()
+            if config.memory.graph_db:
+                self.graph_db.configure(
+                    uri=config.memory.graph_db.uri,
+                    username=config.memory.graph_db.username,
+                    password=config.memory.graph_db.password
+                )
+            
+            self.embedding_service = EmbeddingService(
+                api_key=config.llm.api_key,
+                base_url=config.llm.base_url
+            )
+            
+            self.memory_handler = MemoryHandler(
+                memory_instructions=config.memory.instructions,
+                llm_service=self.llm_service,
+                graph_db=self.graph_db,
+                embedding_service=self.embedding_service
+            )
+        
         # Initialize handlers
         self.response_handler = ResponseHandler(self.code_extractor, self.llm_service)
         self.tool_handler = ToolHandler(self.python_executor)
@@ -138,6 +168,8 @@ class Agent:
     def cleanup(self):
         self.logger.info("Cleaning up agent resources")
         self.python_executor.cleanup()
+        if self.graph_db:
+            self.graph_db.close()
 
 
     def should_stop_follow_up(self, loop_count: int, max_loops: int = 5) -> bool:
