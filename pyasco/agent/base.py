@@ -121,7 +121,13 @@ class Agent:
     def get_response(self, user_input: str, stream: bool = False) -> Union[Message, Generator[Message, None, None]]:
         self.logger.info(f"Getting response for user input (stream={stream})")
         
-        # Recall relevant context before handling the message
+        # Add message to history first
+        self.conversation.add_message(
+            role="user",
+            content=user_input
+        )
+
+        # Then recall and append relevant context
         if self.memory_handler:
             try:
                 recalled_context = self.memory_handler.recall(user_input)
@@ -137,18 +143,13 @@ class Agent:
                     
                     if context_summary:
                         context_message = "\n\n".join(context_summary)
+                        # Insert context right after the user message
                         self.conversation.add_message(
                             role="system",
                             content=context_message
                         )
             except Exception as e:
                 self.logger.error(f"Failed to recall context: {str(e)}")
-        
-        # Add message to history
-        self.conversation.add_message(
-            role="user",
-            content=user_input
-        )
         
         # Get LLM response through response handler
         return self.response_handler.handle_response(
