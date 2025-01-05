@@ -428,28 +428,33 @@ class MemoryHandler:
             self.logger.error(f"Failed to evaluate results: {str(e)}")
             return {"sufficient": True, "reason": "Error in evaluation"}
 
-    def _enhance_search_query(self, query_text: str) -> str:
-        """Use LLM to enhance the search query for better semantic matching"""
+    def _enhance_search_query(self, query_text: str) -> List[str]:
+        """Use LLM to generate multiple enhanced search queries for better semantic matching"""
         prompt = f"""
-        Enhance this search query to improve semantic matching:
+        Generate 3-5 different search queries based on this original query:
         "{query_text}"
 
         Consider:
         1. Key concepts and their synonyms
         2. Related technical terms
         3. Broader context that might be relevant
-        
-        Return only the enhanced query text, no explanation.
+        4. Different aspects or perspectives of the query
+
+        Return only the queries, one per line, no explanations or numbering.
+        Each query should be a complete, natural sentence.
         """
         try:
             response = self.llm_service.get_response([{
                 "role": "user",
                 "content": prompt
             }])
-            return response.strip()
+            # Split response into individual queries and clean them
+            queries = [q.strip() for q in response.strip().split('\n') if q.strip()]
+            # Return original query plus enhanced queries
+            return [query_text] + queries
         except Exception as e:
             self.logger.warning(f"Failed to enhance query: {str(e)}")
-            return query_text
+            return [query_text]
 
     def _should_explore_node(self, node: Dict, original_query: str, path_so_far: List[Dict]) -> bool:
         """Ask LLM if we should explore this node's neighbors"""
@@ -499,16 +504,21 @@ class MemoryHandler:
             list: List of relevant memory nodes and their properties
         """
         try:
-            # Enhance the search query using LLM
-            enhanced_query = self._enhance_search_query(query_text)
-            self.logger.info(f"Enhanced query: {enhanced_query}")
+            # Generate multiple enhanced queries
+            enhanced_queries = self._enhance_search_query(query_text)
+            self.logger.info(f"Enhanced queries: {enhanced_queries}")
             
-            # Generate embedding for enhanced query
-            query_embedding = self.embedding_service.get_embedding(enhanced_query).tolist()[0]
-            
-            # First phase: Vector search to find semantically similar nodes
+            # Search with each query and combine results
             vector_results = []
-            labels_with_indexes = self.graph_db.execute_query("""
+            seen_node_ids = set()
+            
+            for enhanced_query in enhanced_queries:
+                # Generate embedding for each query
+                query_embedding = self.embedding_service.get_embedding(enhanced_query).tolist()[0]
+            
+                # Search with current query embedding
+                current_results = []
+                labels_with_indexes = self.graph_db.execute_query("""
             SHOW INDEXES
             YIELD name, type, labelsOrTypes
             WHERE type = 'VECTOR'
@@ -530,11 +540,20 @@ class MemoryHandler:
                     "query": query_embedding,
                     "threshold": similarity_threshold
                 })
-                vector_results.extend(label_results)
+                    # Only add results for nodes we haven't seen yet
+                    for result in label_results:
+                        node_id = result['node'].element_id
+                        if node_id not in seen_node_ids:
+                            seen_node_ids.add(node_id)
+                            current_results.append(result)
+                
+                vector_results.extend(current_results)
             
             if not vector_results:
                 self.logger.info("No similar nodes found via vector search")
                 return []
+            
+            self.logger.info(f"Found {len(vector_results)} total results across {len(enhanced_queries)} queries")
 
             # Sort and prepare for neighborhood exploration
             vector_results.sort(key=lambda x: x['score'], reverse=True)
