@@ -60,8 +60,8 @@ class Agent:
                 )
             
             self.embedding_service = EmbeddingService(
-                api_key=config.llm.api_key,
-                base_url=config.llm.base_url,
+                #api_key=config.llm.api_key,
+                #base_url=config.llm.base_url,
                 model=config.embedding.model
             )
             
