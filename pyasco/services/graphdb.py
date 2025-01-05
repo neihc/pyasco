@@ -288,14 +288,16 @@ class GraphDB:
             # Add nodes section
             schema.append("Nodes:")
             for node in nodes_schema:
+                props = node['properties'] or []
                 schema.append(f"- Label: {node['nodeType']}")
-                schema.append("  Properties: " + ", ".join(node['properties']))
+                schema.append("  Properties: " + ", ".join(props))
             
             # Add relationships section
             schema.append("\nRelationships:")
             for rel in rels_schema:
+                props = rel['properties'] or []
                 schema.append(f"- Type: {rel['relationType']}")
-                schema.append("  Properties: " + ", ".join(rel['properties']))
+                schema.append("  Properties: " + ", ".join(props))
             
             # Add relationship patterns section
             schema.append("\nRelationship Patterns:")
