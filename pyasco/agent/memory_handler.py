@@ -118,8 +118,8 @@ class MemoryHandler:
                         flattened_context = self._flatten_dict(context, prefix='context')
                         node_spec["properties"].update(flattened_context)
                 
-                # Filter out null values and flatten any nested objects in the node properties
-                filtered_properties = {k: v for k, v in node_spec["properties"].items() if v is not None}
+                # Filter out null/None values and flatten any nested objects in the node properties
+                filtered_properties = {k: v for k, v in node_spec["properties"].items() if v is not None and v != "null"}
                 node_spec["properties"] = self._flatten_dict(filtered_properties)
                 
                 # Ensure vector index exists for this node label
