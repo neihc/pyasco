@@ -509,7 +509,7 @@ class MemoryHandler:
             vector_results.sort(key=lambda x: x['score'], reverse=True)
             seen_ids = set()
             final_results = []
-            nodes_to_explore = []
+            exploration_queue = []
 
             # Add initial vector results
             for result in vector_results:
@@ -525,64 +525,58 @@ class MemoryHandler:
                         'properties': dict(node)
                     }
                     final_results.append(node_info)
-                    nodes_to_explore.append({
+                    exploration_queue.append({
                         'node_id': node_id,
-                        'labels': list(node.labels),
-                        'properties': dict(node),
+                        'depth': 0,
                         'path': [node_info]
                     })
 
-            # Explore neighborhoods of similar nodes
+            # Explore neighborhoods using BFS
             max_depth = 3
-            for start_node in nodes_to_explore:
-                current_depth = 0
-                nodes_at_depth = [start_node]
+            while exploration_queue:
+                current = exploration_queue.pop(0)
+                if current['depth'] >= max_depth:
+                    continue
+
+                # Get all neighbors
+                neighbors = self.graph_db.get_node_neighbors(current['node_id'])
                 
-                while current_depth < max_depth and nodes_at_depth:
-                    next_level = []
-                    for current in nodes_at_depth:
-                        # Get all neighbors
-                        neighbors = self.graph_db.get_node_neighbors(current['node_id'])
-                        
-                        for neighbor in neighbors:
-                            neighbor_node = neighbor['neighbor']
-                            neighbor_id = neighbor_node.element_id
-                            
-                            if neighbor_id in seen_ids:
-                                continue
-                                
-                            neighbor_info = {
-                                'node_id': neighbor_id,
-                                'labels': list(neighbor_node.labels),
-                                'properties': dict(neighbor_node),
-                                'path': current['path'] + [{
-                                    'n': neighbor_node,
-                                    'score': 0.5,  # Base score for neighbors
-                                    'match_type': 'neighbor',
-                                    'relationship': neighbor['relationship_type']
-                                }]
-                            }
-                            
-                            # Ask LLM if we should explore this neighbor
-                            if self._should_explore_node(
-                                neighbor_info,
-                                query_text,
-                                current['path']
-                            ):
-                                seen_ids.add(neighbor_id)
-                                # Properly format neighbor node info
-                                final_results.append({
-                                    'n': neighbor_node,
-                                    'score': 0.5,  # Base score for neighbors
-                                    'match_type': 'neighbor',
-                                    'relationship': neighbor['relationship_type'],
-                                    'labels': list(neighbor_node.labels),
-                                    'properties': dict(neighbor_node)
-                                })
-                                next_level.append(neighbor_info)
+                for neighbor in neighbors:
+                    neighbor_node = neighbor['neighbor']
+                    neighbor_id = neighbor_node.element_id
                     
-                    nodes_at_depth = next_level
-                    current_depth += 1
+                    if neighbor_id in seen_ids:
+                        continue
+                    
+                    # Calculate decaying score based on depth
+                    depth_score = 1.0 / (current['depth'] + 2)  # +2 to avoid division by zero and too high scores
+                    
+                    neighbor_info = {
+                        'n': neighbor_node,
+                        'score': depth_score,
+                        'match_type': 'neighbor',
+                        'relationship': neighbor['relationship_type'],
+                        'labels': list(neighbor_node.labels),
+                        'properties': dict(neighbor_node),
+                        'depth': current['depth'] + 1,
+                        'path_from_source': current['path']
+                    }
+                    
+                    # Ask LLM if we should explore this neighbor
+                    if self._should_explore_node(
+                        neighbor_info,
+                        query_text,
+                        current['path']
+                    ):
+                        seen_ids.add(neighbor_id)
+                        final_results.append(neighbor_info)
+                        
+                        # Add to exploration queue for further traversal
+                        exploration_queue.append({
+                            'node_id': neighbor_id,
+                            'depth': current['depth'] + 1,
+                            'path': current['path'] + [neighbor_info]
+                        })
 
             self.logger.info(f"Found {len(final_results)} total results through neighborhood exploration")
             return final_results
