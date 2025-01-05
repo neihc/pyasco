@@ -508,46 +508,83 @@ class MemoryHandler:
         else:  # Default to vector strategy
             return self._recall_vector_based(query_text, similarity_threshold)
             
-    def _recall_schema_based(self, query_text: str) -> List[Dict[str, Any]]:
+    def _recall_schema_based(self, query_text: str, max_attempts: int = 3) -> List[Dict[str, Any]]:
         """
-        Retrieve memories using schema-based Cypher query generation
+        Retrieve memories using schema-based Cypher query generation with iterative refinement
         """
         try:
-            # Get actual database schema
             db_schema = self._get_db_schema()
+            attempt = 0
+            conversation_history = []
             
-            prompt = f"""
-            Given this database schema and natural language query, create a Cypher query.
-            
-            Query: "{query_text}"
-            
-            {db_schema}
-            
-            Requirements:
-            1. Use only node labels and relationship types that exist in the schema
-            2. Include relevant property filters based on the query
-            3. Use appropriate pattern matching and WHERE clauses
-            4. Return nodes and relationships that best match the query intent
-            5. Limit results to most relevant matches
-            6. Consider using multiple paths if needed
-            
-            Return only the Cypher query in a code block, nothing else.
-            """
-            
-            response = self.llm_service.get_response([{
-                "role": "user",
-                "content": prompt
-            }])
-            
-            snippets = self.code_extractor.extract_snippets(response)
-            if not snippets or not snippets[0].content:
-                raise ValueError("No Cypher query generated")
+            while attempt < max_attempts:
+                attempt += 1
+                self.logger.info(f"Schema-based recall attempt {attempt}/{max_attempts}")
                 
-            cypher_query = snippets[0].content.strip()
-            self.logger.info(f"Generated Cypher query: {cypher_query}")
-            
-            # Execute the generated query
-            results = self.graph_db.execute_query(cypher_query)
+                # Build prompt with conversation history for context
+                history_context = "\n\n".join([
+                    f"Previous attempt {i+1}:\n{msg['content']}\n"
+                    for i, msg in enumerate(conversation_history)
+                ])
+                
+                prompt = f"""
+                Given this database schema and natural language query, create a Cypher query.
+                
+                Query: "{query_text}"
+                
+                {db_schema}
+                
+                {f'Previous attempts and errors:\n{history_context}' if history_context else ''}
+                
+                Requirements:
+                1. Use only node labels and relationship types that exist in the schema
+                2. Include relevant property filters based on the query
+                3. Use appropriate pattern matching and WHERE clauses
+                4. Return nodes and relationships that best match the query intent
+                5. Limit results to most relevant matches
+                6. Consider using multiple paths if needed
+                
+                Return only the Cypher query in a code block, nothing else.
+                """
+                
+                response = self.llm_service.get_response([{
+                    "role": "user",
+                    "content": prompt
+                }])
+                
+                snippets = self.code_extractor.extract_snippets(response)
+                if not snippets or not snippets[0].content:
+                    error_msg = "No Cypher query generated"
+                    conversation_history.append({
+                        "role": "assistant",
+                        "content": f"Error: {error_msg}"
+                    })
+                    if attempt == max_attempts:
+                        raise ValueError(error_msg)
+                    continue
+                
+                cypher_query = snippets[0].content.strip()
+                self.logger.info(f"Generated Cypher query (attempt {attempt}): {cypher_query}")
+                
+                try:
+                    # Execute the generated query
+                    results = self.graph_db.execute_query(cypher_query)
+                    # If we get here, query executed successfully
+                    break
+                    
+                except Exception as e:
+                    error_msg = str(e)
+                    self.logger.warning(f"Query execution failed (attempt {attempt}): {error_msg}")
+                    
+                    # Add error feedback to conversation history
+                    conversation_history.append({
+                        "role": "assistant",
+                        "content": f"Generated query:\n```cypher\n{cypher_query}\n```\n\nError: {error_msg}\n\nPlease fix the query considering the schema constraints and error message."
+                    })
+                    
+                    if attempt == max_attempts:
+                        raise ValueError(f"Failed to generate valid query after {max_attempts} attempts. Last error: {error_msg}")
+                    continue
             
             # Format results
             formatted_results = []
