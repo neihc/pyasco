@@ -3,6 +3,7 @@ import re
 
 from ..logger_config import setup_logger
 from ..services.skill_manager import Skill
+from .conversation import Conversation
 from .prompt import (
     DEFAULT_SYSTEM_PROMPT,
     FOLLOW_UP_PROMPT,
