@@ -543,7 +543,7 @@ class MemoryHandler:
             # Add initial vector results
             for result in vector_results:
                 node = result['node']
-                node_id = node.id
+                node_id = node.element_id
                 if node_id not in seen_ids:
                     seen_ids.add(node_id)
                     node_info = {
@@ -571,13 +571,13 @@ class MemoryHandler:
                         # Get all neighbors
                         neighbors = self.graph_db.execute_query("""
                         MATCH (n)-[r]-(neighbor)
-                        WHERE id(n) = $node_id
+                        WHERE elementId(n) = $node_id
                         RETURN neighbor, type(r) as relationship_type
                         """, {"node_id": current['node_id']})
                         
                         for neighbor in neighbors:
                             neighbor_node = neighbor['neighbor']
-                            neighbor_id = neighbor_node.id
+                            neighbor_id = neighbor_node.element_id
                             
                             if neighbor_id in seen_ids:
                                 continue
