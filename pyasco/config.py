@@ -21,9 +21,33 @@ class LLMConfig:
     api_key: Optional[str] = None
 
 @dataclass
+class GraphDBConfig:
+    uri: str = "bolt://localhost:7687"
+    username: str = "neo4j"
+    password: Optional[str] = None
+
+@dataclass
+class MemoryConfig:
+    enabled: bool = False
+    instructions: str = """
+    Memory Schema:
+    - Nodes can be of type: Conversation, CodeSnippet, Command, Error, Result
+    - Properties should include: content, timestamp, type, metadata
+    - Relationships: FOLLOWED_BY, GENERATED, CAUSED, RELATED_TO
+    
+    Guidelines:
+    1. Store complete context and metadata
+    2. Maintain chronological order
+    3. Link related items with appropriate relationships
+    4. Include error states and outcomes
+    """
+    graph_db: Optional[GraphDBConfig] = field(default_factory=GraphDBConfig)
+
+@dataclass
 class Config:
     docker: DockerConfig = field(default_factory=DockerConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
+    memory: MemoryConfig = field(default_factory=MemoryConfig)
     skills_path: str = "skills"
     custom_instructions: Optional[str] = None
 
@@ -53,10 +77,28 @@ class ConfigManager:
             base_url=yaml_config.get('llm', {}).get('base_url', "https://openrouter.ai/api/v1"),
             api_key=yaml_config.get('llm', {}).get('api_key')
         )
-        
+
+        # Configure memory settings if present
+        memory_config = None
+        if 'memory' in yaml_config:
+            graph_db_config = None
+            if 'graph_db' in yaml_config['memory']:
+                graph_db_config = GraphDBConfig(
+                    uri=yaml_config['memory']['graph_db'].get('uri', "bolt://localhost:7687"),
+                    username=yaml_config['memory']['graph_db'].get('username', "neo4j"),
+                    password=yaml_config['memory']['graph_db'].get('password')
+                )
+
+            memory_config = MemoryConfig(
+                enabled=yaml_config['memory'].get('enabled', False),
+                instructions=yaml_config['memory'].get('instructions', MemoryConfig.instructions),
+                graph_db=graph_db_config
+            )
+            
         return Config(
             docker=docker_config,
             llm=llm_config,
+            memory=memory_config or MemoryConfig(),
             skills_path=yaml_config.get('skills_path', "skills"),
             custom_instructions=yaml_config.get('custom_instructions')
         )
@@ -89,10 +131,28 @@ class ConfigManager:
             base_url=args.llm_base_url if hasattr(args, 'llm_base_url') else "https://openrouter.ai/api/v1",
             api_key=args.llm_api_key if hasattr(args, 'llm_api_key') else None
         )
-        
+
+        # Configure memory if args present
+        memory_config = None
+        if hasattr(args, 'memory_enabled'):
+            graph_db_config = None
+            if hasattr(args, 'graph_db_uri'):
+                graph_db_config = GraphDBConfig(
+                    uri=args.graph_db_uri,
+                    username=args.graph_db_username if hasattr(args, 'graph_db_username') else "neo4j",
+                    password=args.graph_db_password if hasattr(args, 'graph_db_password') else None
+                )
+
+            memory_config = MemoryConfig(
+                enabled=args.memory_enabled,
+                instructions=args.memory_instructions if hasattr(args, 'memory_instructions') else MemoryConfig.instructions,
+                graph_db=graph_db_config
+            )
+            
         return Config(
             docker=docker_config,
             llm=llm_config,
+            memory=memory_config or MemoryConfig(),
             skills_path=args.skills_path if hasattr(args, 'skills_path') else "skills",
             custom_instructions=args.custom_instructions if hasattr(args, 'custom_instructions') else None
         )
