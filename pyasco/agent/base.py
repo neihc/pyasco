@@ -26,7 +26,7 @@ class Agent:
     def __init__(self, config: Config):
         self.logger = setup_logger('agent')
         self.logger.info("Initializing Agent")
-        self.messages: List[Dict] = []
+        self.conversation = Conversation()
         self.code_extractor = CodeSnippetExtractor()
         self.python_executor = self._setup_executor(config)
         self.custom_instructions = config.custom_instructions or ""
@@ -79,30 +79,30 @@ class Agent:
         system_content = f"{base_prompt}\n\n{self.custom_instructions}" if self.custom_instructions else base_prompt
         self.logger.info(system_content)
         
-        self.messages.append({
-            "role": "system",
-            "content": system_content
-        })
+        self.conversation.add_message(
+            role="system",
+            content=system_content
+        )
 
     def get_response(self, user_input: str, stream: bool = False) -> Union[AgentResponse, Generator[AgentResponse, None, None]]:
         self.logger.info(f"Getting response for user input (stream={stream})")
         
         # Get relevant skills based on conversation
-        relevant_skills = self.skill_handler.get_relevant_skills(self.messages, self.model, user_input)
+        relevant_skills = self.skill_handler.get_relevant_skills(self.conversation.to_llm_format(), self.model, user_input)
         
         # Process skills and update input if needed
         if relevant_skills:
             user_input = self.skill_handler.process_skills(user_input, relevant_skills, self.messages)
         
         # Add message to history
-        self.messages.append({
-            "role": "user", 
-            "content": user_input,
-            "skills": [skill.to_dict() for skill in relevant_skills] if relevant_skills else []
-        })
+        self.conversation.add_message(
+            role="user",
+            content=user_input,
+            skills=[skill.to_dict() for skill in relevant_skills] if relevant_skills else []
+        )
         
         # Get LLM response through response handler
-        return self.response_handler.handle_response(self.messages, self.model, stream)
+        return self.response_handler.handle_response(self.conversation.to_llm_format(), self.model, stream)
 
     def ask(self, new_input: str, stream: bool = False, auto: bool = False, max_loops: int = 5) -> Dict:
         response = self.get_response(new_input, stream=stream)
@@ -121,7 +121,8 @@ class Agent:
                 self.logger.warning(f"Reached maximum follow-up iterations ({max_loops})")
                 break
                 
-            results = self.tool_handler.execute_tools(self.messages[-1].get("tools", []))
+            last_message = self.conversation.last_message
+            results = self.tool_handler.execute_tools(last_message.tools if last_message else [])
             if not results:
                 break
                 
@@ -135,14 +136,12 @@ class Agent:
         return FOLLOW_UP_PROMPT.format(output=chr(10).join(results))
 
     def should_ask_user(self) -> bool:
-        if not self.messages:
-            return False
-        last_message = self.messages[-1]
-        return bool(last_message.get("tools"))
+        last_message = self.conversation.last_message
+        return bool(last_message and last_message.tools)
 
     def reset(self):
         self.logger.info("Resetting agent state")
-        self.messages = []
+        self.conversation.clear()
         self.python_executor.reset()
         self._initialize_chat()
     
