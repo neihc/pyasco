@@ -150,9 +150,12 @@ class MemoryHandler:
         # Filter out embeddings from node info
         filtered_nodes = []
         for node in nodes:
-            filtered_node = node.copy()
-            if 'properties' in filtered_node:
-                filtered_node['properties'] = {k: v for k, v in filtered_node['properties'].items() if k != 'embedding'}
+            # Create a new dict instead of copying the Neo4j Node object
+            filtered_node = {
+                'labels': list(node.labels) if hasattr(node, 'labels') else [],
+                'properties': {k: v for k, v in dict(node).items() if k != 'embedding'},
+                'element_id': node.element_id if hasattr(node, 'element_id') else None
+            }
             filtered_nodes.append(filtered_node)
             
         nodes_info = "\n".join([f"Node {i}: {node}" for i, node in enumerate(filtered_nodes)])
