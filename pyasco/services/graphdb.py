@@ -159,6 +159,62 @@ class GraphDB:
             for record in results
         ]
 
+    def get_schema(self) -> str:
+        """Get the actual database schema including nodes, relationships and patterns"""
+        try:
+            # Get node labels and their properties
+            nodes_schema = self.execute_query("""
+            CALL db.schema.nodeTypeProperties()
+            YIELD nodeType, propertyName
+            RETURN nodeType, collect(propertyName) as properties
+            """)
+            
+            # Get relationship types and their properties
+            rels_schema = self.execute_query("""
+            CALL db.schema.relationshipTypeProperties()
+            YIELD relationType, propertyName
+            RETURN relationType, collect(propertyName) as properties
+            """)
+            
+            # Get relationship type patterns
+            rel_patterns = self.execute_query("""
+            CALL db.schema.visualization()
+            YIELD nodes, relationships
+            UNWIND relationships as rel
+            RETURN DISTINCT
+                rel.start.labels[0] as fromLabel,
+                rel.type as relType,
+                rel.end.labels[0] as toLabel
+            """)
+            
+            # Format schema as detailed string
+            schema = []
+            
+            # Add nodes section
+            schema.append("Nodes:")
+            for node in nodes_schema:
+                schema.append(f"- Label: {node['nodeType']}")
+                schema.append("  Properties: " + ", ".join(node['properties']))
+            
+            # Add relationships section
+            schema.append("\nRelationships:")
+            for rel in rels_schema:
+                schema.append(f"- Type: {rel['relationType']}")
+                schema.append("  Properties: " + ", ".join(rel['properties']))
+            
+            # Add relationship patterns section
+            schema.append("\nRelationship Patterns:")
+            for pattern in rel_patterns:
+                schema.append(
+                    f"- ({pattern['fromLabel']})-[:{pattern['relType']}]->({pattern['toLabel']})"
+                )
+            
+            return "\n".join(schema)
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get database schema: {str(e)}")
+            return "Schema retrieval failed"
+
     def create_text_index(self, label: str, properties: List[str]) -> bool:
         """
         Create a full-text index for the specified label and properties

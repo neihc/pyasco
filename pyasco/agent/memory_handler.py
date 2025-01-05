@@ -834,51 +834,17 @@ class MemoryHandler:
     def _get_db_schema(self) -> str:
         """Get the actual schema from the database and combine with domain schema"""
         try:
-            # Get node labels and their properties
-            nodes_schema = self.graph_db.execute_query("""
-            CALL db.schema.nodeTypeProperties()
-            YIELD nodeType, propertyName
-            RETURN nodeType, collect(propertyName) as properties
-            """)
+            # Get schema from GraphDB
+            db_schema = self.graph_db.get_schema()
             
-            # Get relationship types and their properties
-            rels_schema = self.graph_db.execute_query("""
-            CALL db.schema.relationshipTypeProperties()
-            YIELD relationType, propertyName
-            RETURN relationType, collect(propertyName) as properties
-            """)
-            
-            # Get relationship type patterns
-            rel_patterns = self.graph_db.execute_query("""
-            CALL db.schema.visualization()
-            YIELD nodes, relationships
-            UNWIND relationships as rel
-            RETURN DISTINCT
-                rel.start.labels[0] as fromLabel,
-                rel.type as relType,
-                rel.end.labels[0] as toLabel
-            """)
-            
-            # Format schema as detailed string
+            # Format complete schema with domain context
             schema = "Database Schema:\n\n"
             
             # Add domain schema first
             schema += "Domain Schema:\n" + DOMAIN_SCHEMA_INSTRUCTIONS + "\n\n"
             
             # Add actual database state
-            schema += "Current Database State:\n\nNodes:\n"
-            for node in nodes_schema:
-                schema += f"- Label: {node['nodeType']}\n"
-                schema += "  Properties: " + ", ".join(node['properties']) + "\n"
-            
-            schema += "\nRelationships:\n"
-            for rel in rels_schema:
-                schema += f"- Type: {rel['relationType']}\n"
-                schema += "  Properties: " + ", ".join(rel['properties']) + "\n"
-            
-            schema += "\nRelationship Patterns:\n"
-            for pattern in rel_patterns:
-                schema += f"- ({pattern['fromLabel']})-[:{pattern['relType']}]->({pattern['toLabel']})\n"
+            schema += "Current Database State:\n\n" + db_schema
             
             return schema
             
