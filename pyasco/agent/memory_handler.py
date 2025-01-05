@@ -52,6 +52,7 @@ class MemoryHandler:
         self.llm_service = llm_service or LLMService()
         self.graph_db = graph_db or GraphDB()
         self.code_extractor = CodeSnippetExtractor()
+        self._setup_indexes()
 
     def _create_nodes(self, content: str, context: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
@@ -260,3 +261,44 @@ class MemoryHandler:
         except Exception as e:
             self.logger.error(f"Failed to process memory: {str(e)}")
             raise
+    def _setup_indexes(self):
+        """Set up text indexes for searchable fields"""
+        prompt = """
+        Based on the schema below, determine which fields should be indexed for text search.
+        Return a JSON object in a code block with index configurations per node label.
+        Only include fields that would be useful for semantic search.
+
+        Schema:
+        {self.memory_instructions}
+
+        Return format:
+        ```json
+        {
+            "indexes": [
+                {
+                    "label": "NodeLabel",
+                    "properties": ["field1", "field2"]
+                }
+            ]
+        }
+        ```
+        """
+        
+        try:
+            response = self.llm_service.get_response([{
+                "role": "user",
+                "content": prompt
+            }])
+            
+            snippets = self.code_extractor.extract_snippets(response)
+            if snippets and snippets[0].content:
+                index_config = eval(snippets[0].content)
+                
+                for idx in index_config["indexes"]:
+                    self.graph_db.create_text_index(
+                        idx["label"],
+                        idx["properties"]
+                    )
+                    
+        except Exception as e:
+            self.logger.error(f"Failed to setup indexes: {str(e)}")

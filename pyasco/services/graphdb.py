@@ -16,6 +16,7 @@ class GraphDB:
         """
         self.logger = setup_logger('graphdb', 'graphdb_verbose.log', verbose=True)
         self.driver = None
+        self.indexes = {}  # Track created indexes
         if uri and username and password:
             self.configure(uri, username, password)
     
@@ -120,6 +121,34 @@ class GraphDB:
             "properties": dict(node)
         }
 
+    def create_text_index(self, label: str, properties: List[str]) -> bool:
+        """
+        Create a full-text index for the specified label and properties
+        Args:
+            label (str): Node label to index
+            properties (list): List of property names to include in the index
+        Returns:
+            bool: True if index was created successfully
+        """
+        try:
+            index_name = f"{label.lower()}_text_idx"
+            if index_name in self.indexes:
+                self.logger.info(f"Index {index_name} already exists")
+                return True
+
+            query = f"""
+            CREATE FULLTEXT INDEX {index_name} IF NOT EXISTS
+            FOR (n:{label})
+            ON EACH [{', '.join(f'n.{prop}' for prop in properties)}]
+            """
+            self.execute_query(query)
+            self.indexes[index_name] = {'label': label, 'properties': properties}
+            self.logger.info(f"Created text index {index_name} for {label} on {properties}")
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to create index: {e}")
+            return False
+
     def semantic_search(self, query: str, node_labels: Optional[List[str]] = None,
                        limit: int = 5) -> List[Dict]:
         """
@@ -131,19 +160,42 @@ class GraphDB:
         Returns:
             list: List of matching nodes with their properties
         """
-        label_filter = ""
-        if node_labels:
-            label_filter = f"WHERE any(label IN labels(n) WHERE label IN {node_labels})"
-
-        cypher_query = f"""
-        MATCH (n)
-        {label_filter}
-        WITH n, properties(n) as props
-        WHERE any(prop IN keys(props) 
-                 WHERE toString(props[prop]) CONTAINS $query)
-        RETURN n
-        LIMIT $limit
-        """
+        # Use text indexes if available
+        if node_labels and any(idx for idx in self.indexes.values() if idx['label'] in node_labels):
+            indexed_searches = []
+            for label in node_labels:
+                idx = next((idx for idx in self.indexes.values() if idx['label'] == label), None)
+                if idx:
+                    indexed_searches.append(f"""
+                    CALL db.index.fulltext.queryNodes("{label.lower()}_text_idx", $query)
+                    YIELD node, score
+                    RETURN node as n, score
+                    """)
+            
+            if indexed_searches:
+                cypher_query = " UNION ALL ".join(indexed_searches) + " ORDER BY score DESC LIMIT $limit"
+            else:
+                # Fallback to regular search
+                label_filter = f"WHERE any(label IN labels(n) WHERE label IN {node_labels})"
+                cypher_query = f"""
+                MATCH (n)
+                {label_filter}
+                WITH n, properties(n) as props
+                WHERE any(prop IN keys(props) 
+                         WHERE toString(props[prop]) CONTAINS $query)
+                RETURN n
+                LIMIT $limit
+                """
+        else:
+            # Regular search without labels
+            cypher_query = """
+            MATCH (n)
+            WITH n, properties(n) as props
+            WHERE any(prop IN keys(props) 
+                     WHERE toString(props[prop]) CONTAINS $query)
+            RETURN n
+            LIMIT $limit
+            """
         
         return self.execute_query(cypher_query, {
             "query": query,
