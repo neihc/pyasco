@@ -28,9 +28,11 @@ class Agent:
         self.logger.info("Initializing Agent")
         self.user_id = user_id
         self.app_type = app_type
+        self.conversation_id = str(int(datetime.now().timestamp()))
         self.metadata = {
             "user_id": user_id,
             "app_type": app_type,
+            "conversation_id": self.conversation_id,
             **metadata
         }
         self.conversation = Conversation()
@@ -189,6 +191,7 @@ class Agent:
             # Add context about the conversation
             context = {
                 "type": "conversation",
+                "conversation_id": self.conversation_id,
                 "timestamp": str(datetime.now()),
                 "message_count": len(self.conversation.messages),
                 **self.metadata
