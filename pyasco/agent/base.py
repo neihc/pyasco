@@ -93,7 +93,7 @@ class Agent:
         
         # Process skills and update input if needed
         if relevant_skills:
-            user_input = self.skill_handler.process_skills(user_input, relevant_skills, self.messages)
+            user_input = self.skill_handler.process_skills(user_input, relevant_skills, self.conversation.to_llm_format())
         
         # Add message to history
         self.conversation.add_message(
@@ -209,7 +209,7 @@ class Agent:
         Raises:
             ValueError: If skill response is invalid or no messages to learn from
         """
-        if len(self.messages) < 2:  # Need at least system + 1 interaction
+        if len(self.conversation.to_llm_format()) < 2:  # Need at least system + 1 interaction
             raise ValueError("Not enough conversation history to learn from")
             
         max_retries = 3
@@ -219,8 +219,9 @@ class Agent:
         while retry_count < max_retries:
             try:
                 # Create prompt to consolidate conversation into skill
+                messages = self.conversation.to_llm_format()
                 conversation = "\n".join(f"{msg['role']}: {msg['content']}" 
-                                    for msg in self.messages[1:])  # Skip system message
+                                    for msg in messages[1:])  # Skip system message
                 
                 error_feedback = ""
                 if last_error:
@@ -281,7 +282,7 @@ class Agent:
         Raises:
             ValueError: If skill response is invalid or no messages to learn from
         """
-        if len(self.messages) < 2:
+        if len(self.conversation.to_llm_format()) < 2:
             raise ValueError("Not enough conversation history to learn from")
             
         error_context = []
@@ -380,22 +381,22 @@ class Agent:
             self.logger.warning(f"Reached maximum follow-up iterations ({max_loops})")
             return True
             
-        if not self.messages:
+        last_message = self.conversation.last_message
+        if not last_message:
             return True
             
-        last_message = self.messages[-1]
-        if not last_message.get("tools"):
+        if not last_message.tools:
             return True
             
         return False
 
     def confirm(self) -> List[str] | None:
         """Execute any pending tools and return their results"""
-        if not self.messages:
+        last_message = self.conversation.last_message
+        if not last_message:
             return None
             
-        last_message = self.messages[-1]
-        if not last_message.get("tools"):
+        if not last_message.tools:
             return None
             
-        return self.tool_handler.execute_tools(last_message["tools"])
+        return self.tool_handler.execute_tools(last_message.tools)
