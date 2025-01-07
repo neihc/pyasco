@@ -82,6 +82,7 @@ class MemoryHandler:
         
         Based on the provided schema in the instructions, structure this content as nodes only.
         Return a JSON object wrapped in a code block with only the nodes array:
+        Only response string value, do not response null/numberic
         ```json
         {{
             "nodes": [
@@ -155,7 +156,7 @@ class MemoryHandler:
             filtered_node = {
                 'labels': list(node.labels) if hasattr(node, 'labels') else [],
                 'properties': {k: v for k, v in dict(node).items() if k != 'embedding'},
-                'element_id': node.element_id if hasattr(node, 'element_id') else None
+                'node_id': node.element_id if hasattr(node, 'element_id') else None
             }
             filtered_nodes.append(filtered_node)
             

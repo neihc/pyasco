@@ -171,7 +171,7 @@ def main():
                 
             # Get streaming response
             console.print("\n[bold purple]Assistant[/bold purple]")
-            response = agent.get_response(user_input, stream=True)
+            response = agent.ask(user_input, stream=True)
             stream_response(response)
             
             # Check if we should ask user for code execution
