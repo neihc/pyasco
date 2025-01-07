@@ -71,3 +71,123 @@ def test_no_code_blocks(extractor):
     markdown = "Just some regular markdown text"
     snippets = extractor.extract_snippets(markdown)
     assert len(snippets) == 0
+
+def test_nested_code_blocks(extractor):
+    markdown = '''
+> Here's some code:
+> ```python
+> def nested():
+>     pass
+> ```
+'''
+    snippets = extractor.extract_snippets(markdown)
+    assert len(snippets) == 1
+    assert snippets[0] == CodeSnippet(
+        language="python",
+        content="def nested():\n    pass"
+    )
+
+def test_unicode_content(extractor):
+    markdown = '''
+```python
+print("Hello 世界")
+```
+'''
+    snippets = extractor.extract_snippets(markdown)
+    assert len(snippets) == 1
+    assert snippets[0] == CodeSnippet(
+        language="python",
+        content='print("Hello 世界")'
+    )
+
+def test_multiple_backticks(extractor):
+    markdown = '''
+````python
+def test():
+    pass
+````
+'''
+    snippets = extractor.extract_snippets(markdown)
+    assert len(snippets) == 1
+    assert snippets[0] == CodeSnippet(
+        language="python",
+        content='def test():\n    pass'
+    )
+
+def test_language_with_whitespace(extractor):
+    markdown = '''
+``` python 
+x = 1
+```
+'''
+    snippets = extractor.extract_snippets(markdown)
+    assert len(snippets) == 1
+    assert snippets[0] == CodeSnippet(
+        language="python",
+        content='x = 1'
+    )
+
+def test_consecutive_code_blocks(extractor):
+    markdown = '''
+```python
+x = 1
+```
+```javascript
+y = 2
+```'''
+    snippets = extractor.extract_snippets(markdown)
+    assert len(snippets) == 2
+    assert snippets[0] == CodeSnippet(language="python", content='x = 1')
+    assert snippets[1] == CodeSnippet(language="javascript", content='y = 2')
+
+# Tests for omit_snippets method
+def test_omit_single_code_block(extractor):
+    markdown = '''
+Some text
+```python
+def hello():
+    pass
+```
+More text
+'''
+    result = extractor.omit_snippets(markdown)
+    assert 'Some text' in result
+    assert 'More text' in result
+    assert 'def hello()' not in result
+
+def test_omit_multiple_code_blocks(extractor):
+    markdown = '''
+First text
+```python
+x = 1
+```
+Middle text
+```javascript
+y = 2
+```
+Last text
+'''
+    result = extractor.omit_snippets(markdown)
+    assert 'First text' in result
+    assert 'Middle text' in result
+    assert 'Last text' in result
+    assert 'x = 1' not in result
+    assert 'y = 2' not in result
+
+def test_omit_preserves_markdown(extractor):
+    markdown = '''
+# Heading
+```python
+code = 1
+```
+**Bold text**
+'''
+    result = extractor.omit_snippets(markdown)
+    assert '# Heading' in result
+    assert '**Bold text**' in result
+    assert 'code = 1' not in result
+
+def test_omit_no_code_blocks(extractor):
+    markdown = "Just regular text\n**with formatting**"
+    result = extractor.omit_snippets(markdown)
+    assert result == markdown.strip()
