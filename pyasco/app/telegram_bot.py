@@ -63,8 +63,7 @@ class TelegramInterface:
             "I can help you with Python programming and execute code.\n\n"
             "Available commands:\n"
             "/reset - Start over\n"
-            "/learn - Convert current conversation into a reusable skill\n"
-            "/improve - Improve an existing skill\n"
+            "/remember - Store current conversation in memory\n"
             "/help - Show this help message"
         )
         await update.message.reply_text(welcome_message)
@@ -81,30 +80,13 @@ class TelegramInterface:
             self.user_states[user_id] = {}
         await update.message.reply_text("Chat history has been reset! 🔄")
 
-    async def learn_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Learn a new skill from the conversation."""
+    async def remember_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Store the current conversation in memory."""
         try:
-            skill = self.agent.learn_that_skill()
-            await update.message.reply_text(
-                f"✅ Learned new skill: {skill.name}\n"
-                f"Usage: {skill.usage}"
-            )
-        except ValueError as e:
-            await update.message.reply_text(f"❌ Error learning skill: {str(e)}")
-
-    async def improve_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Improve an existing skill."""
-        try:
-            skill = self.agent.improve_that_skill()
-            if skill:
-                await update.message.reply_text(
-                    f"✅ Improved skill: {skill.name}\n"
-                    f"New usage: {skill.usage}"
-                )
-            else:
-                await update.message.reply_text("❌ No skill to improve")
-        except ValueError as e:
-            await update.message.reply_text(f"❌ Error improving skill: {str(e)}")
+            self.agent.remember_conversation()
+            await update.message.reply_text("✅ Conversation stored in memory!")
+        except Exception as e:
+            await update.message.reply_text(f"❌ Error storing conversation: {str(e)}")
 
     def _should_process_message(self, message, context: ContextTypes.DEFAULT_TYPE) -> bool:
         """
@@ -342,8 +324,7 @@ def main():
     application.add_handler(CommandHandler("start", interface.start_command))
     application.add_handler(CommandHandler("help", interface.help_command))
     application.add_handler(CommandHandler("reset", interface.reset_command))
-    application.add_handler(CommandHandler("learn", interface.learn_command))
-    application.add_handler(CommandHandler("improve", interface.improve_command))
+    application.add_handler(CommandHandler("remember", interface.remember_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,
                                          interface.handle_message))
     application.add_handler(CallbackQueryHandler(interface.handle_button))

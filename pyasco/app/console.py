@@ -44,8 +44,7 @@ class CommandCompleter(Completer):
         self.commands = [
             '%exit',
             '%reset',
-            '%learn_that_skill',
-            '%improve_that_skill'
+            '%remember'
         ]
     
     def get_completions(self, document, complete_event):
@@ -135,8 +134,7 @@ def main():
         console.print("Magic commands:")
         console.print("  %exit - quit the console")
         console.print("  %reset - start over")
-        console.print("  %learn_that_skill - convert current conversation into a reusable skill")
-        console.print("  %improve_that_skill - improve an existing skill based on current conversation\n")
+        console.print("  %remember - store current conversation in memory\n")
         
         loop_count = 0
         user_input = None  # Initialize user_input
@@ -152,20 +150,12 @@ def main():
                     elif command == 'reset':
                         agent.reset()
                         console.print("[bold yellow]Chat history reset![/bold yellow]")
-                    elif command == 'learn_that_skill':
+                    elif command == 'remember':
                         try:
-                            skill = agent.learn_that_skill()
-                            console.print(f"[bold green]Learned new skill: {skill.name}[/bold green]")
-                            console.print(f"Usage: {skill.usage}")
-                        except ValueError as e:
-                            console.print(f"[bold red]Error learning skill: {str(e)}[/bold red]")
-                    elif command == 'improve_that_skill':
-                        try:
-                            skill = agent.improve_that_skill()
-                            console.print(f"[bold green]Improved skill: {skill.name}[/bold green]")
-                            console.print(f"New usage: {skill.usage}")
-                        except ValueError as e:
-                            console.print(f"[bold red]Error improving skill: {str(e)}[/bold red]")
+                            agent.remember_conversation()
+                            console.print("[bold green]Conversation stored in memory![/bold green]")
+                        except Exception as e:
+                            console.print(f"[bold red]Error storing conversation: {str(e)}[/bold red]")
                     user_input = None
                     continue
                 
