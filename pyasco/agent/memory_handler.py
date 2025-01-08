@@ -4,6 +4,11 @@ from ..services.llm import LLMService
 from ..services.code_snippet_extractor import CodeSnippetExtractor
 from ..services.embedding import EmbeddingService
 from ..logger_config import setup_logger
+import logging
+
+# Configure logging to only show errors
+logging.getLogger('neo4j').setLevel(logging.ERROR)
+logging.getLogger('urllib3').setLevel(logging.ERROR)
 
 
 class MemoryHandler:

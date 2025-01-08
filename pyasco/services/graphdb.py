@@ -4,10 +4,12 @@ import logging
 import warnings
 from ..logger_config import setup_logger
 
-# Suppress all Neo4j warnings
-warnings.filterwarnings('ignore', category=DeprecationWarning)
-warnings.filterwarnings('ignore', category=UserWarning, module='neo4j')
-warnings.filterwarnings('ignore', category=ResourceWarning, module='neo4j')
+# Suppress all warnings
+warnings.filterwarnings('ignore')
+
+# Configure logging to only show errors
+logging.getLogger('neo4j').setLevel(logging.ERROR)
+logging.getLogger('urllib3').setLevel(logging.ERROR)
 
 class GraphDB:
     """Class for handling Neo4j database operations"""
