@@ -323,8 +323,8 @@ class TelegramInterface:
             
             logger.debug(f"Sent {len(messages_to_send)} messages to user")
 
-            # If there's code to execute, ask user
-            if self.agent.should_ask_user():
+            # If there's code to execute, ask user only if not in auto mode
+            if self.agent.should_ask_user() and not self.auto:
                 reply_markup = {
                     'inline_keyboard': [[
                         {'text': 'Yes ✅', 'callback_data': 'execute_yes'},
