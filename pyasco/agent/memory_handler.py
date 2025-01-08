@@ -346,38 +346,163 @@ class MemoryHandler:
             self.logger.warning(f"Failed to determine strategy: {str(e)}")
             return {"strategy": "vector", "reason": "defaulting to vector search"}
 
-    def recall(self, query_text: str, similarity_threshold: float = 0.7) -> List[Dict[str, Any]]:
+    def _search_similar(self, search_text: str, similarity_threshold: float = 0.7) -> List[Dict[str, Any]]:
         """
-        Retrieve memories based on a natural language query using the most appropriate strategy
+        Search for similar nodes using vector similarity
+        Args:
+            search_text (str): Text to search for
+            similarity_threshold (float): Minimum similarity score
+        Returns:
+            list: List of similar nodes with scores
+        """
+        try:
+            # Generate embedding for search text
+            query_embedding = self.embedding_service.get_embedding(search_text).tolist()[0]
+            
+            # Get results from all indexed labels
+            results = []
+            for label in self.graph_db.get_indexed_labels():
+                label_results = self.graph_db.get_vector_search_results(
+                    label,
+                    query_embedding,
+                    similarity_threshold
+                )
+                results.extend(label_results)
+            
+            # Sort by score and format results
+            results.sort(key=lambda x: x['score'], reverse=True)
+            return [{
+                'node': result['node'],
+                'score': result['score'],
+                'labels': list(result['node'].labels),
+                'properties': {k:v for k,v in dict(result['node']).items() if k != 'embedding'}
+            } for result in results]
+            
+        except Exception as e:
+            self.logger.error(f"Error in similarity search: {str(e)}")
+            return []
+
+    def _execute_query(self, cypher_query: str) -> List[Dict[str, Any]]:
+        """
+        Execute a Cypher query and return formatted results
+        Args:
+            cypher_query (str): Cypher query to execute
+        Returns:
+            list: Query results formatted as dictionaries
+        """
+        try:
+            results = self.graph_db.execute_query(cypher_query)
+            formatted_results = []
+            
+            for result in results:
+                # Extract and format node data from results
+                for value in result.values():
+                    if hasattr(value, 'labels'):  # It's a node
+                        formatted_results.append({
+                            'node': value,
+                            'labels': list(value.labels),
+                            'properties': dict(value)
+                        })
+            
+            return formatted_results
+            
+        except Exception as e:
+            self.logger.error(f"Error executing query: {str(e)}")
+            return []
+
+    def recall(self, query_text: str) -> List[Dict[str, Any]]:
+        """
+        Retrieve memories based on natural language query using LLM to guide the search
         Args:
             query_text (str): Natural language query
-            similarity_threshold (float): Minimum similarity score for vector search results
         Returns:
-            list: List of relevant memory nodes and their properties
+            list: List of relevant memory nodes
         """
-        strategy_info = self._determine_search_strategy(query_text)
-        self.logger.info(f"Using search strategy: {strategy_info['strategy']} - {strategy_info['reason']}")
+        prompt = f"""
+        Help find relevant information using these available functions:
         
-        if strategy_info['strategy'] == "schema":
-            return self._recall_schema_based(query_text)
-        elif strategy_info['strategy'] == "both":
-            # Combine results from both strategies
-            vector_results = self._recall_vector_based(query_text, similarity_threshold)
-            schema_results = self._recall_schema_based(query_text)
+        1. Search similar nodes:
+           - Input: search text
+           - Returns: nodes with similarity scores
+           - Best for: finding semantically similar content
+        
+        2. Execute Cypher query:
+           - Input: Cypher query following Neo4j syntax
+           - Returns: matching nodes
+           - Best for: specific patterns, relationships, or conditions
+        
+        Your task:
+        1. Analyze this query: "{query_text}"
+        2. Decide which function(s) to use and in what order
+        3. Return either a search text or Cypher query in a code block
+        4. Based on results, decide if more searches/queries are needed
+        
+        Database schema:
+        {self._get_db_schema()}
+        
+        Return ONLY code blocks:
+        For similarity search:
+        ```text
+        your search text here
+        ```
+        
+        For Cypher query:
+        ```cypher
+        your query here
+        ```
+        
+        I will execute your code block and return results.
+        You can then analyze them and provide another code block if needed.
+        """
+        
+        all_results = []
+        seen_node_ids = set()
+        max_iterations = 3
+        
+        for iteration in range(max_iterations):
+            # Add context from previous results if any
+            if all_results:
+                result_summary = "\n".join([
+                    f"- Node {r['labels']}: {r['properties'].get('content', '')[:100]}..."
+                    for r in all_results[-3:]  # Show last 3 results
+                ])
+                prompt += f"\n\nPrevious results:\n{result_summary}"
             
-            # Merge results, avoiding duplicates
-            seen_ids = set()
-            combined_results = []
+            response = self.llm_service.get_response([{
+                "role": "user",
+                "content": prompt
+            }])
             
-            for result in vector_results + schema_results:
-                node_id = result['n'].element_id
-                if node_id not in seen_ids:
-                    seen_ids.add(node_id)
-                    combined_results.append(result)
+            # Extract code snippets and execute appropriate function
+            snippets = self.code_extractor.extract_snippets(response)
+            if not snippets:
+                break
+                
+            for snippet in snippets:
+                try:
+                    if snippet.language == 'text':
+                        results = self._search_similar(snippet.content)
+                    elif snippet.language == 'cypher':
+                        results = self._execute_query(snippet.content)
+                    else:
+                        continue
+                        
+                    # Add new unique results
+                    for result in results:
+                        node_id = result['node'].element_id
+                        if node_id not in seen_node_ids:
+                            seen_node_ids.add(node_id)
+                            all_results.append(result)
+                            
+                except Exception as e:
+                    self.logger.error(f"Error processing snippet: {str(e)}")
+                    continue
             
-            return combined_results
-        else:  # Default to vector strategy
-            return self._recall_vector_based(query_text, similarity_threshold)
+            # Check if we have enough relevant results
+            if len(all_results) >= 5:  # Arbitrary threshold
+                break
+                
+        return all_results
             
     def _recall_schema_based(self, query_text: str, max_attempts: int = 3) -> List[Dict[str, Any]]:
         """
