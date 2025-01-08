@@ -243,17 +243,27 @@ class MemoryHandler:
     def _enhance_search_query(self, query_text: str) -> List[str]:
         """Use LLM to generate multiple enhanced search queries for better semantic matching"""
         prompt = f"""
-        Generate 3-5 different search queries based on this original query:
+        Generate 3-5 variations of this search query to improve semantic matching:
         "{query_text}"
 
-        Consider:
-        1. Key concepts and their synonyms
-        2. Related technical terms
-        3. Broader context that might be relevant
-        4. Different aspects or perspectives of the query
+        Guidelines for variations:
+        1. Use synonyms and related technical terms
+        2. Rephrase using different sentence structures
+        3. Include domain-specific terminology
+        4. Add relevant context or specifications
+        5. Consider both broader and narrower scopes
 
-        Return only the queries, one per line, no explanations or numbering.
-        Each query should be a complete, natural sentence.
+        Examples:
+        Original: "How to handle errors in Python?"
+        Variations:
+        Python exception handling best practices
+        What are the ways to manage exceptions in Python code
+        Error handling patterns and techniques for Python applications
+        Python try-except block usage and implementation
+        
+        Return ONLY the query variations, one per line.
+        No explanations, numbering, or additional text.
+        Each variation should be a complete, natural phrase.
         """
         try:
             response = self.llm_service.get_response([{
