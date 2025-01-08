@@ -261,8 +261,7 @@ class Agent:
                                 continue
                                 
                             node = result.get('node', {})
-                            print(result)
-                            node_id = node.get('element_id') or str(hash(str(node)))
+                            node_id = node.element_id or str(hash(str(node)))
                             
                             if node_id and node_id not in related_nodes:
                                 # Store all node properties excluding embeddings
