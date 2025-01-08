@@ -367,7 +367,7 @@ class MemoryHandler:
             # Add context from previous results if any
             if all_results:
                 result_summary = "\n".join([
-                    f"- Node {r['labels']}: {r['properties'].get('content', '')[:100]}..."
+                    f"- Node {r['labels']}: {', '.join(f'{k}={v}' for k, v in r['properties'].items() if k != 'embedding')}"
                     for r in all_results[-3:]  # Show last 3 results
                 ])
                 prompt += f"\n\nPrevious results:\n{result_summary}"
