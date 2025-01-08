@@ -124,6 +124,10 @@ class Agent:
         if not self.memory_handler:
             return False
             
+        # Always recall for first message
+        if len(self.conversation.messages) <= 1:  # Only system message present
+            return True
+            
         # Ask LLM if recall is needed
         prompt = f"""Analyze this user input and determine if recalling past conversations would be helpful:
         
