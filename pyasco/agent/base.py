@@ -307,8 +307,6 @@ class Agent:
     
     def cleanup(self):
         self.logger.info("Cleaning up agent resources")
-        # Remember conversation before cleanup
-        self.remember_conversation()
         self.python_executor.cleanup()
         if self.graph_db:
             self.graph_db.close()
