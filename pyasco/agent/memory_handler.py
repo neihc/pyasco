@@ -348,7 +348,7 @@ class MemoryHandler:
 
     def _search_similar(self, search_text: str, similarity_threshold: float = 0.7) -> List[Dict[str, Any]]:
         """
-        Search for similar nodes using vector similarity
+        Search for similar nodes using vector similarity with enhanced queries
         Args:
             search_text (str): Text to search for
             similarity_threshold (float): Minimum similarity score
@@ -356,18 +356,23 @@ class MemoryHandler:
             list: List of similar nodes with scores
         """
         try:
-            # Generate embedding for search text
-            query_embedding = self.embedding_service.get_embedding(search_text).tolist()[0]
+            # Generate enhanced queries
+            enhanced_queries = self._enhance_search_query(search_text)
             
-            # Get results from all indexed labels
+            # Search with each query
             results = []
-            for label in self.graph_db.get_indexed_labels():
-                label_results = self.graph_db.get_vector_search_results(
-                    label,
-                    query_embedding,
-                    similarity_threshold
-                )
-                results.extend(label_results)
+            for query in enhanced_queries:
+                # Generate embedding for search text
+                query_embedding = self.embedding_service.get_embedding(query).tolist()[0]
+                
+                # Get results from all indexed labels
+                for label in self.graph_db.get_indexed_labels():
+                    label_results = self.graph_db.get_vector_search_results(
+                        label,
+                        query_embedding,
+                        similarity_threshold
+                    )
+                    results.extend(label_results)
             
             # Sort by score and format results
             results.sort(key=lambda x: x['score'], reverse=True)
