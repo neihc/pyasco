@@ -16,7 +16,10 @@ Options:
 import argparse
 import os
 import logging
-from typing import Optional, Dict, List
+import glob
+import shutil
+from typing import Optional, Dict, List, Tuple
+from pathlib import Path
 from io import BytesIO
 import asyncio
 from telegram import Update, InputFile
@@ -49,6 +52,46 @@ class TelegramInterface:
         self.user_states: Dict[int, dict] = {}
         self.code_to_image = CodeToImage()
         self.code_extractor = CodeSnippetExtractor()
+        self.workspace_dir = os.path.expanduser("~/.pyasco/workspace")
+        self.archive_dir = os.path.join(self.workspace_dir, "archived")
+        
+        # Ensure directories exist
+        os.makedirs(self.workspace_dir, exist_ok=True)
+        os.makedirs(self.archive_dir, exist_ok=True)
+
+    def _get_workspace_files(self) -> List[str]:
+        """Get list of files in workspace directory"""
+        files = []
+        for file in glob.glob(os.path.join(self.workspace_dir, '*')):
+            if os.path.isfile(file) and not file.startswith(self.archive_dir):
+                files.append(file)
+        return files
+
+    async def _send_workspace_files(self, update: Update) -> List[Tuple[str, str]]:
+        """Send workspace files and return list of (filename, file_id)"""
+        sent_files = []
+        for filepath in self._get_workspace_files():
+            try:
+                with open(filepath, 'rb') as f:
+                    message = await update.message.reply_document(
+                        document=InputFile(f, filename=os.path.basename(filepath)),
+                        caption=f"Workspace file: {os.path.basename(filepath)}"
+                    )
+                    sent_files.append((filepath, message.document.file_id))
+            except Exception as e:
+                logger.error(f"Error sending file {filepath}: {str(e)}")
+        return sent_files
+
+    def _archive_files(self, files: List[str]):
+        """Move files to archive directory"""
+        for filepath in files:
+            try:
+                filename = os.path.basename(filepath)
+                archive_path = os.path.join(self.archive_dir, filename)
+                shutil.move(filepath, archive_path)
+                logger.info(f"Archived {filename}")
+            except Exception as e:
+                logger.error(f"Error archiving {filepath}: {str(e)}")
     
     async def ping_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Simple command to test if bot is responsive"""
@@ -138,6 +181,11 @@ class TelegramInterface:
                     )
                 else:
                     await query.message.reply_text(output_message)
+                
+                # Send any workspace files that were generated
+                sent_files = await self._send_workspace_files(update)
+                if sent_files:
+                    self._archive_files([f[0] for f in sent_files])
                 
                 # Handle follow-up if needed
                 follow_up = self.agent.get_follow_up(results)
