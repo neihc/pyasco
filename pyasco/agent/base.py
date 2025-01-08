@@ -220,6 +220,10 @@ class Agent:
             follow_up = self.get_follow_up(results)
             # Use regular get_response for follow-ups (no recall)
             current_response = self.get_response(follow_up, stream=stream)
+            if auto:
+                # Execute any tools from the follow-up response
+                if self.should_ask_user():
+                    results = self.confirm()
             loop_count += 1
             
         return current_response

@@ -237,6 +237,29 @@ class TelegramInterface:
             logger.debug("Sending request to agent")
             response = self.agent.ask(user_input, stream=False, auto=self.auto)
             logger.debug(f"Got response from agent: {response.content}")
+
+            # If in auto mode, handle execution automatically
+            if self.auto and self.agent.should_ask_user():
+                results = self.agent.confirm()
+                if results:
+                    output_message = "Execution Output:\n"
+                    for result in results:
+                        output_message += f"{result}\n"
+                    
+                    # Send execution output
+                    if len(output_message) > MAX_MESSAGE_LENGTH:
+                        output_file = BytesIO(output_message.encode('utf-8'))
+                        await update.message.reply_document(
+                            document=InputFile(output_file, filename='output.txt'),
+                            caption="Execution output (sent as file due to length)"
+                        )
+                    else:
+                        await update.message.reply_text(output_message)
+                    
+                    # Send any workspace files
+                    sent_files = await self._send_workspace_files(update.message)
+                    if sent_files:
+                        self._archive_files([f[0] for f in sent_files])
             
             # Delete processing message
             await processing_message.delete()
