@@ -240,43 +240,6 @@ class MemoryHandler:
             self.logger.error(f"Failed to process memory: {str(e)}")
             raise
 
-    def _enhance_search_query(self, query_text: str) -> List[str]:
-        """Use LLM to generate multiple enhanced search queries for better semantic matching"""
-        prompt = f"""
-        Generate 3-5 variations of this search query to improve semantic matching:
-        "{query_text}"
-
-        Guidelines for variations:
-        1. Use synonyms and related technical terms
-        2. Rephrase using different sentence structures
-        3. Include domain-specific terminology
-        4. Add relevant context or specifications
-        5. Consider both broader and narrower scopes
-
-        Examples:
-        Original: "How to handle errors in Python?"
-        Variations:
-        Python exception handling best practices
-        What are the ways to manage exceptions in Python code
-        Error handling patterns and techniques for Python applications
-        Python try-except block usage and implementation
-        
-        Return ONLY the query variations, one per line.
-        No explanations, numbering, or additional text.
-        Each variation should be a complete, natural phrase.
-        """
-        try:
-            response = self.llm_service.get_response([{
-                "role": "user",
-                "content": prompt
-            }])
-            # Split response into individual queries and clean them
-            queries = [q.strip() for q in response.strip().split('\n') if q.strip()]
-            # Return original query plus enhanced queries
-            return [query_text] + queries
-        except Exception as e:
-            self.logger.warning(f"Failed to enhance query: {str(e)}")
-            return [query_text]
 
     def _should_explore_node(self, node: Dict, original_query: str, path_so_far: List[Dict]) -> bool:
         """Ask LLM if we should explore this node's neighbors"""
@@ -446,20 +409,27 @@ class MemoryHandler:
            - Returns: matching nodes
            - Best for: specific patterns, relationships, or conditions
         
-        Your task:
-        1. Analyze this query: "{query_text}"
-        2. Decide which function(s) to use and in what order
-        3. Return either a search text or Cypher query in a code block
-        4. Based on results, decide if more searches/queries are needed
-        5. If you unsure, start with similarity search
+        Original query: "{query_text}"
+        
+        First, generate 3-4 variations of the search query:
+        1. Use synonyms and related technical terms
+        2. Include domain-specific terminology
+        3. Consider both broader and narrower scopes
+        4. Rephrase using different sentence structures
+        
+        Then decide which function(s) to use and in what order.
         
         Database schema:
         {self._get_db_schema()}
         
-        Return ONLY code blocks:
+        Return ONLY code blocks, alternating between:
+        
         For similarity search:
         ```text
-        your search text here
+        variation 1 of search text
+        ```
+        ```text
+        variation 2 of search text
         ```
         
         For Cypher query:
@@ -467,8 +437,8 @@ class MemoryHandler:
         your query here
         ```
         
-        I will execute your code block and return results.
-        You can then analyze them and provide another code block if needed.
+        I will execute each code block and return results.
+        You can then analyze them and provide more code blocks if needed.
         """
         
         all_results = []
