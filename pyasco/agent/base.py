@@ -244,17 +244,34 @@ class Agent:
             return
             
         try:
-            # Convert conversation to storable format
+            # Convert conversation to storable format with related nodes
             messages_data = []
+            related_nodes = {}
+            
             for msg in self.conversation.messages:
                 if msg.role == "system":  # Skip system messages
                     continue
-                    
-                message_text = f"{msg.role}: {msg.content}"
-                if msg.context and 'node_id' in msg.context:
-                    message_text += f" [ref: {msg.context['node_id']}]"
-                messages_data.append(message_text)
                 
+                message_text = f"{msg.role}: {msg.content}"
+                
+                # If message has a node reference, fetch its data
+                if msg.context and 'node_id' in msg.context:
+                    node_id = msg.context['node_id']
+                    if node_id not in related_nodes:
+                        # Query the node data
+                        node_result = self.memory_handler.graph_db.execute_query(
+                            "MATCH (n) WHERE id(n) = $node_id RETURN n",
+                            {"node_id": node_id}
+                        )
+                        if node_result:
+                            # Store node properties excluding embedding
+                            node_data = dict(node_result[0]['n'])
+                            node_data.pop('embedding', None)
+                            related_nodes[node_id] = node_data
+                            message_text += f" [ref: {node_id}]"
+                
+                messages_data.append(message_text)
+            
             conversation_text = "\n".join(messages_data)
             
             if not conversation_text.strip():
@@ -277,6 +294,7 @@ class Agent:
                 "conversation_id": self.conversation_id,
                 "timestamp": str(datetime.now()),
                 "message_count": len(self.conversation.messages),
+                "related_nodes": related_nodes,
                 **self.metadata
             }
             
