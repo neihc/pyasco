@@ -279,8 +279,6 @@ class Agent:
 
     def reset(self):
         self.logger.info("Resetting agent state")
-        # Remember conversation before clearing it
-        self.remember_conversation()
         self.conversation.clear()
         self.python_executor.reset()
         self._initialize_chat()
