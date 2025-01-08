@@ -67,17 +67,30 @@ class TelegramInterface:
                 files.append(file)
         return files
 
+    def _is_image_file(self, filepath: str) -> bool:
+        """Check if file is an image based on extension"""
+        image_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'}
+        return os.path.splitext(filepath)[1].lower() in image_extensions
+
     async def _send_workspace_files(self, message) -> List[Tuple[str, str]]:
         """Send workspace files and return list of (filename, file_id)"""
         sent_files = []
         for filepath in self._get_workspace_files():
             try:
                 with open(filepath, 'rb') as f:
-                    sent_message = await message.reply_document(
-                        document=InputFile(f, filename=os.path.basename(filepath)),
-                        caption=f"Workspace file: {os.path.basename(filepath)}"
-                    )
-                    sent_files.append((filepath, sent_message.document.file_id))
+                    filename = os.path.basename(filepath)
+                    if self._is_image_file(filepath):
+                        sent_message = await message.reply_photo(
+                            photo=InputFile(f, filename=filename),
+                            caption=f"Workspace image: {filename}"
+                        )
+                        sent_files.append((filepath, sent_message.photo[-1].file_id))
+                    else:
+                        sent_message = await message.reply_document(
+                            document=InputFile(f, filename=filename),
+                            caption=f"Workspace file: {filename}"
+                        )
+                        sent_files.append((filepath, sent_message.document.file_id))
             except Exception as e:
                 logger.error(f"Error sending file {filepath}: {str(e)}")
         return sent_files
