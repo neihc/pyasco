@@ -67,17 +67,17 @@ class TelegramInterface:
                 files.append(file)
         return files
 
-    async def _send_workspace_files(self, update: Update) -> List[Tuple[str, str]]:
+    async def _send_workspace_files(self, message) -> List[Tuple[str, str]]:
         """Send workspace files and return list of (filename, file_id)"""
         sent_files = []
         for filepath in self._get_workspace_files():
             try:
                 with open(filepath, 'rb') as f:
-                    message = await update.message.reply_document(
+                    sent_message = await message.reply_document(
                         document=InputFile(f, filename=os.path.basename(filepath)),
                         caption=f"Workspace file: {os.path.basename(filepath)}"
                     )
-                    sent_files.append((filepath, message.document.file_id))
+                    sent_files.append((filepath, sent_message.document.file_id))
             except Exception as e:
                 logger.error(f"Error sending file {filepath}: {str(e)}")
         return sent_files
@@ -183,7 +183,7 @@ class TelegramInterface:
                     await query.message.reply_text(output_message)
                 
                 # Send any workspace files that were generated
-                sent_files = await self._send_workspace_files(update)
+                sent_files = await self._send_workspace_files(query.message)
                 if sent_files:
                     self._archive_files([f[0] for f in sent_files])
                 
