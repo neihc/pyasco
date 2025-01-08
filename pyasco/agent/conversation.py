@@ -9,7 +9,8 @@ class Conversation:
         self.messages: List[Message] = []
 
     def add_message(self, role: str, content: str, user_id: str = "default", 
-                   tools: List[Dict] = None, skills: List[Dict] = None) -> Message:
+                   tools: List[Dict] = None, skills: List[Dict] = None,
+                   context: Dict = None) -> Message:
         """Add a new message to the conversation"""
         message = Message(
             role=role,
@@ -17,7 +18,8 @@ class Conversation:
             user_id=user_id,
             tools=tools or [],
             skills=skills or [],
-            timestamp=datetime.now()
+            timestamp=datetime.now(),
+            context=context
         )
         self.messages.append(message)
         return message

@@ -244,12 +244,18 @@ class Agent:
             return
             
         try:
-            # Convert conversation to storable format, excluding recalled context
-            conversation_text = "\n".join([
-                f"{msg.role}: {msg.content}" 
-                for msg in self.conversation.messages 
-                if msg.role != "system"  # Skip system messages
-            ])
+            # Convert conversation to storable format
+            messages_data = []
+            for msg in self.conversation.messages:
+                if msg.role == "system":  # Skip system messages
+                    continue
+                    
+                message_text = f"{msg.role}: {msg.content}"
+                if msg.context and 'node_id' in msg.context:
+                    message_text += f" [ref: {msg.context['node_id']}]"
+                messages_data.append(message_text)
+                
+            conversation_text = "\n".join(messages_data)
             
             if not conversation_text.strip():
                 self.logger.debug("No conversation content to store")
