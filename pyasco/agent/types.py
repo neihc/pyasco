@@ -22,7 +22,7 @@ class Message:
         if self.context:
             # Format context excluding embeddings and technical fields
             context_dict = {k: v for k, v in self.context.items() 
-                          if k not in ('embedding', 'id', 'node_id')}
+                          if k not in ('embeddings', 'id', 'node_id')}
             if context_dict:
                 context_str = "\nContext:\n" + "\n".join(f"{k}: {v}" for k, v in context_dict.items())
                 formatted_content = formatted_content + context_str

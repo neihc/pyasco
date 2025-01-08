@@ -103,10 +103,7 @@ def main():
     
     # Demonstrate different types of recalls
     queries = [
-        "What projects are currently active and what skills do they require?",
-        "Find any discussions or topics related to RAG or vector databases",
-        "What skills have been recently used in our projects?",
-        "Show me the progression of topics and skills in the graph database domain",
+        "Did we ever talked about any fact?",
     ]
     
     for query in queries:
