@@ -34,7 +34,47 @@ class Conversation:
 
     def to_llm_format(self) -> List[Dict]:
         """Convert conversation to format expected by LLM"""
-        return [msg.to_llm_format() for msg in self.messages]
+        formatted_messages = []
+        for msg in self.messages:
+            if msg.context and msg.context.get("type") == "memory_recall":
+                recalled = msg.context.get("recalled", [])
+                context_parts = ["Previous relevant context:"]
+                
+                for result in recalled:
+                    if not isinstance(result, dict):
+                        continue
+                        
+                    node = result.get('node', {})
+                    score = result.get('score', 0.0)
+                    
+                    if score < 0.7:
+                        continue
+                    
+                    properties = {k: v for k, v in dict(node).items() if k != 'embedding'}
+                    labels = list(node.labels) if hasattr(node, 'labels') else ['Unknown']
+                    label = labels[0] if labels else 'Unknown'
+                    
+                    content = properties.get('content', '')
+                    if content:
+                        context_parts.append(f"\n[{label}] (relevance: {score:.2f})")
+                        context_parts.append(f"{content}")
+                        
+                        for key, value in properties.items():
+                            if key not in ('content', 'embedding') and value:
+                                context_parts.append(f"- {key}: {value}")
+                
+                if len(context_parts) > 1:
+                    formatted_content = "\n".join(context_parts) + "\n\nCurrent message:\n" + msg.content
+                    formatted_messages.append({
+                        "role": msg.role,
+                        "content": formatted_content
+                    })
+                else:
+                    formatted_messages.append(msg.to_llm_format())
+            else:
+                formatted_messages.append(msg.to_llm_format())
+                
+        return formatted_messages
 
     def to_text_format(self, skip_system: bool = True) -> str:
         """Convert conversation to plain text format

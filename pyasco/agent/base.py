@@ -118,62 +118,27 @@ class Agent:
             content=system_content
         )
 
-    def _format_recalled_context(self, recalled_context: List[Dict]) -> str:
-        """Format recalled context into a readable string"""
-        if not recalled_context:
-            return ""
-            
-        formatted_parts = ["Previous relevant context:"]
-        
-        for result in recalled_context:
-            if not isinstance(result, dict):
-                continue
-                
-            # Extract node and score
-            node = result.get('node', {})
-            score = result.get('score', 0.0)
-            
-            # Skip low relevance results
-            if score < 0.7:
-                continue
-                
-            # Get node properties excluding embeddings
-            properties = {k: v for k, v in dict(node).items() if k != 'embedding'}
-            
-            # Get node labels
-            labels = list(node.labels) if hasattr(node, 'labels') else ['Unknown']
-            label = labels[0] if labels else 'Unknown'
-            
-            # Format the content
-            content = properties.get('content', '')
-            if content:
-                formatted_parts.append(f"\n[{label}] (relevance: {score:.2f})")
-                formatted_parts.append(f"{content}")
-                
-                # Add other relevant properties
-                for key, value in properties.items():
-                    if key not in ('content', 'embedding') and value:
-                        formatted_parts.append(f"- {key}: {value}")
-        
-        return "\n".join(formatted_parts) if len(formatted_parts) > 1 else ""
 
     def _get_response_with_recall(self, user_input: str, stream: bool = False) -> Union[Message, Generator[Message, None, None]]:
         """Get response with memory recall for initial messages"""
         self.logger.info(f"Getting response with recall for user input (stream={stream})")
         
-        context_prefix = ""
+        context = None
         if self.memory_handler:
             try:
                 recalled_context = self.memory_handler.recall(user_input, similarity_threshold=0.7)
-                context_prefix = self._format_recalled_context(recalled_context)
-                if context_prefix:
-                    context_prefix += "\n\nCurrent message:\n"
+                if recalled_context:
+                    context = {
+                        "type": "memory_recall",
+                        "recalled": recalled_context
+                    }
             except Exception as e:
                 self.logger.error(f"Failed to recall context: {str(e)}")
 
         self.conversation.add_message(
             role="user",
-            content=context_prefix + user_input
+            content=user_input,
+            context=context
         )
         
         return self.response_handler.handle_response(
