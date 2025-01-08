@@ -80,6 +80,30 @@ class MemoryHandler:
                 return False
         return True
 
+    def _properties_match(self, props1: Dict, props2: Dict, threshold: float = 0.8) -> bool:
+        """
+        Compare two property dictionaries for similarity
+        Args:
+            props1 (dict): First set of properties
+            props2 (dict): Second set of properties
+            threshold (float): Similarity threshold for matching
+        Returns:
+            bool: True if properties are similar enough
+        """
+        # Convert all values to strings for comparison
+        props1_str = {k: str(v) for k, v in props1.items() if k not in ['embedding', 'original_content']}
+        props2_str = {k: str(v) for k, v in props2.items() if k not in ['embedding', 'original_content']}
+        
+        # Calculate similarity score
+        common_keys = set(props1_str.keys()) & set(props2_str.keys())
+        if not common_keys:
+            return False
+            
+        matches = sum(1 for k in common_keys if props1_str[k] == props2_str[k])
+        similarity = matches / len(common_keys)
+        
+        return similarity >= threshold
+
     def _validate_relationship_structure(self, rel_structure: Dict) -> bool:
         """Validate the relationship structure returned by LLM"""
         if not isinstance(rel_structure, dict):
@@ -184,7 +208,30 @@ class MemoryHandler:
                 raise ValueError("Invalid node structure in LLM response")
             
             created_nodes = []
+            existing_nodes = {}
+            
+            # Extract existing node IDs from context if available
+            if context and 'related_nodes' in context:
+                existing_nodes = context['related_nodes']
+            
             for node_spec in node_structure["nodes"]:
+                # Check if this node matches an existing one
+                existing_node = None
+                for node_id, node_info in existing_nodes.items():
+                    if (node_info['labels'] == [node_spec['label']] and 
+                        self._properties_match(node_info['properties'], node_spec['properties'])):
+                        existing_node = self.graph_db.execute_query(
+                            "MATCH (n) WHERE elementId(n) = $node_id RETURN n",
+                            {"node_id": node_id}
+                        )
+                        if existing_node:
+                            existing_node = existing_node[0]['n']
+                            break
+                
+                if existing_node:
+                    created_nodes.append(existing_node)
+                    continue
+                
                 if not created_nodes:
                     node_spec["properties"]["original_content"] = content
                     if context:
@@ -242,6 +289,9 @@ class MemoryHandler:
         
         INSTRUCTIONS:
         {self.memory_instructions}
+        
+        Consider both new and existing nodes when creating relationships.
+        For existing nodes, maintain their current relationships and add new ones where appropriate.
         
         Return a JSON object wrapped in a code block with only the relationships array:
         ```json

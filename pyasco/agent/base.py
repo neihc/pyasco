@@ -261,7 +261,7 @@ class Agent:
                                 continue
                                 
                             node = result.get('node', {})
-                            node_id = node.element_id or str(hash(str(node)))
+                            node_id = node.element_id if hasattr(node, 'element_id') else str(hash(str(node)))
                             
                             if node_id and node_id not in related_nodes:
                                 # Store all node properties excluding embeddings
@@ -269,6 +269,7 @@ class Agent:
                                 labels = list(node.labels) if hasattr(node, 'labels') else ['Unknown']
                                 
                                 related_nodes[node_id] = {
+                                    'node_id': node_id,
                                     'properties': properties,
                                     'labels': labels,
                                     'relevance': result.get('score', 0.0)
