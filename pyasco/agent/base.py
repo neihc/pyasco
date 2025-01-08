@@ -221,15 +221,26 @@ class Agent:
                 
                 # If message has context data, store it
                 if msg.context:
-                    # Get all node data from context
-                    node_data = msg.context.get('node_data', {})
-                    node_id = msg.context.get('node_id')
-                    
-                    if node_id and node_id not in related_nodes:
-                        # Store all node data excluding embeddings
-                        filtered_data = {k: v for k, v in node_data.items() if k != 'embedding'}
-                        related_nodes[node_id] = filtered_data
-                        message_text += f" [ref: {node_id}]"
+                    if msg.context.get("type") == "memory_recall":
+                        recalled = msg.context.get("recalled", [])
+                        for result in recalled:
+                            if not isinstance(result, dict):
+                                continue
+                                
+                            node = result.get('node', {})
+                            node_id = node.get('id') or str(hash(str(node)))
+                            
+                            if node_id and node_id not in related_nodes:
+                                # Store all node properties excluding embeddings
+                                properties = {k: v for k, v in dict(node).items() if k != 'embedding'}
+                                labels = list(node.labels) if hasattr(node, 'labels') else ['Unknown']
+                                
+                                related_nodes[node_id] = {
+                                    'properties': properties,
+                                    'labels': labels,
+                                    'relevance': result.get('score', 0.0)
+                                }
+                                message_text += f" [ref: {node_id}]"
                 
                 messages_data.append(message_text)
             
