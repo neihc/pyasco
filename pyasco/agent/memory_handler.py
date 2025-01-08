@@ -255,15 +255,15 @@ class MemoryHandler:
             
             # Search with the query
             results = []
-                
-                # Get results from all indexed labels
-                for label in self.graph_db.get_indexed_labels():
-                    label_results = self.graph_db.get_vector_search_results(
-                        label,
-                        query_embedding,
-                        similarity_threshold
-                    )
-                    results.extend(label_results)
+            
+            # Get results from all indexed labels
+            for label in self.graph_db.get_indexed_labels():
+                label_results = self.graph_db.get_vector_search_results(
+                    label,
+                    query_embedding,
+                    similarity_threshold
+                )
+                results.extend(label_results)
             
             # Sort by score and format results
             results.sort(key=lambda x: x['score'], reverse=True)
