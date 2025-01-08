@@ -254,21 +254,14 @@ class Agent:
                 
                 message_text = f"{msg.role}: {msg.content}"
                 
-                # If message has a node reference, fetch its data
-                if msg.context and 'node_id' in msg.context:
-                    node_id = msg.context['node_id']
-                    if node_id not in related_nodes:
-                        # Query the node data
-                        node_result = self.memory_handler.graph_db.execute_query(
-                            "MATCH (n) WHERE id(n) = $node_id RETURN n",
-                            {"node_id": node_id}
-                        )
-                        if node_result:
-                            # Store node properties excluding embedding
-                            node_data = dict(node_result[0]['n'])
-                            node_data.pop('embedding', None)
-                            related_nodes[node_id] = node_data
-                            message_text += f" [ref: {node_id}]"
+                # If message has context data, store it
+                if msg.context:
+                    node_id = msg.context.get('node_id')
+                    if node_id and node_id not in related_nodes:
+                        # Copy context data excluding embeddings
+                        node_data = {k: v for k, v in msg.context.items() if k != 'embedding'}
+                        related_nodes[node_id] = node_data
+                        message_text += f" [ref: {node_id}]"
                 
                 messages_data.append(message_text)
             
