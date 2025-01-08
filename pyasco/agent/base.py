@@ -134,6 +134,7 @@ class Agent:
         - References previous conversations
         - Is vague and might need context
         - Is a follow-up question
+        - If you are unsure, respond with YES
         
         Respond with only "YES" or "NO"."""
         
