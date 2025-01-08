@@ -42,14 +42,14 @@ class MemoryHandler:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
 
-    def _retry_on_invalid_response(self, func):
+    def _retry_on_invalid_response(func):
         """Decorator to retry functions that depend on LLM responses"""
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(self, *args, **kwargs):
             last_error = None
             for attempt in range(self.max_retries):
                 try:
-                    result = func(*args, **kwargs)
+                    result = func(self, *args, **kwargs)
                     # Validate the result based on expected type
                     if result is not None:
                         return result
