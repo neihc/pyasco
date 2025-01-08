@@ -118,6 +118,45 @@ class Agent:
             content=system_content
         )
 
+    def _format_recalled_context(self, recalled_context: List[Dict]) -> str:
+        """Format recalled context into a readable string"""
+        if not recalled_context:
+            return ""
+            
+        formatted_parts = ["Previous relevant context:"]
+        
+        for result in recalled_context:
+            if not isinstance(result, dict):
+                continue
+                
+            # Extract node and score
+            node = result.get('node', {})
+            score = result.get('score', 0.0)
+            
+            # Skip low relevance results
+            if score < 0.7:
+                continue
+                
+            # Get node properties excluding embeddings
+            properties = {k: v for k, v in dict(node).items() if k != 'embedding'}
+            
+            # Get node labels
+            labels = list(node.labels) if hasattr(node, 'labels') else ['Unknown']
+            label = labels[0] if labels else 'Unknown'
+            
+            # Format the content
+            content = properties.get('content', '')
+            if content:
+                formatted_parts.append(f"\n[{label}] (relevance: {score:.2f})")
+                formatted_parts.append(f"{content}")
+                
+                # Add other relevant properties
+                for key, value in properties.items():
+                    if key not in ('content', 'embedding') and value:
+                        formatted_parts.append(f"- {key}: {value}")
+        
+        return "\n".join(formatted_parts) if len(formatted_parts) > 1 else ""
+
     def _get_response_with_recall(self, user_input: str, stream: bool = False) -> Union[Message, Generator[Message, None, None]]:
         """Get response with memory recall for initial messages"""
         self.logger.info(f"Getting response with recall for user input (stream={stream})")
@@ -125,28 +164,10 @@ class Agent:
         context_prefix = ""
         if self.memory_handler:
             try:
-                recalled_context = self.memory_handler.recall(user_input)
-                if recalled_context:
-                    nodes_by_type = {}
-                    for result in recalled_context[:3]:  # Limit to 3 nodes
-                        node = result.get('n')
-                        if node and hasattr(node, 'get'):
-                            node_dict = {k: v for k, v in dict(node).items() if k != 'embeddings'}
-                            node_labels = node.get('labels', ['Unknown'])
-                            label = node_labels[0] if node_labels else 'Unknown'
-                            if label not in nodes_by_type:
-                                nodes_by_type[label] = []
-                            nodes_by_type[label].append((node_dict, result.get('score', 0.0)))
-                    
-                    if nodes_by_type:
-                        context_parts = ["Recall context (from graphdb - your brain)\n"]
-                        for label, nodes in nodes_by_type.items():
-                            context_parts.append(f"Node {label}:")
-                            for node_dict, score in nodes:
-                                context_parts.append(str(node_dict))
-                                context_parts.append(f"relevant score: {score:.3f}\n")
-                        
-                        context_prefix = "\n".join(context_parts) + "\n"
+                recalled_context = self.memory_handler.recall(user_input, similarity_threshold=0.7)
+                context_prefix = self._format_recalled_context(recalled_context)
+                if context_prefix:
+                    context_prefix += "\n\nCurrent message:\n"
             except Exception as e:
                 self.logger.error(f"Failed to recall context: {str(e)}")
 
@@ -180,7 +201,7 @@ class Agent:
 
     def ask(self, user_input: str, stream: bool = False, auto: bool = False, max_loops: int = 5) -> Dict:
         """Process user input and handle any follow-up interactions"""
-        # Initial response always uses recall for user messages
+        # Initial response uses recall for user messages
         response = self._get_response_with_recall(user_input, stream=stream)
         
         if not auto:
@@ -203,7 +224,7 @@ class Agent:
                 break
                 
             follow_up = self.get_follow_up(results)
-            # Follow-up responses don't use recall since they're system-generated
+            # Use regular get_response for follow-ups (no recall)
             current_response = self.get_response(follow_up, stream=stream)
             loop_count += 1
             
