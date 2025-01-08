@@ -238,6 +238,11 @@ class TelegramInterface:
             response = self.agent.ask(user_input, stream=False, auto=self.auto)
             logger.debug(f"Got response from agent: {response.content}")
 
+            # Check for workspace files first
+            sent_files = await self._send_workspace_files(update.message)
+            if sent_files:
+                self._archive_files([f[0] for f in sent_files])
+
             # If in auto mode, handle execution automatically
             if self.auto and self.agent.should_ask_user():
                 results = self.agent.confirm()
@@ -256,7 +261,7 @@ class TelegramInterface:
                     else:
                         await update.message.reply_text(output_message)
                     
-                    # Send any workspace files
+                    # Check for any new workspace files after execution
                     sent_files = await self._send_workspace_files(update.message)
                     if sent_files:
                         self._archive_files([f[0] for f in sent_files])
