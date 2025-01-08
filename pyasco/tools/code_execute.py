@@ -264,13 +264,20 @@ class CodeExecutor:
             'environment': environment
         }
         
+        # Setup default volumes
+        volumes = {
+            '/.pyasco/workspace': {'bind': '/pyasco', 'mode': 'rw'}
+        }
+        
         # Add specific Docker options
         if 'mem_limit' in self.docker_options:
             container_options['mem_limit'] = self.docker_options['mem_limit']
         if 'cpu_count' in self.docker_options:
             container_options['cpu_count'] = self.docker_options['cpu_count']
         if 'volumes' in self.docker_options:
-            container_options['volumes'] = self.docker_options['volumes']
+            volumes.update(self.docker_options['volumes'])
+            
+        container_options['volumes'] = volumes
 
         # Create container
         self.container = self.docker_client.containers.run(
