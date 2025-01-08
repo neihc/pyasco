@@ -410,7 +410,7 @@ class MemoryHandler:
             self.logger.error(f"Error executing query: {str(e)}")
             return []
 
-    def recall(self, query_text: str) -> List[Dict[str, Any]]:
+    def recall(self, query_text: str, similarity_threshold: float = 0.7) -> List[Dict[str, Any]]:
         """
         Retrieve memories based on natural language query using LLM to guide the search
         Args:
@@ -502,7 +502,9 @@ class MemoryHandler:
             if len(all_results) >= 5:  # Arbitrary threshold
                 break
                 
-        return all_results
+        # Sort results by score before returning
+        all_results.sort(key=lambda x: x.get('score', 0), reverse=True)
+        return [r for r in all_results if r.get('score', 0) >= similarity_threshold]
             
     def _recall_schema_based(self, query_text: str, max_attempts: int = 3) -> List[Dict[str, Any]]:
         """
