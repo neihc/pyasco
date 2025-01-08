@@ -503,9 +503,10 @@ class MemoryHandler:
             if len(all_results) >= 5:  # Arbitrary threshold
                 break
                 
-        # Sort results by score before returning
+        # Sort results by score and return top 5
         all_results.sort(key=lambda x: x.get('score', 0), reverse=True)
-        return [r for r in all_results if r.get('score', 0) >= similarity_threshold]
+        filtered_results = [r for r in all_results if r.get('score', 0) >= similarity_threshold]
+        return filtered_results[:5]
             
     def _get_db_schema(self) -> str:
         """Get the actual schema from the database and combine with domain schema"""
