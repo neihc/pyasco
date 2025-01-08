@@ -119,12 +119,33 @@ class Agent:
         )
 
 
+    def _needs_recall(self, user_input: str) -> bool:
+        """Determine if memory recall is needed for this input"""
+        if not self.memory_handler:
+            return False
+            
+        # Ask LLM if recall is needed
+        prompt = f"""Analyze this user input and determine if recalling past conversations would be helpful:
+        
+        User Input: {user_input}
+        
+        Consider if the input:
+        - Asks about past topics
+        - References previous conversations
+        - Is vague and might need context
+        - Is a follow-up question
+        
+        Respond with only "YES" or "NO"."""
+        
+        response = self.llm_service.complete(prompt, max_tokens=10)
+        return response.strip().upper() == "YES"
+
     def _get_response_with_recall(self, user_input: str, stream: bool = False) -> Union[Message, Generator[Message, None, None]]:
-        """Get response with memory recall for initial messages"""
-        self.logger.info(f"Getting response with recall for user input (stream={stream})")
+        """Get response with optional memory recall"""
+        self.logger.info(f"Getting response for user input (stream={stream})")
         
         context = None
-        if self.memory_handler:
+        if self.memory_handler and self._needs_recall(user_input):
             try:
                 recalled_context = self.memory_handler.recall(user_input, similarity_threshold=0.7)
                 if recalled_context:
@@ -132,6 +153,7 @@ class Agent:
                         "type": "memory_recall",
                         "recalled": recalled_context
                     }
+                    self.logger.info(f"Recalled {len(recalled_context)} relevant memories")
             except Exception as e:
                 self.logger.error(f"Failed to recall context: {str(e)}")
 
