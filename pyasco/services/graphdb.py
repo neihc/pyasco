@@ -1,7 +1,11 @@
 from typing import Optional, List, Dict, Any
 from neo4j import GraphDatabase
 import logging
+import warnings
 from ..logger_config import setup_logger
+
+# Filter Neo4j driver warnings
+warnings.filterwarnings('ignore', category=DeprecationWarning, module='neo4j')
 
 class GraphDB:
     """Class for handling Neo4j database operations"""
