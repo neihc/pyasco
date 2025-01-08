@@ -256,11 +256,14 @@ class Agent:
                 
                 # If message has context data, store it
                 if msg.context:
+                    # Get all node data from context
+                    node_data = msg.context.get('node_data', {})
                     node_id = msg.context.get('node_id')
+                    
                     if node_id and node_id not in related_nodes:
-                        # Copy context data excluding embeddings
-                        node_data = {k: v for k, v in msg.context.items() if k != 'embedding'}
-                        related_nodes[node_id] = node_data
+                        # Store all node data excluding embeddings
+                        filtered_data = {k: v for k, v in node_data.items() if k != 'embedding'}
+                        related_nodes[node_id] = filtered_data
                         message_text += f" [ref: {node_id}]"
                 
                 messages_data.append(message_text)
