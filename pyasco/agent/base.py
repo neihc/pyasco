@@ -137,11 +137,10 @@ class Agent:
         
         Respond with only "YES" or "NO"."""
         
-        response = self.llm_service.chat(
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=10
+        response = self.llm_service.get_response(
+            messages=[{"role": "user", "content": prompt}]
         )
-        return response.choices[0].message.content.strip().upper() == "YES"
+        return response.strip().upper() == "YES"
 
     def _get_response_with_recall(self, user_input: str, stream: bool = False) -> Union[Message, Generator[Message, None, None]]:
         """Get response with optional memory recall"""
