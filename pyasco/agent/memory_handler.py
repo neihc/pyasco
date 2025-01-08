@@ -1,4 +1,6 @@
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Union
+import time
+from functools import wraps
 from ..services.graphdb import GraphDB
 from ..services.llm import LLMService
 from ..services.code_snippet_extractor import CodeSnippetExtractor
@@ -11,11 +13,19 @@ logging.getLogger('neo4j').setLevel(logging.ERROR)
 logging.getLogger('urllib3').setLevel(logging.ERROR)
 
 
+class LLMRetryError(Exception):
+    """Raised when LLM retries are exhausted"""
+    pass
+
 class MemoryHandler:
     """Handler for processing and storing memories using LLM and graph database"""
     
+    MAX_RETRIES = 3
+    RETRY_DELAY = 1  # seconds
+    
     def __init__(self, memory_instructions: str, llm_service: Optional[LLMService] = None,
-                 graph_db: Optional[GraphDB] = None, embedding_service: Optional[EmbeddingService] = None):
+                 graph_db: Optional[GraphDB] = None, embedding_service: Optional[EmbeddingService] = None,
+                 max_retries: int = 3, retry_delay: float = 1.0):
         """
         Initialize the memory handler
         Args:
@@ -29,6 +39,61 @@ class MemoryHandler:
         self.graph_db = graph_db or GraphDB()
         self.code_extractor = CodeSnippetExtractor()
         self.embedding_service = embedding_service or EmbeddingService()
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
+
+    def _retry_on_invalid_response(self, func):
+        """Decorator to retry functions that depend on LLM responses"""
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_error = None
+            for attempt in range(self.max_retries):
+                try:
+                    result = func(*args, **kwargs)
+                    # Validate the result based on expected type
+                    if result is not None:
+                        return result
+                except Exception as e:
+                    last_error = e
+                    self.logger.warning(f"Attempt {attempt + 1} failed: {str(e)}")
+                
+                if attempt < self.max_retries - 1:
+                    time.sleep(self.retry_delay * (attempt + 1))  # Exponential backoff
+            
+            raise LLMRetryError(f"Failed after {self.max_retries} attempts. Last error: {str(last_error)}")
+        return wrapper
+
+    def _validate_node_structure(self, node_structure: Dict) -> bool:
+        """Validate the node structure returned by LLM"""
+        if not isinstance(node_structure, dict):
+            return False
+        if "nodes" not in node_structure:
+            return False
+        if not isinstance(node_structure["nodes"], list):
+            return False
+        for node in node_structure["nodes"]:
+            if not isinstance(node, dict):
+                return False
+            if "label" not in node or "properties" not in node:
+                return False
+            if not isinstance(node["properties"], dict):
+                return False
+        return True
+
+    def _validate_relationship_structure(self, rel_structure: Dict) -> bool:
+        """Validate the relationship structure returned by LLM"""
+        if not isinstance(rel_structure, dict):
+            return False
+        if "relationships" not in rel_structure:
+            return False
+        if not isinstance(rel_structure["relationships"], list):
+            return False
+        for rel in rel_structure["relationships"]:
+            if not isinstance(rel, dict):
+                return False
+            if "from_node_id" not in rel or "to_node_id" not in rel or "type" not in rel:
+                return False
+        return True
 
     def _generate_node_embedding(self, node_data: Dict[str, Any]) -> str:
         """
@@ -64,6 +129,7 @@ class MemoryHandler:
                 items.append((new_key, str(v)))
         return dict(items)
 
+    @_retry_on_invalid_response
     def _create_nodes(self, content: str, context: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
         First phase: Create nodes based on content
@@ -114,6 +180,8 @@ class MemoryHandler:
                 raise ValueError("No JSON structure found in LLM response")
                 
             node_structure = eval(snippets[0].content)
+            if not self._validate_node_structure(node_structure):
+                raise ValueError("Invalid node structure in LLM response")
             
             created_nodes = []
             for node_spec in node_structure["nodes"]:
@@ -146,6 +214,7 @@ class MemoryHandler:
             self.logger.error(f"Failed to create nodes: {str(e)}")
             raise
             
+    @_retry_on_invalid_response
     def _create_relationships(self, nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Second phase: Create relationships between nodes
@@ -203,6 +272,8 @@ class MemoryHandler:
                 raise ValueError("No JSON structure found in LLM response")
                 
             rel_structure = eval(snippets[0].content)
+            if not self._validate_relationship_structure(rel_structure):
+                raise ValueError("Invalid relationship structure in LLM response")
             
             created_relationships = []
             for rel in rel_structure["relationships"]:
