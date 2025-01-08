@@ -250,14 +250,11 @@ class MemoryHandler:
             list: List of similar nodes with scores
         """
         try:
-            # Generate enhanced queries
-            enhanced_queries = self._enhance_search_query(search_text)
+            # Generate embedding for search text
+            query_embedding = self.embedding_service.get_embedding(search_text).tolist()[0]
             
-            # Search with each query
+            # Search with the query
             results = []
-            for query in enhanced_queries:
-                # Generate embedding for search text
-                query_embedding = self.embedding_service.get_embedding(query).tolist()[0]
                 
                 # Get results from all indexed labels
                 for label in self.graph_db.get_indexed_labels():
