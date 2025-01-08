@@ -264,73 +264,96 @@ class GraphDB:
 
     def get_schema(self) -> str:
         """Get the actual database schema including nodes, relationships and patterns"""
+        if not self.driver:
+            return "Database not connected. Please configure database connection first."
+            
         try:
-            # Get node labels
-            nodes_schema = self.execute_query("""
-            CALL db.labels() YIELD label
-            CALL {
-                WITH label
-                MATCH (n)
-                WHERE label in labels(n)
+            schema_parts = []
+            
+            # Get node labels and their properties
+            try:
+                nodes_schema = self.execute_query("""
+                CALL db.labels() YIELD label
+                OPTIONAL MATCH (n:`${label}`)
                 WITH label, n
+                RETURN DISTINCT label as nodeType, 
+                       CASE WHEN n IS NOT NULL 
+                            THEN keys(n) 
+                            ELSE [] 
+                       END as properties
                 LIMIT 1
-                RETURN collect(keys(n)) as properties
-            } AS subquery
-            RETURN label as nodeType, subquery.properties[0] as properties
-            """)
+                """)
+                
+                if nodes_schema:
+                    schema_parts.append("Nodes:")
+                    for node in nodes_schema:
+                        props = node.get('properties', [])
+                        schema_parts.append(f"- Label: {node['nodeType']}")
+                        if props:
+                            schema_parts.append("  Properties: " + ", ".join(props))
+                        else:
+                            schema_parts.append("  Properties: none")
+            except Exception as e:
+                self.logger.warning(f"Failed to get node schema: {str(e)}")
+                schema_parts.append("Nodes: Unable to retrieve node information")
             
             # Get relationship types and their properties
-            rels_schema = self.execute_query("""
-            CALL db.relationshipTypes() YIELD relationshipType
-            CALL {
-                WITH relationshipType
-                MATCH ()-[r]->()
-                WHERE type(r) = relationshipType
+            try:
+                rels_schema = self.execute_query("""
+                CALL db.relationshipTypes() YIELD relationshipType
+                OPTIONAL MATCH ()-[r:`${relationshipType}`]->()
                 WITH relationshipType, r
+                RETURN DISTINCT relationshipType as relationType,
+                       CASE WHEN r IS NOT NULL 
+                            THEN keys(r) 
+                            ELSE [] 
+                       END as properties
                 LIMIT 1
-                RETURN collect(keys(r)) as properties
-            }
-            RETURN relationshipType as relationType, properties[0] as properties
-            """)
+                """)
+                
+                if rels_schema:
+                    schema_parts.append("\nRelationships:")
+                    for rel in rels_schema:
+                        props = rel.get('properties', [])
+                        schema_parts.append(f"- Type: {rel['relationType']}")
+                        if props:
+                            schema_parts.append("  Properties: " + ", ".join(props))
+                        else:
+                            schema_parts.append("  Properties: none")
+            except Exception as e:
+                self.logger.warning(f"Failed to get relationship schema: {str(e)}")
+                schema_parts.append("Relationships: Unable to retrieve relationship information")
             
             # Get relationship patterns
-            rel_patterns = self.execute_query("""
-            MATCH (start)-[r]->(end)
-            RETURN DISTINCT
-                labels(start)[0] as fromLabel,
-                type(r) as relType,
-                labels(end)[0] as toLabel
-            """)
+            try:
+                rel_patterns = self.execute_query("""
+                MATCH (start)-[r]->(end)
+                RETURN DISTINCT
+                    labels(start)[0] as fromLabel,
+                    type(r) as relType,
+                    labels(end)[0] as toLabel
+                """)
+                
+                if rel_patterns:
+                    schema_parts.append("\nRelationship Patterns:")
+                    for pattern in rel_patterns:
+                        schema_parts.append(
+                            f"- ({pattern['fromLabel']})-[:{pattern['relType']}]->({pattern['toLabel']})"
+                        )
+                else:
+                    schema_parts.append("\nRelationship Patterns: No patterns found")
+            except Exception as e:
+                self.logger.warning(f"Failed to get relationship patterns: {str(e)}")
+                schema_parts.append("Relationship Patterns: Unable to retrieve pattern information")
             
-            # Format schema as detailed string
-            schema = []
-            
-            # Add nodes section
-            schema.append("Nodes:")
-            for node in nodes_schema:
-                props = node['properties'] or []
-                schema.append(f"- Label: {node['nodeType']}")
-                schema.append("  Properties: " + ", ".join(props))
-            
-            # Add relationships section
-            schema.append("\nRelationships:")
-            for rel in rels_schema:
-                props = rel['properties'] or []
-                schema.append(f"- Type: {rel['relationType']}")
-                schema.append("  Properties: " + ", ".join(props))
-            
-            # Add relationship patterns section
-            schema.append("\nRelationship Patterns:")
-            for pattern in rel_patterns:
-                schema.append(
-                    f"- ({pattern['fromLabel']})-[:{pattern['relType']}]->({pattern['toLabel']})"
-                )
-            
-            return "\n".join(schema)
+            if not schema_parts:
+                return "Database is empty or schema information is not accessible"
+                
+            return "\n".join(schema_parts)
             
         except Exception as e:
             self.logger.error(f"Failed to get database schema: {str(e)}")
-            return "Schema retrieval failed"
+            return f"Schema retrieval failed: {str(e)}"
 
     def create_text_index(self, label: str, properties: List[str]) -> bool:
         """
