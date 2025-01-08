@@ -275,8 +275,8 @@ class GraphDB:
                 WITH label, n
                 LIMIT 1
                 RETURN collect(keys(n)) as properties
-            }
-            RETURN label as nodeType, properties[0] as properties
+            } AS subquery
+            RETURN label as nodeType, subquery.properties[0] as properties
             """)
             
             # Get relationship types and their properties
