@@ -264,9 +264,13 @@ class CodeExecutor:
             'environment': environment
         }
         
-        # Setup default volumes
+        # Setup default volumes with expanded home directory path
+        workspace_path = os.path.expanduser('~/.pyasco/workspace')
+        # Ensure the directory exists
+        os.makedirs(workspace_path, exist_ok=True)
+        
         volumes = {
-            '/.pyasco/workspace': {'bind': '/pyasco', 'mode': 'rw'}
+            workspace_path: {'bind': '/pyasco', 'mode': 'rw'}
         }
         
         # Add specific Docker options
