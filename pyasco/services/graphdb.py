@@ -274,14 +274,17 @@ class GraphDB:
             try:
                 nodes_schema = self.execute_query("""
                 CALL db.labels() YIELD label
-                OPTIONAL MATCH (n:`${label}`)
-                WITH label, n
-                RETURN DISTINCT label as nodeType, 
-                       CASE WHEN n IS NOT NULL 
-                            THEN keys(n) 
-                            ELSE [] 
-                       END as properties
-                LIMIT 1
+                WITH label
+                OPTIONAL MATCH (n)
+                WHERE label in labels(n)
+                WITH label, collect(DISTINCT keys(n)) as allProperties
+                RETURN DISTINCT 
+                    label as nodeType,
+                    CASE 
+                        WHEN size(allProperties) > 0 
+                        THEN reduce(props = [], prop IN allProperties | props + prop)
+                        ELSE []
+                    END as properties
                 """)
                 
                 if nodes_schema:
