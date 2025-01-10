@@ -174,79 +174,30 @@ class CodeExecutor:
             return None, str(e)
 
     def _execute_in_docker(self, code: str) -> Tuple[Optional[str], Optional[str]]:
-        """Execute code inside Docker container using persistent Python process"""
+        """Execute code inside Docker container using python -c"""
         try:
-            # Generate unique execution ID
-            exec_id = str(time.time())
-            self.logger.info(f"Starting Docker execution with ID: {exec_id}")
+            self.logger.info("Starting Docker execution")
             self.logger.debug(f"Code to execute:\n{code}")
             
-            # Clean up old files and verify cleanup
-            self.logger.debug("Cleaning up previous execution files")
-            cleanup_result = self.container.exec_run(
-                ['rm', '-f', '/tmp/pyasco/output.json', '/tmp/pyasco/done', '/tmp/pyasco/exec_id'])
-            if cleanup_result.exit_code != 0:
-                self.logger.error("Failed to cleanup previous execution files")
-                return None, "Failed to cleanup previous execution files"
-
-            # Write execution ID and code
-            self.logger.debug("Writing execution ID and code files")
-            write_result = self.container.exec_run(['bash', '-c', 
-                f'echo "{exec_id}" > /tmp/pyasco/exec_id && '
-                f'cat > /tmp/pyasco/input.py << EOL\n{code}\nEOL'])
-            if write_result.exit_code != 0:
-                self.logger.error("Failed to write input files")
-                return None, "Failed to write input files"
+            # Execute code directly using python -c
+            exit_code, (stdout, stderr) = self.container.exec_run(
+                [self.python_command, '-c', code],
+                demux=True
+            )
             
-            # Wait for execution
-            self.logger.debug("Waiting for code execution to complete")
-            for attempt in range(1200):
-                if self.container.exec_run(['test', '-f', '/tmp/pyasco/done']).exit_code == 0:
-                    # Verify it's our execution
-                    id_check = self.container.exec_run(['cat', '/tmp/pyasco/exec_id'])
-                    if id_check.exit_code == 0 and id_check.output.decode('utf-8').strip() == exec_id:
-                        self.logger.info(f"Execution completed after {attempt} checks")
-                        break
-                time.sleep(0.1)
-            else:
-                self.logger.error("Execution timed out")
-                return None, "Execution timeout"
+            stdout = stdout.decode('utf-8') if stdout else None
+            stderr = stderr.decode('utf-8') if stderr else None
             
-            self.logger.debug("Reading execution output")
-            output = self.container.exec_run(['cat', '/tmp/pyasco/output.json'])
-            if output.exit_code != 0:
-                self.logger.error("Failed to read output file")
-                return None, "Failed to read output"
-                
-            try:
-                raw_output = output.output.decode('utf-8')
-                self.logger.debug(f"Raw output from container: {raw_output}")
-                result = json.loads(raw_output)
-                self.logger.info("Successfully parsed execution output")
-                self.logger.debug(f"Full execution result: {result}")
-                self.logger.debug(f"Stdout length: {len(result['stdout']) if result['stdout'] else 0}")
-                self.logger.debug(f"Stderr length: {len(result['stderr']) if result['stderr'] else 0}")
-                self.logger.debug(f"Stdout content: {result['stdout']}")
-                self.logger.debug(f"Stderr content: {result['stderr']}")
-                return result['stdout'], result['stderr']
-            except json.JSONDecodeError as e:
-                self.logger.error(f"Failed to parse output JSON: {e}")
-                return None, f"Failed to parse output: {str(e)}"
+            if exit_code != 0 and not stderr:
+                stderr = f"Exit code: {exit_code}"
+                    
+            return stdout, stderr
         except Exception as e:
             self.logger.error(f"Docker execution error: {str(e)}", exc_info=True)
             return None, str(e)
                     
     def _start_container(self):
-        """Initialize and start a new Docker container with all required setup"""
-        # Try to use saved state image if it exists
-        container_image = self.docker_image
-        try:
-            saved_image = f"{self.docker_image.split(':')[0]}:latest_state"
-            self.docker_client.images.get(saved_image)
-            container_image = saved_image
-        except docker.errors.ImageNotFound:
-            pass
-
+        """Initialize and start a new Docker container"""
         # Load environment variables if env_file exists
         environment = {}
         if self.env_file and os.path.exists(self.env_file):
@@ -266,7 +217,6 @@ class CodeExecutor:
         
         # Setup default volumes with expanded home directory path
         workspace_path = os.path.expanduser('~/.pyasco/workspace')
-        # Ensure the directory exists
         os.makedirs(workspace_path, exist_ok=True)
         
         volumes = {
@@ -285,29 +235,9 @@ class CodeExecutor:
 
         # Create container
         self.container = self.docker_client.containers.run(
-            container_image,
+            self.docker_image,
             **container_options
         )
-        
-        # Install required packages and setup kernel
-        print("Setting up IPython kernel in container...")
-        setup_cmd = """
-        pip install jupyter_client ipykernel > /dev/null 2>&1
-        python -m ipykernel install --user
-        mkdir -p /root/.local/share/jupyter/runtime
-        """
-        self.container.exec_run(['bash', '-c', setup_cmd])
-        print("IPython kernel setup completed")
-        
-        # Create directories for communication
-        self.container.exec_run(['mkdir', '-p', '/tmp/pyasco'])
-        
-        # Start Python server with kernel
-        server_path = os.path.join(os.path.dirname(__file__), 'python_server.py')
-        with open(server_path, 'r') as f:
-            server_code = f.read()
-        self.container.exec_run(['bash', '-c', f'cat > /tmp/server.py << EOL\n{server_code}\nEOL'])
-        self.container.exec_run(['python', '/tmp/server.py'], detach=True)
 
     def cleanup(self):
         """Cleanup all resources properly"""
