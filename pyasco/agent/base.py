@@ -4,7 +4,7 @@ import re
 
 from ..logger_config import setup_logger
 from .conversation import Conversation
-from ..services.duckdb_memory import DuckDBMemoryHandler
+from ..services.lance_memory import LanceDBMemoryHandler
 from ..services.embedding import EmbeddingService
 from .prompt import (
     DEFAULT_SYSTEM_PROMPT,
@@ -53,9 +53,10 @@ class Agent:
         if hasattr(config, 'memory') and config.memory.enabled:
             self.embedding_service = EmbeddingService()
             
-            self.memory_handler = DuckDBMemoryHandler(
+            self.memory_handler = LanceDBMemoryHandler(
                 llm_service=self.llm_service,
-                embedding_service=self.embedding_service
+                embedding_service=self.embedding_service,
+                db_path=config.memory.db_path if hasattr(config.memory, 'db_path') else "~/.pyasco/memories"
             )
         
         # Initialize handlers
