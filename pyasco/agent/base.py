@@ -136,15 +136,22 @@ class Agent:
         self.logger.info(f"Getting response for user input (stream={stream})")
         
         context = None
+        recalled_memories = []
         if self.memory_handler and self._needs_recall(user_input):
             try:
-                recalled_context = self.memory_handler.recall(user_input, similarity_threshold=0.7)
-                if recalled_context:
+                recalled_memories = self.memory_handler.recall(user_input, similarity_threshold=0.7)
+                if recalled_memories:
+                    # Format memories for context
+                    memory_text = "\n\n".join([
+                        f"Memory from {mem.get('created_at', 'unknown time')}:\n{mem.get('content', '')}"
+                        for mem in recalled_memories
+                    ])
                     context = {
                         "type": "memory_recall",
-                        "recalled": recalled_context
+                        "recalled": recalled_memories,
+                        "memory_text": memory_text
                     }
-                    self.logger.info(f"Recalled {len(recalled_context)} relevant memories")
+                    self.logger.info(f"Recalled {len(recalled_memories)} relevant memories")
             except Exception as e:
                 self.logger.error(f"Failed to recall context: {str(e)}")
 
