@@ -11,21 +11,20 @@ from ..services.duckdb_memory import DuckDBMemoryHandler
 def demonstrate_memory_operations(memory_handler: DuckDBMemoryHandler, debug: bool = False):
     """Demonstrate memory storage and retrieval operations"""
     
-    # Example conversation to store
+    # Example user insights to store
     conversation = """
-    User: How do I create a virtual environment in Python?
-    Assistant: To create a virtual environment in Python, you can use the following steps:
-    1. Open your terminal
-    2. Navigate to your project directory
-    3. Run 'python -m venv myenv'
-    4. Activate it using 'source myenv/bin/activate' on Unix/macOS or 'myenv\\Scripts\\activate' on Windows
+    User: I prefer working late at night because it's quieter and I can focus better.
+    Assistant: I understand. Your preference for night work seems related to:
+    - Reduced distractions during quiet hours
+    - Better focus and concentration
+    - More peaceful work environment
     
-    User: What's the difference between pip and conda?
-    Assistant: Pip and conda have several key differences:
-    - Pip is Python's package installer, while conda is a package manager for any software
-    - Conda can manage different Python versions, pip cannot
-    - Conda handles dependencies at the environment level, pip handles them at the package level
-    - Conda packages are binaries, while pip typically builds packages from source
+    User: I find that I learn programming concepts better when I build small projects.
+    Assistant: That's a valuable insight about your learning style:
+    - Hands-on learning through practical projects
+    - Active engagement rather than passive reading
+    - Real-world application of concepts
+    - Learning through trial and error
     """
     
     print("\n=== Storing Memories ===")
@@ -38,9 +37,9 @@ def demonstrate_memory_operations(memory_handler: DuckDBMemoryHandler, debug: bo
 
     # Example queries to demonstrate recall
     queries = [
-        "How do I set up Python environments?",
-        "What are package managers in Python?",
-        "How do I install packages?"
+        "How does the user prefer to work?",
+        "What's the user's learning style?",
+        "When is the user most productive?"
     ]
     
     print("\n=== Recalling Memories ===")
