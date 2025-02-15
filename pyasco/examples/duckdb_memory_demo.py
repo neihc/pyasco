@@ -6,9 +6,9 @@ import yaml
 from ..config import Config, ConfigManager
 from ..services.llm import LLMService
 from ..services.embedding import EmbeddingService
-from ..services.duckdb_memory import DuckDBMemoryHandler
+from ..services.lance_memory import LanceDBMemoryHandler
 
-def demonstrate_memory_operations(memory_handler: DuckDBMemoryHandler, debug: bool = False):
+def demonstrate_memory_operations(memory_handler: LanceDBMemoryHandler, debug: bool = False):
     """Demonstrate memory storage and retrieval operations"""
     
     # Example user insights to store
@@ -59,17 +59,19 @@ def main():
     embedding_service = EmbeddingService()
     
     # Initialize memory handler with custom path for demo
-    memory_handler = DuckDBMemoryHandler(
+    memory_handler = LanceDBMemoryHandler(
         llm_service=llm_service,
         embedding_service=embedding_service,
+        db_path="demo_memories.lance"
     )
     
     try:
         demonstrate_memory_operations(memory_handler, debug=args.debug)
     finally:
         # Cleanup
-        if os.path.exists("demo_memories.db"):
-            os.remove("demo_memories.db")
+        if os.path.exists("demo_memories.lance"):
+            import shutil
+            shutil.rmtree("demo_memories.lance")
 
 if __name__ == "__main__":
     main()
