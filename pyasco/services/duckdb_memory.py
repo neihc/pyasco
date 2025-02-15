@@ -35,7 +35,7 @@ class DuckDBMemoryHandler:
             CREATE TABLE IF NOT EXISTS memories (
                 id INTEGER PRIMARY KEY,
                 content TEXT NOT NULL,
-                embedding FLOAT[1024] NOT NULL,
+                embedding DOUBLE[1024] NOT NULL,
                 metadata JSON,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
@@ -125,7 +125,7 @@ class DuckDBMemoryHandler:
             # Store in database with embedding as FLOAT array
             self.conn.execute("""
                 INSERT INTO memories (content, embedding, metadata)
-                VALUES (?, ?::FLOAT[], ?);
+                VALUES (?, ?::DOUBLE[], ?);
             """, [memory["content"], embedding.tolist(), json.dumps(metadata)])
             
             stored_memories.append({
