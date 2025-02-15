@@ -46,7 +46,8 @@ class DuckDBMemoryHandler:
         self.conn.execute("""
             CREATE INDEX IF NOT EXISTS memory_embedding_idx 
             ON memories 
-            USING HNSW (embedding);
+            USING HNSW (embedding)
+            WITH (metric = 'cosine');
         """)
 
     def remember(self, content: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -147,7 +148,7 @@ class DuckDBMemoryHandler:
             "memories": stored_memories
         }
 
-    def recall(self, query: str, limit: int = 5, similarity_threshold: float = 0.7) -> List[Dict[str, Any]]:
+    def recall(self, query: str, limit: int = 5, similarity_threshold: float = 0.3) -> List[Dict[str, Any]]:
         """
         Recall relevant memories based on semantic similarity
         
@@ -161,17 +162,17 @@ class DuckDBMemoryHandler:
         """
         # Get embedding and ensure it's the right shape
         query_embedding = self.embedding_service.get_embedding(query)
-        query_embedding = query_embedding.flatten().tolist()  # Flatten to 1D list
+        query_embedding = query_embedding[0].tolist()  # Flatten to 1D list
         
         results = self.conn.execute("""
             SELECT 
                 content,
                 metadata,
-                1 - array_distance(embedding, ?::FLOAT[1024]) as similarity,
+                array_cosine_distance(embedding, ?::FLOAT[1024]) as similarity,
                 created_at
             FROM memories
-            WHERE 1 - array_distance(embedding, ?::FLOAT[1024]) >= ?
-            ORDER BY array_distance(embedding, ?::FLOAT[1024])
+            WHERE array_cosine_distance(embedding, ?::FLOAT[1024]) >= ?
+            ORDER BY array_cosine_distance(embedding, ?::FLOAT[1024]) DESC
             LIMIT ?;
         """, [
             query_embedding,
