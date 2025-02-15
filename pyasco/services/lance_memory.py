@@ -226,6 +226,7 @@ class LanceDBMemoryHandler:
         results = table.search(query_embedding).metric("cosine").limit(limit).to_df()
         
         memories = []
+        import pdb; pdb.set_trace()
         for _, row in results.iterrows():
             if row._distance > (1 - similarity_threshold):  # Convert cosine similarity to distance
                 continue
