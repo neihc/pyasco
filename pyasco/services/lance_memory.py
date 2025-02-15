@@ -9,11 +9,10 @@ import pandas as pd
 import pyarrow as pa
 from lancedb.pydantic import Vector, LanceModel
 from lancedb.embeddings import get_registry
-from pydantic import Field
+from lancedb.rerankers import LinearCombinationReranker
 import os
 
 from ..services.llm import LLMService
-from ..services.embedding import EmbeddingService
 from ..services.code_snippet_extractor import CodeSnippetExtractor
 
 # Get Jina embedding function
@@ -25,7 +24,7 @@ class Memory(LanceModel):
     """Pydantic model for memory table schema"""
     id: str
     content: str = jina_embed.SourceField()
-    vector: Vector(jina_embed.ndims()) = jina_embed.VectorField()
+    vector: Vector(1024) = jina_embed.VectorField()
     memory_type: str
     meta: str  # JSON string
     tags: List[str]
@@ -237,9 +236,11 @@ class LanceDBMemoryHandler:
         # Jina will handle the embedding automatically
         current_time = datetime.now()
         
+        reranker = LinearCombinationReranker(weight=hybrid_weight)
         # Perform hybrid search using vector and text query
         results = (
             table.search(query, query_type="hybrid")
+            .rerank(reranker)
             .limit(limit)
             .to_pandas()
         )
