@@ -35,7 +35,7 @@ class DuckDBMemoryHandler:
             CREATE TABLE IF NOT EXISTS memories (
                 id INTEGER PRIMARY KEY,
                 content TEXT NOT NULL,
-                embedding FLOAT[] NOT NULL,
+                embedding FLOAT[1024] NOT NULL,
                 metadata JSON,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
@@ -45,7 +45,7 @@ class DuckDBMemoryHandler:
         self.conn.execute("""
             CREATE INDEX IF NOT EXISTS memory_embedding_idx 
             ON memories 
-            USING HNSW (embedding vector_type='float');
+            USING HNSW (embedding);
         """)
 
     def remember(self, content: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
