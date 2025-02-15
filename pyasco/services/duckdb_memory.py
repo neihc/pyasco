@@ -60,38 +60,77 @@ class DuckDBMemoryHandler:
             Dict containing status and extracted memories
         """
         # Use LLM to extract meaningful memories
-        prompt = f"""Extract independent meaningful memories from the following content. 
-        Each memory should be self-contained and meaningful on its own.
-        Return the memories as a JSON array of strings.
+        prompt = f"""
+        Process the following content into meaningful memories.
+        Each memory should be self-contained and include relevant metadata.
         
-        Content: {content}"""
+        CONTENT:
+        {content}
         
-        response = self.llm_service.get_response([
-            {"role": "system", "content": "You are a helpful assistant that extracts meaningful memories from text."},
-            {"role": "user", "content": prompt}
-        ])
+        CONTEXT:
+        {context or {}}
         
+        Return a JSON object wrapped in a code block with this structure:
+        ```json
+        {{
+            "memories": [
+                {{
+                    "content": "the actual memory text",
+                    "type": "observation|fact|concept|relationship",
+                    "confidence": 0.0-1.0,
+                    "metadata": {{
+                        "source": "original text",
+                        "extracted_at": "timestamp",
+                        "additional_context": "any relevant context"
+                    }}
+                }}
+            ]
+        }}
+        ```
+        """
+        
+        response = self.llm_service.get_response([{
+            "role": "user",
+            "content": prompt
+        }])
+        
+        # Extract JSON from code block
+        import re
+        json_match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
+        if not json_match:
+            raise ValueError("No JSON structure found in LLM response")
+            
         try:
-            memories = json.loads(response.content)
-            if not isinstance(memories, list):
-                raise ValueError("Expected JSON array of memories")
+            memories_data = json.loads(json_match.group(1))
+            if not isinstance(memories_data, dict) or "memories" not in memories_
+                raise ValueError("Invalid memories structure in response")
+            memories = memories_data["memories"]
         except (json.JSONDecodeError, ValueError) as e:
             raise Exception(f"Failed to parse memories from LLM response: {e}")
 
         stored_memories = []
         for memory in memories:
-            # Generate embedding
-            embedding = self.embedding_service.get_embedding(memory)
+            # Generate embedding for the memory content
+            embedding = self.embedding_service.get_embedding(memory["content"])
+            
+            # Combine memory metadata with context
+            metadata = memory.get("metadata", {})
+            if context:
+                metadata.update(context)
+            
+            # Add memory type and confidence
+            metadata["memory_type"] = memory.get("type", "observation")
+            metadata["confidence"] = memory.get("confidence", 1.0)
             
             # Store in database with embedding as FLOAT array
             self.conn.execute("""
                 INSERT INTO memories (content, embedding, metadata)
                 VALUES (?, ?::FLOAT[], ?);
-            """, [memory, embedding.tolist(), json.dumps(context or {})])
+            """, [memory["content"], embedding.tolist(), json.dumps(metadata)])
             
             stored_memories.append({
-                "content": memory,
-                "metadata": context
+                "content": memory["content"],
+                "metadata": metadata
             })
             
         return {
