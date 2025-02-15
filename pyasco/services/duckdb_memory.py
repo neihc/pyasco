@@ -126,7 +126,7 @@ class DuckDBMemoryHandler:
             self.conn.execute("""
                 INSERT INTO memories (content, embedding, metadata)
                 VALUES (?, ?::FLOAT[], ?);
-            """, [memory["content"], embedding.tolist(), json.dumps(metadata)])
+            """, [memory["content"], embedding[0].tolist(), json.dumps(metadata)])
             
             stored_memories.append({
                 "content": memory["content"],
