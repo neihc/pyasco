@@ -39,6 +39,7 @@ class DuckDBMemoryHandler:
                 id UUID PRIMARY KEY,
                 content TEXT NOT NULL,
                 embedding FLOAT[1024] NOT NULL,
+                memory_type TEXT NOT NULL DEFAULT 'observation',
                 metadata JSON,
                 tags TEXT[],
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -162,7 +163,6 @@ class DuckDBMemoryHandler:
                 "importance_level": memory.get("metadata", {}).get("importance_level", 0.5),
                 "last_accessed": datetime.now().isoformat(),
                 "access_count": 0,
-                "memory_type": memory.get("type", "observation"),
                 "confidence": memory.get("confidence", 1.0)
             }
             
@@ -187,6 +187,7 @@ class DuckDBMemoryHandler:
                     UPDATE memories 
                     SET content = ?,
                         embedding = ?::FLOAT[],
+                        memory_type = ?,
                         metadata = ?,
                         tags = ?::TEXT[],
                         valid_from = ?::TIMESTAMP,
@@ -195,6 +196,7 @@ class DuckDBMemoryHandler:
                     WHERE id = ?;
                 """, [
                     memory["content"], embedding[0].tolist(),
+                    memory.get("type", "observation"),
                     json.dumps(metadata), tags,
                     valid_from, valid_until, event_time,
                     memory_id
@@ -202,13 +204,14 @@ class DuckDBMemoryHandler:
             else:
                 self.conn.execute("""
                     INSERT INTO memories (
-                        id, content, embedding, metadata, tags,
+                        id, content, embedding, memory_type, metadata, tags,
                         valid_from, valid_until, event_time
                     )
-                    VALUES (?, ?, ?::FLOAT[], ?, ?::TEXT[],
+                    VALUES (?, ?, ?::FLOAT[], ?, ?, ?::TEXT[],
                             ?::TIMESTAMP, ?::TIMESTAMP, ?::TIMESTAMP);
                 """, [
                 memory_id, memory["content"], embedding[0].tolist(),
+                memory.get("type", "observation"),
                 json.dumps(metadata), tags,
                 valid_from, valid_until, event_time
             ])
