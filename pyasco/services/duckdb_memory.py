@@ -105,15 +105,16 @@ class DuckDBMemoryHandler:
             "content": prompt
         }])
         
-        # Extract JSON from code block
-        import re
-        json_match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
-        if not json_match:
+        # Extract JSON using CodeSnippetExtractor
+        snippets = self.code_extractor.extract_snippets(response)
+        json_snippets = [s for s in snippets if s.language == "json"]
+        
+        if not json_snippets:
             raise ValueError("No JSON structure found in LLM response")
             
         try:
-            memories_data = json.loads(json_match.group(1))
-            if not isinstance(memories_data, dict) or "memories" not in memories_data:
+            memories_data = json.loads(json_snippets[0].content)
+            if not isinstance(memories_data, dict) or "memories" not in memories_
                 raise ValueError("Invalid memories structure in response")
             memories = memories_data["memories"]
         except (json.JSONDecodeError, ValueError) as e:
