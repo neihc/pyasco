@@ -35,7 +35,7 @@ class DuckDBMemoryHandler:
             CREATE TABLE IF NOT EXISTS memories (
                 id INTEGER PRIMARY KEY,
                 content TEXT NOT NULL,
-                embedding FLOAT[1536] NOT NULL,
+                embedding REAL[1536] NOT NULL,
                 metadata JSON,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
@@ -86,7 +86,7 @@ class DuckDBMemoryHandler:
             # Store in database with embedding as FLOAT array
             self.conn.execute("""
                 INSERT INTO memories (content, embedding, metadata)
-                VALUES (?, ?::FLOAT[], ?);
+                VALUES (?, ?::REAL[], ?);
             """, [memory, embedding.tolist(), json.dumps(context or {})])
             
             stored_memories.append({
@@ -117,11 +117,11 @@ class DuckDBMemoryHandler:
             SELECT 
                 content,
                 meta:JSON as metadata,
-                1 - array_distance(embedding, ?::FLOAT[1536]) as similarity,
+                1 - array_distance(embedding, ?::REAL[1536]) as similarity,
                 created_at
             FROM memories
-            WHERE 1 - array_distance(embedding, ?::FLOAT[1536]) >= ?
-            ORDER BY array_distance(embedding, ?::FLOAT[1536])
+            WHERE 1 - array_distance(embedding, ?::REAL[1536]) >= ?
+            ORDER BY array_distance(embedding, ?::REAL[1536])
             LIMIT ?;
         """, [
             query_embedding.tolist(),
