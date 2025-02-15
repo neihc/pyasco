@@ -227,28 +227,13 @@ class LanceDBMemoryHandler:
         table = self.db.open_table("memories")
         current_time = datetime.now()
         
-        # Perform hybrid search combining vector and full-text
-        vector_search = table.search(query_embedding).metric("cosine")
-        text_search = table.search(query).fts_query("content")
-        
-        # Combine searches with weighted score
+        # Perform hybrid search using vector and text query
         results = (
-            vector_search.limit(limit * 2)  # Get more results for reranking
-            .join(
-                text_search.limit(limit * 2),
-                how="outer",
-                on="id"
-            )
-            .select(
-                "*",
-                # Combine scores with weighted average
-                expr=f"coalesce(_distance_1 * {hybrid_weight} + _distance_2 * (1 - {hybrid_weight}), "
-                     f"_distance_1 * {hybrid_weight}, "
-                     f"_distance_2 * (1 - {hybrid_weight})) as hybrid_score"
-            )
-            .sort("hybrid_score")
+            table.search(query_type="hybrid")
+            .vector(query_embedding)
+            .text(query, column="content")
             .limit(limit)
-            .to_df()
+            .to_pandas()
         )
         
         memories = []
