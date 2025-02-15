@@ -248,7 +248,7 @@ class LanceDBMemoryHandler:
         memories = []
         import pdb; pdb.set_trace()
         for _, row in results.iterrows():
-            if row._distance > (1 - similarity_threshold):  # Convert cosine similarity to distance
+            if row._relevance_score < similarity_threshold:  # Check if relevance score is below threshold
                 continue
                 
             # Check temporal validity
@@ -294,7 +294,7 @@ class LanceDBMemoryHandler:
                 "id": str(row.id),
                 "content": row.content,
                 "metadata": metadata,
-                "similarity": 1 - float(row._distance),  # Convert distance back to similarity
+                "similarity": float(row._relevance_score),  # Use relevance score directly
                 "created_at": row.created_at.isoformat() if row.created_at else None,
                 "tags": row.tags,
                 "valid_from": row.valid_from.isoformat() if row.valid_from else None,
