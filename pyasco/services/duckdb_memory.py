@@ -102,7 +102,7 @@ class DuckDBMemoryHandler:
             
         try:
             memories_data = json.loads(json_match.group(1))
-            if not isinstance(memories_data, dict) or "memories" not in memories_
+            if not isinstance(memories_data, dict) or "memories" not in memories_data:
                 raise ValueError("Invalid memories structure in response")
             memories = memories_data["memories"]
         except (json.JSONDecodeError, ValueError) as e:
