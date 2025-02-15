@@ -29,6 +29,7 @@ class DuckDBMemoryHandler:
     def _initialize_db(self):
         """Initialize the database schema with VSS extension support"""
         # Install and load VSS extension
+        import pdb; pdb.set_trace()
         self.conn.execute("INSTALL vss;")
         self.conn.execute("LOAD vss;")
         self.conn.execute("SET hnsw_enable_experimental_persistence=true;")
@@ -256,7 +257,7 @@ class DuckDBMemoryHandler:
                 id,
                 content,
                 metadata,
-                array_cosine_distance(embedding, $query_embedding::FLOAT[1024]) as similarity,
+                array_cosine_similarity(embedding, $query_embedding::FLOAT[1024]) as similarity,
                 created_at,
                 tags,
                 valid_from,
@@ -264,14 +265,14 @@ class DuckDBMemoryHandler:
                 event_time,
                 embedding
             FROM memories
-            WHERE array_cosine_distance(embedding, $query_embedding::FLOAT[1024]) >= $similarity_threshold
+            WHERE array_cosine_similarity(embedding, $query_embedding::FLOAT[1024]) >= $similarity_threshold
             AND (
                 (valid_from IS NULL AND valid_until IS NULL) OR
                 (valid_from IS NULL AND valid_until > CURRENT_TIMESTAMP) OR
                 (valid_from <= CURRENT_TIMESTAMP AND valid_until IS NULL) OR
                 (valid_from <= CURRENT_TIMESTAMP AND valid_until > CURRENT_TIMESTAMP)
             )
-            ORDER BY array_cosine_distance(embedding, $query_embedding::FLOAT[1024]) DESC
+            ORDER BY array_cosine_similarity(embedding, $query_embedding::FLOAT[1024]) DESC
             LIMIT $limit;
         """
         params = {
