@@ -11,28 +11,64 @@ from ..services.lance_memory import LanceDBMemoryHandler
 def demonstrate_memory_operations(memory_handler: LanceDBMemoryHandler, debug: bool = False):
     """Demonstrate memory storage and retrieval operations"""
     
-    # Example user insights to store
-    conversation = """
+    print("\n=== Storing New Memories ===")
+    # Store initial memory about user preferences
+    initial_memory = """
     User: I prefer working late at night because it's quieter and I can focus better.
     Assistant: I understand. Your preference for night work seems related to:
     - Reduced distractions during quiet hours
     - Better focus and concentration
     - More peaceful work environment
-    
+    """
+    result = memory_handler.remember(initial_memory, context={"source": "chat"})
+    print("Stored initial memory about work preferences")
+    if debug:
+        print(f"Result: {result}")
+
+    # Store memory about learning style
+    learning_memory = """
     User: I find that I learn programming concepts better when I build small projects.
     Assistant: That's a valuable insight about your learning style:
     - Hands-on learning through practical projects
     - Active engagement rather than passive reading
     - Real-world application of concepts
-    - Learning through trial and error
     """
-    
+    result = memory_handler.remember(learning_memory, context={"source": "chat"})
+    print("Stored memory about learning preferences")
+
+    print("\n=== Updating Existing Memory ===")
+    # Update with more specific information
+    update_memory = """
+    User: Actually, I specifically prefer coding between 10 PM and 2 AM, and I'm most productive 
+    during these hours. The complete silence helps me solve complex problems.
+    """
+    # First recall existing memory to update
+    existing = memory_handler.recall("working late at night", limit=1)
+    if existing:
+        result = memory_handler.remember(update_memory, 
+                                       context={"source": "chat", "update": True},
+                                       related_memories=existing)
+        print("Updated work schedule preferences with specific hours")
+
+    print("\n=== Adding New Related Memory ===")
+    # Add related information
+    additional_memory = """
+    User: I've also noticed I need at least 7 hours of sleep to maintain this schedule,
+    so I usually wake up around 9 AM to stay productive.
+    """
+    result = memory_handler.remember(additional_memory, 
+                                   context={"source": "chat"},
+                                   related_memories=existing)
+    print("Added sleep schedule information")
+
     # Example queries to demonstrate recall
+    print("\n=== Recalling Memories ===")
     queries = [
-        "Do you know my name?",
+        "What are the user's work preferences?",
+        "How does the user learn best?",
+        "What do we know about the user's sleep schedule?"
     ]
     
-    print("\n=== Recalling Memories ===")
     for query in queries:
         print(f"\nQuery: {query}")
         memories = memory_handler.recall(query, limit=2)
