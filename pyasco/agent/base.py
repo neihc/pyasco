@@ -226,9 +226,9 @@ class Agent:
             return
             
         try:
-            # Convert conversation to storable format with related nodes
+            # Convert conversation to storable format
             messages_data = []
-            related_nodes = {}
+            recalled_memories = []
             
             for msg in self.conversation.messages:
                 if msg.role == "system":  # Skip system messages
@@ -236,29 +236,10 @@ class Agent:
                 
                 message_text = f"{msg.role}: {msg.content}"
                 
-                # If message has context data, store it
-                if msg.context:
-                    if msg.context.get("type") == "memory_recall":
-                        recalled = msg.context.get("recalled", [])
-                        for result in recalled:
-                            if not isinstance(result, dict):
-                                continue
-                                
-                            node = result.get('node', {})
-                            node_id = node.element_id if hasattr(node, 'element_id') else str(hash(str(node)))
-                            
-                            if node_id and node_id not in related_nodes:
-                                # Store all node properties excluding embeddings
-                                properties = {k: v for k, v in dict(node).items() if k != 'embedding'}
-                                labels = list(node.labels) if hasattr(node, 'labels') else ['Unknown']
-                                
-                                related_nodes[node_id] = {
-                                    'node_id': node_id,
-                                    'properties': properties,
-                                    'labels': labels,
-                                    'relevance': result.get('score', 0.0)
-                                }
-                                message_text += f" [ref: {node_id}]"
+                # Collect recalled memories from context
+                if msg.context and msg.context.get("type") == "memory_recall":
+                    recalled = msg.context.get("recalled", [])
+                    recalled_memories.extend(recalled)
                 
                 messages_data.append(message_text)
             
@@ -267,24 +248,14 @@ class Agent:
             if not conversation_text.strip():
                 self.logger.debug("No conversation content to store")
                 return
-                
-            # Check if this conversation is already stored
-            if self.memory_handler and hasattr(self.memory_handler, 'graph_db'):
-                existing = self.memory_handler.graph_db.execute_query(
-                    "MATCH (n) WHERE n.conversation_id = $conv_id RETURN n",
-                    {"conv_id": self.conversation_id}
-                )
-                if existing:
-                    self.logger.debug(f"Conversation {self.conversation_id} already stored")
-                    return
-                
+            
             # Add context about the conversation
             context = {
                 "type": "conversation",
                 "conversation_id": self.conversation_id,
                 "timestamp": str(datetime.now()),
                 "message_count": len(self.conversation.messages),
-                "related_nodes": related_nodes,
+                "recalled_memories": recalled_memories,
                 **self.metadata
             }
             
