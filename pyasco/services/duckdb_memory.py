@@ -8,6 +8,7 @@ import uuid
 
 from ..services.llm import LLMService
 from ..services.embedding import EmbeddingService
+from ..services.code_snippet_extractor import CodeSnippetExtractor
 
 class DuckDBMemoryHandler:
     """Handler for processing and storing memories using DuckDB"""
@@ -18,6 +19,7 @@ class DuckDBMemoryHandler:
                  db_path: str = "~/.pyasco/memories.db"):
         self.llm_service = llm_service
         self.embedding_service = embedding_service
+        self.code_extractor = CodeSnippetExtractor()
         self.db_path = Path(db_path).expanduser()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         
