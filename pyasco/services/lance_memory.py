@@ -191,7 +191,7 @@ class LanceDBMemoryHandler:
                 'id': memory_id,
                 'content': memory["content"],
                 'memory_type': memory.get("type", "observation"),
-                'metadata': json.dumps(metadata),
+                'meta': json.dumps(metadata),
                 'tags': tags,
                 'valid_from': valid_from,
                 'valid_until': valid_until,
@@ -279,9 +279,9 @@ class LanceDBMemoryHandler:
             table.add([{
                 'id': row.id,
                 'content': row.content,
-                'embedding': row.embedding,
+                'vector': row.vector,  # Use vector instead of embedding
                 'memory_type': row.memory_type,
-                'metadata': json.dumps(metadata),
+                'meta': json.dumps(metadata),  # Use meta instead of metadata to match schema
                 'tags': row.tags,
                 'valid_from': valid_from,
                 'valid_until': valid_until,
