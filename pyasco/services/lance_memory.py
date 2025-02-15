@@ -16,6 +16,24 @@ from ..services.llm import LLMService
 from ..services.embedding import EmbeddingService
 from ..services.code_snippet_extractor import CodeSnippetExtractor
 
+# Get Jina embedding function
+jina_embed = EmbeddingFunctionRegistry.get_instance().get("jina").create(
+    name="jina-embeddings-v2-base-en"
+)
+
+class Memory(LanceModel):
+    """Pydantic model for memory table schema"""
+    id: str
+    content: str = jina_embed.SourceField()
+    vector: Vector(jina_embed.ndims()) = jina_embed.VectorField()
+    memory_type: str
+    meta: str  # JSON string
+    tags: List[str]
+    created_at: datetime
+    valid_from: Optional[datetime] = None
+    valid_until: Optional[datetime] = None
+    event_time: Optional[datetime] = None
+
 class LanceDBMemoryHandler:
     """Handler for processing and storing memories using LanceDB"""
     
@@ -28,30 +46,13 @@ class LanceDBMemoryHandler:
         self.db_path = Path(db_path).expanduser()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Setup Jina embeddings
+        # Setup Jina API key if provided
         if jina_api_key:
             os.environ['JINA_API_KEY'] = jina_api_key
-        self.jina_embed = EmbeddingFunctionRegistry.get_instance().get("jina").create(
-            name="jina-embeddings-v2-base-en"
-        )
         
         # Connect to LanceDB
         self.db = lancedb.connect(str(self.db_path))
-        # Define Memory model after jina_embed is initialized
-        class Memory(LanceModel):
-            """Pydantic model for memory table schema"""
-            id: str
-            content: str = self.jina_embed.SourceField()
-            vector: Vector(768) = self.jina_embed.VectorField()  # Jina base model has 768 dimensions
-            memory_type: str
-            meta: str  # JSON string
-            tags: List[str]
-            created_at: datetime
-            valid_from: Optional[datetime] = None
-            valid_until: Optional[datetime] = None
-            event_time: Optional[datetime] = None
-            
-        self.Memory = Memory
+        self.Memory = Memory  # Use the globally defined Memory class
         self._initialize_db()
 
 
