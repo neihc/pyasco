@@ -54,18 +54,6 @@ class LanceDBMemoryHandler:
         self.Memory = Memory
         self._initialize_db()
 
-    class Memory(LanceModel):
-        """Pydantic model for memory table schema"""
-        id: str
-        content: str = jina_embed.SourceField()
-        vector: Vector(768) = jina_embed.VectorField()  # Jina base model has 768 dimensions
-        memory_type: str
-        meta: str  # JSON string
-        tags: List[str]
-        created_at: datetime
-        valid_from: Optional[datetime] = None
-        valid_until: Optional[datetime] = None
-        event_time: Optional[datetime] = None
 
     def _initialize_db(self):
         """Initialize the database table with vector search and full-text search support"""
