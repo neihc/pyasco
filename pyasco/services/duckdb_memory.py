@@ -29,7 +29,7 @@ class DuckDBMemoryHandler:
             CREATE TABLE IF NOT EXISTS memories (
                 id INTEGER PRIMARY KEY,
                 content TEXT NOT NULL,
-                embedding DOUBLE[] NOT NULL,
+                embedding TEXT NOT NULL,
                 metadata JSON,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
@@ -37,14 +37,17 @@ class DuckDBMemoryHandler:
         
         # Create embedding similarity search function
         self.conn.execute("""
-            CREATE OR REPLACE FUNCTION cosine_similarity(a DOUBLE[], b DOUBLE[]) 
+            CREATE OR REPLACE FUNCTION cosine_similarity(a TEXT, b TEXT) 
             RETURNS DOUBLE AS '
+                WITH arrays AS (
+                    SELECT 
+                        unnest(string_split(trim(both ''[]'' from a), '','')::DOUBLE[]) as a_val,
+                        unnest(string_split(trim(both ''[]'' from b), '','')::DOUBLE[]) as b_val
+                )
                 SELECT 
                     SUM(a_val * b_val) / 
                     (SQRT(SUM(a_val * a_val)) * SQRT(SUM(b_val * b_val)))
-                FROM (
-                    SELECT UNNEST(a) as a_val, UNNEST(b) as b_val
-                )
+                FROM arrays
             ';
         """)
 
@@ -87,7 +90,7 @@ class DuckDBMemoryHandler:
             self.conn.execute("""
                 INSERT INTO memories (content, embedding, metadata)
                 VALUES (?, ?, ?);
-            """, [memory, embedding.tolist(), json.dumps(context or {})])
+            """, [memory, str(embedding.tolist()), json.dumps(context or {})])
             
             stored_memories.append({
                 "content": memory,
@@ -132,7 +135,7 @@ class DuckDBMemoryHandler:
                 similarity,
                 created_at
             FROM similarity_scores;
-        """, [query_embedding.tolist(), query_embedding.tolist(), similarity_threshold, limit]).fetchall()
+        """, [str(query_embedding.tolist()), str(query_embedding.tolist()), similarity_threshold, limit]).fetchall()
         
         return [{
             "content": row[0],
