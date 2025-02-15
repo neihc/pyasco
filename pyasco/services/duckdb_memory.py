@@ -238,6 +238,7 @@ class DuckDBMemoryHandler:
         
         results = self.conn.execute("""
             SELECT 
+                id,
                 content,
                 metadata,
                 array_cosine_distance(embedding, ?::FLOAT[1024]) as similarity,
@@ -245,7 +246,8 @@ class DuckDBMemoryHandler:
                 tags,
                 valid_from,
                 valid_until,
-                event_time
+                event_time,
+                embedding
             FROM memories
             WHERE array_cosine_distance(embedding, ?::FLOAT[1024]) >= ?
             ORDER BY array_cosine_distance(embedding, ?::FLOAT[1024]) DESC
@@ -269,18 +271,20 @@ class DuckDBMemoryHandler:
             self.conn.execute("""
                 UPDATE memories 
                 SET metadata = ? 
-                WHERE content = ?
-            """, [json.dumps(metadata), row[0]])
+                WHERE id = ?
+            """, [json.dumps(metadata), row[0]])  # row[0] is now the id
             
             memories.append({
-                "content": row[0],
+                "id": str(row[0]),
+                "content": row[1],
                 "metadata": metadata,
-                "similarity": float(row[2]),
-                "created_at": row[3].isoformat() if row[3] else None,
-                "tags": row[4],
-                "valid_from": row[5].isoformat() if row[5] else None,
-                "valid_until": row[6].isoformat() if row[6] else None,
-                "event_time": row[7].isoformat() if row[7] else None
+                "similarity": float(row[3]),
+                "created_at": row[4].isoformat() if row[4] else None,
+                "tags": row[5],
+                "valid_from": row[6].isoformat() if row[6] else None,
+                "valid_until": row[7].isoformat() if row[7] else None,
+                "event_time": row[8].isoformat() if row[8] else None,
+                "embedding": row[9]
             })
             
         return memories
