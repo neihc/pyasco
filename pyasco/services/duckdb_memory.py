@@ -165,11 +165,11 @@ class DuckDBMemoryHandler:
             SELECT 
                 content,
                 metadata,
-                1 - array_distance(embedding, ?::FLOAT[]) as similarity,
+                1 - array_distance(embedding, ?::FLOAT[1024]) as similarity,
                 created_at
             FROM memories
-            WHERE 1 - array_distance(embedding, ?::FLOAT[]) >= ?
-            ORDER BY array_distance(embedding, ?::FLOAT[])
+            WHERE 1 - array_distance(embedding, ?::FLOAT[1024]) >= ?
+            ORDER BY array_distance(embedding, ?::FLOAT[1024])
             LIMIT ?;
         """, [
             query_embedding.tolist(),
