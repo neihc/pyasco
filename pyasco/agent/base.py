@@ -109,6 +109,7 @@ class Agent:
             return False
             
         # Always recall for first message
+        self.logger.info(self.conversation)
         if len(self.conversation.messages) <= 1:  # Only system message present
             return True
             
@@ -129,6 +130,7 @@ class Agent:
         response = self.llm_service.get_response(
             messages=[{"role": "user", "content": prompt}]
         )
+        self.logger.info(response)
         return response.strip().upper() == "YES"
 
     def _get_response_with_recall(self, user_input: str, stream: bool = False) -> Union[Message, Generator[Message, None, None]]:
@@ -137,9 +139,11 @@ class Agent:
         
         context = None
         recalled_memories = []
+        self.logger.info(self.memory_handler)
         if self.memory_handler and self._needs_recall(user_input):
             try:
-                recalled_memories = self.memory_handler.recall(user_input, similarity_threshold=0.7)
+                recalled_memories = self.memory_handler.recall(user_input, similarity_threshold=0)
+                self.logger.info(recalled_memories)
                 if recalled_memories:
                     # Format memories for context
                     memory_text = "\n\n".join([
