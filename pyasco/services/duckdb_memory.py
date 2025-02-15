@@ -1,63 +1,50 @@
 from typing import List, Dict, Any, Optional
 import json
-import duckdb
+import lancedb
 import numpy as np
 from datetime import datetime
 from pathlib import Path
 import uuid
+import pyarrow as pa
 
 from ..services.llm import LLMService
 from ..services.embedding import EmbeddingService
 from ..services.code_snippet_extractor import CodeSnippetExtractor
 
-class DuckDBMemoryHandler:
-    """Handler for processing and storing memories using DuckDB"""
+class LanceDBMemoryHandler:
+    """Handler for processing and storing memories using LanceDB"""
     
     def __init__(self, 
                  llm_service: LLMService,
                  embedding_service: EmbeddingService,
-                 db_path: str = "~/.pyasco/memories.db"):
+                 db_path: str = "~/.pyasco/memories"):
         self.llm_service = llm_service
         self.embedding_service = embedding_service
         self.code_extractor = CodeSnippetExtractor()
         self.db_path = Path(db_path).expanduser()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Connect to in-memory first to load extensions before attaching
-        self.conn = duckdb.connect(':memory:')
-        self.conn.execute("LOAD vss;")
-        self.conn.execute("SET hnsw_enable_experimental_persistence=true;")
-        self.conn.execute(f"ATTACH '{str(self.db_path)}' AS pyasco_db (READ_WRITE)")
+        # Connect to LanceDB
+        self.db = lancedb.connect(str(self.db_path))
         self._initialize_db()
 
     def _initialize_db(self):
-        """Initialize the database schema with VSS extension support"""
-        # Use attached database for all operations
-        self.conn.execute("USE pyasco_db;")
+        """Initialize the database table with vector search support"""
+        schema = pa.schema([
+            ("id", pa.string()),
+            ("content", pa.string()),
+            ("embedding", pa.list_(pa.float32(), 1024)),
+            ("memory_type", pa.string()),
+            ("metadata", pa.string()),  # JSON string
+            ("tags", pa.list_(pa.string())),
+            ("created_at", pa.timestamp('us')),
+            ("valid_from", pa.timestamp('us')),
+            ("valid_until", pa.timestamp('us')),
+            ("event_time", pa.timestamp('us'))
+        ])
         
-        # Create table with FLOAT[] type for embeddings
-        self.conn.execute("""
-            CREATE TABLE IF NOT EXISTS pyasco_db.main.memories (
-                id UUID PRIMARY KEY,
-                content TEXT NOT NULL,
-                embedding FLOAT[1024] NOT NULL,
-                memory_type TEXT NOT NULL DEFAULT 'observation',
-                metadata JSON,
-                tags TEXT[],
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                valid_from TIMESTAMP,
-                valid_until TIMESTAMP,
-                event_time TIMESTAMP
-            );
-        """)
-        
-        # Create HNSW index for fast similarity search
-        self.conn.execute("""
-            CREATE INDEX IF NOT EXISTS memory_embedding_idx 
-            ON memories 
-            USING HNSW (embedding)
-            WITH (metric = 'cosine');
-        """)
+        if "memories" not in self.db.table_names():
+            self.db.create_table("memories", schema=schema, mode="create")
 
     def remember(self, content: str, context: Optional[Dict[str, Any]] = None, 
                 related_memories: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
@@ -183,49 +170,28 @@ class DuckDBMemoryHandler:
             # Extract tags
             tags = memory.get("tags", [])
             
+            # Prepare the memory data
+            memory_data = {
+                'id': memory_id,
+                'content': memory["content"],
+                'embedding': embedding[0].tolist(),
+                'memory_type': memory.get("type", "observation"),
+                'metadata': json.dumps(metadata),
+                'tags': tags,
+                'valid_from': valid_from,
+                'valid_until': valid_until,
+                'event_time': event_time,
+                'created_at': datetime.now()
+            }
+
+            table = self.db.open_table("memories")
+            
             # Check if this is an update to an existing memory
             if memory.get("id"):
-                self.conn.execute("""
-                    UPDATE memories 
-                    SET content = $content,
-                        embedding = $embedding::FLOAT[],
-                        memory_type = $memory_type,
-                        metadata = $metadata,
-                        tags = $tags::TEXT[],
-                        valid_from = $valid_from::TIMESTAMP,
-                        valid_until = $valid_until::TIMESTAMP,
-                        event_time = $event_time::TIMESTAMP
-                    WHERE id = $id;
-                """, {
-                    'content': memory["content"],
-                    'embedding': embedding[0].tolist(),
-                    'memory_type': memory.get("type", "observation"),
-                    'metadata': json.dumps(metadata),
-                    'tags': tags,
-                    'valid_from': valid_from,
-                    'valid_until': valid_until,
-                    'event_time': event_time,
-                    'id': memory_id
-                })
-            else:
-                self.conn.execute("""
-                    INSERT INTO memories (
-                        id, content, embedding, memory_type, metadata, tags,
-                        valid_from, valid_until, event_time
-                    )
-                    VALUES ($id, $content, $embedding::FLOAT[], $memory_type, $metadata, $tags::TEXT[],
-                            $valid_from::TIMESTAMP, $valid_until::TIMESTAMP, $event_time::TIMESTAMP);
-                """, {
-                    'id': memory_id,
-                    'content': memory["content"],
-                    'embedding': embedding[0].tolist(),
-                    'memory_type': memory.get("type", "observation"),
-                    'metadata': json.dumps(metadata),
-                    'tags': tags,
-                    'valid_from': valid_from,
-                    'valid_until': valid_until,
-                    'event_time': event_time
-                })
+                table.delete(f"id = '{memory_id}'")
+            
+            # Insert the new or updated memory
+            table.add([memory_data])
             
             stored_memories.append({
                 "content": memory["content"],
@@ -253,69 +219,65 @@ class DuckDBMemoryHandler:
         query_embedding = self.embedding_service.get_embedding(query)
         query_embedding = query_embedding[0].tolist()  # Flatten to 1D list
         
-        query = """
-            SELECT 
-                id,
-                content,
-                metadata,
-                array_cosine_similarity(embedding, $query_embedding::FLOAT[1024]) as similarity,
-                created_at,
-                tags,
-                valid_from,
-                valid_until,
-                event_time,
-                embedding
-            FROM memories
-            WHERE array_cosine_similarity(embedding, $query_embedding::FLOAT[1024]) >= $similarity_threshold
-            AND (
-                (valid_from IS NULL AND valid_until IS NULL) OR
-                (valid_from IS NULL AND valid_until > CURRENT_TIMESTAMP) OR
-                (valid_from <= CURRENT_TIMESTAMP AND valid_until IS NULL) OR
-                (valid_from <= CURRENT_TIMESTAMP AND valid_until > CURRENT_TIMESTAMP)
-            )
-            ORDER BY array_cosine_similarity(embedding, $query_embedding::FLOAT[1024]) DESC
-            LIMIT $limit;
-        """
-        params = {
-            'query_embedding': query_embedding,
-            'similarity_threshold': similarity_threshold,
-            'limit': limit
-        }
-        results = self.conn.execute(query, params).fetchall()
+        table = self.db.open_table("memories")
+        current_time = datetime.now()
+        
+        # Perform vector similarity search
+        results = table.search(query_embedding).metric("cosine").limit(limit).to_df()
         
         memories = []
-        for row in results:
+        for _, row in results.iterrows():
+            if row._distance > (1 - similarity_threshold):  # Convert cosine similarity to distance
+                continue
+                
+            # Check temporal validity
+            valid = True
+            if row.valid_from is not None and row.valid_until is not None:
+                valid = row.valid_from <= current_time <= row.valid_until
+            elif row.valid_from is not None:
+                valid = row.valid_from <= current_time
+            elif row.valid_until is not None:
+                valid = current_time <= row.valid_until
+                
+            if not valid:
+                continue
+                
             # Update access count and last_accessed time
-            metadata = json.loads(row[2])
+            metadata = json.loads(row.metadata)
             metadata["access_count"] = metadata.get("access_count", 0) + 1
-            metadata["last_accessed"] = datetime.now().isoformat()
+            metadata["last_accessed"] = current_time.isoformat()
             
             # Update the metadata in the database
-            self.conn.execute("""
-                UPDATE memories 
-                SET metadata = $metadata 
-                WHERE id = $id
-            """, {
+            table.delete(f"id = '{row.id}'")
+            table.add([{
+                'id': row.id,
+                'content': row.content,
+                'embedding': row.embedding,
+                'memory_type': row.memory_type,
                 'metadata': json.dumps(metadata),
-                'id': row[0]  # row[0] is the id
-            })
+                'tags': row.tags,
+                'valid_from': row.valid_from,
+                'valid_until': row.valid_until,
+                'event_time': row.event_time,
+                'created_at': row.created_at
+            }])
             
             memories.append({
-                "id": str(row[0]),
-                "content": row[1],
+                "id": str(row.id),
+                "content": row.content,
                 "metadata": metadata,
-                "similarity": float(row[3]),
-                "created_at": row[4].isoformat() if row[4] else None,
-                "tags": row[5],
-                "valid_from": row[6].isoformat() if row[6] else None,
-                "valid_until": row[7].isoformat() if row[7] else None,
-                "event_time": row[8].isoformat() if row[8] else None,
-                "embedding": row[9]
+                "similarity": 1 - float(row._distance),  # Convert distance back to similarity
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "tags": row.tags,
+                "valid_from": row.valid_from.isoformat() if row.valid_from else None,
+                "valid_until": row.valid_until.isoformat() if row.valid_until else None,
+                "event_time": row.event_time.isoformat() if row.event_time else None,
+                "embedding": row.embedding
             })
             
         return memories
 
     def __del__(self):
         """Cleanup database connection"""
-        if hasattr(self, 'conn'):
-            self.conn.close()
+        if hasattr(self, 'db'):
+            self.db.close()
