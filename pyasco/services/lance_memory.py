@@ -8,7 +8,7 @@ import uuid
 import pandas as pd
 import pyarrow as pa
 from lancedb.pydantic import Vector, LanceModel
-from lancedb.embeddings import EmbeddingFunctionRegistry
+from lancedb.embeddings import get_registry
 from pydantic import Field
 import os
 
@@ -17,7 +17,7 @@ from ..services.embedding import EmbeddingService
 from ..services.code_snippet_extractor import CodeSnippetExtractor
 
 # Get Jina embedding function
-jina_embed = EmbeddingFunctionRegistry.get_instance().get("jina").create(
+jina_embed = get_registry().get("jina").create(
     name="jina-embeddings-v3"
 )
 
