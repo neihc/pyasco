@@ -105,6 +105,7 @@ class DuckDBMemoryHandler:
         {{
             "memories": [
                 {{
+                    "id": "existing-id-to-update or null for new memory",
                     "content": "the specific memory with concrete details",
                     "type": "observation|fact|relationship",
                     "confidence": 0.0-1.0,
@@ -118,7 +119,8 @@ class DuckDBMemoryHandler:
                         "source": "original text",
                         "importance_level": 0.0-1.0,
                         "last_accessed": null,
-                        "access_count": 0
+                        "access_count": 0,
+                        "update_type": "new|update|merge|conflict"
                     }}
                 }}
             ]
