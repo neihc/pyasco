@@ -164,7 +164,7 @@ class DuckDBMemoryHandler:
         results = self.conn.execute("""
             SELECT 
                 content,
-                meta:JSON as metadata,
+                metadata,
                 1 - array_distance(embedding, ?::FLOAT[]) as similarity,
                 created_at
             FROM memories
