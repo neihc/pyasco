@@ -250,6 +250,12 @@ class DuckDBMemoryHandler:
                 embedding
             FROM memories
             WHERE array_cosine_distance(embedding, ?::FLOAT[1024]) >= ?
+            AND (
+                (valid_from IS NULL AND valid_until IS NULL) OR
+                (valid_from IS NULL AND valid_until > CURRENT_TIMESTAMP) OR
+                (valid_from <= CURRENT_TIMESTAMP AND valid_until IS NULL) OR
+                (valid_from <= CURRENT_TIMESTAMP AND valid_until > CURRENT_TIMESTAMP)
+            )
             ORDER BY array_cosine_distance(embedding, ?::FLOAT[1024]) DESC
             LIMIT ?;
         """, [
