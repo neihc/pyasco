@@ -51,9 +51,7 @@ class Agent:
         self.memory_handler = None
         
         if hasattr(config, 'memory') and config.memory.enabled:
-            self.embedding_service = EmbeddingService(
-                model=config.embedding.model
-            )
+            self.embedding_service = EmbeddingService()
             
             self.memory_handler = DuckDBMemoryHandler(
                 llm_service=self.llm_service,
