@@ -263,7 +263,7 @@ class DuckDBMemoryHandler:
         memories = []
         for row in results:
             # Update access count and last_accessed time
-            metadata = json.loads(row[1])
+            metadata = json.loads(row[2])
             metadata["access_count"] = metadata.get("access_count", 0) + 1
             metadata["last_accessed"] = datetime.now().isoformat()
             
