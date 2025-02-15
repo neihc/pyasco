@@ -8,10 +8,9 @@ from ..services.llm import LLMService
 from ..services.embedding import EmbeddingService
 from ..services.lance_memory import LanceDBMemoryHandler
 
-def demonstrate_memory_operations(memory_handler: LanceDBMemoryHandler, debug: bool = False):
-    """Demonstrate memory storage and retrieval operations"""
-    
-    print("\n=== Storing New Memories ===")
+def create_memories(memory_handler: LanceDBMemoryHandler, debug: bool = False):
+    """Store new memories in the database"""
+    print("\n=== Creating New Memories ===")
     # Store initial memory about user preferences
     initial_memory = """
     User: I prefer working late at night because it's quieter and I can focus better.
@@ -79,12 +78,61 @@ def demonstrate_memory_operations(memory_handler: LanceDBMemoryHandler, debug: b
                 print(f"Created at: {memory['created_at']}")
                 print(f"Meta {memory['metadata']}")
 
+def update_memories(memory_handler: LanceDBMemoryHandler, debug: bool = False):
+    """Update existing memories in the database"""
+    print("\n=== Updating Existing Memories ===")
+    
+    # Update with more specific information
+    update_memory = """
+    User: Actually, I specifically prefer coding between 10 PM and 2 AM, and I'm most productive 
+    during these hours. The complete silence helps me solve complex problems.
+    """
+    # First recall existing memory to update
+    existing = memory_handler.recall("working late at night", limit=1)
+    if existing:
+        result = memory_handler.remember(update_memory, 
+                                       context={"source": "chat", "update": True},
+                                       related_memories=existing)
+        print("Updated work schedule preferences with specific hours")
+
+    print("\n=== Adding New Related Memory ===")
+    # Add related information
+    additional_memory = """
+    User: I've also noticed I need at least 7 hours of sleep to maintain this schedule,
+    so I usually wake up around 9 AM to stay productive.
+    """
+    result = memory_handler.remember(additional_memory, 
+                                   context={"source": "chat"},
+                                   related_memories=existing)
+    print("Added sleep schedule information")
+
+def get_memories(memory_handler: LanceDBMemoryHandler, debug: bool = False):
+    """Retrieve and display memories from the database"""
+    print("\n=== Retrieving Memories ===")
+    queries = [
+        "What are the user's work preferences?",
+        "How does the user learn best?",
+        "What do we know about the user's sleep schedule?"
+    ]
+    
+    for query in queries:
+        print(f"\nQuery: {query}")
+        memories = memory_handler.recall(query, limit=2)
+        for memory in memories:
+            print(f"\nRelevant Memory (similarity: {memory['similarity']:.2f}):")
+            print(memory['content'])
+            if debug:
+                print(f"Created at: {memory['created_at']}")
+                print(f"Meta {memory['metadata']}")
+
 def main():
-    parser = argparse.ArgumentParser(description='Demonstrate DuckDB Memory Handler')
+    parser = argparse.ArgumentParser(description='Demonstrate Lance Memory Handler')
     parser.add_argument('--config', type=str, default='config.yaml',
                        help='Path to configuration file')
     parser.add_argument('--debug', action='store_true',
                        help='Enable debug output')
+    parser.add_argument('--feature', type=str, choices=['create', 'update', 'get'],
+                       required=True, help='Feature to demonstrate')
     args = parser.parse_args()
 
     # Load configuration
@@ -101,13 +149,13 @@ def main():
         db_path="demo_memories.lance"
     )
     
-    try:
-        demonstrate_memory_operations(memory_handler, debug=args.debug)
-    finally:
-        # Cleanup
-        if os.path.exists("demo_memories.lance"):
-            import shutil
-            shutil.rmtree("demo_memories.lance")
+    # Execute requested feature
+    if args.feature == 'create':
+        create_memories(memory_handler, debug=args.debug)
+    elif args.feature == 'update':
+        update_memories(memory_handler, debug=args.debug)
+    elif args.feature == 'get':
+        get_memories(memory_handler, debug=args.debug)
 
 if __name__ == "__main__":
     main()
