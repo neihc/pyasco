@@ -24,31 +24,27 @@ class DuckDBMemoryHandler:
         self._initialize_db()
 
     def _initialize_db(self):
-        """Initialize the database schema"""
+        """Initialize the database schema with VSS extension support"""
+        # Install and load VSS extension
+        self.conn.execute("INSTALL vss;")
+        self.conn.execute("LOAD vss;")
+        
+        # Create table with FLOAT[] type for embeddings
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS memories (
                 id INTEGER PRIMARY KEY,
                 content TEXT NOT NULL,
-                embedding TEXT NOT NULL,
+                embedding FLOAT[1536] NOT NULL,
                 metadata JSON,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
         
-        # Create embedding similarity search function
+        # Create HNSW index for fast similarity search
         self.conn.execute("""
-            CREATE OR REPLACE FUNCTION cosine_similarity(a TEXT, b TEXT) 
-            RETURNS DOUBLE AS '
-                WITH arrays AS (
-                    SELECT 
-                        unnest(string_split(trim(both ''[]'' from a), '','')::DOUBLE[]) as a_val,
-                        unnest(string_split(trim(both ''[]'' from b), '','')::DOUBLE[]) as b_val
-                )
-                SELECT 
-                    SUM(a_val * b_val) / 
-                    (SQRT(SUM(a_val * a_val)) * SQRT(SUM(b_val * b_val)))
-                FROM arrays
-            ';
+            CREATE INDEX IF NOT EXISTS memory_embedding_idx 
+            ON memories 
+            USING HNSW (embedding);
         """)
 
     def remember(self, content: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -86,11 +82,11 @@ class DuckDBMemoryHandler:
             # Generate embedding
             embedding = self.embedding_service.get_embedding(memory)
             
-            # Store in database
+            # Store in database with embedding as FLOAT array
             self.conn.execute("""
                 INSERT INTO memories (content, embedding, metadata)
-                VALUES (?, ?, ?);
-            """, [memory, str(embedding.tolist()), json.dumps(context or {})])
+                VALUES (?, ?::FLOAT[], ?);
+            """, [memory, embedding.tolist(), json.dumps(context or {})])
             
             stored_memories.append({
                 "content": memory,
@@ -117,25 +113,22 @@ class DuckDBMemoryHandler:
         query_embedding = self.embedding_service.get_embedding(query)
         
         results = self.conn.execute("""
-            WITH similarity_scores AS (
-                SELECT 
-                    id,
-                    content,
-                    metadata,
-                    created_at,
-                    cosine_similarity(embedding, ?) as similarity
-                FROM memories
-                WHERE cosine_similarity(embedding, ?) >= ?
-                ORDER BY similarity DESC
-                LIMIT ?
-            )
             SELECT 
                 content,
                 meta:JSON as metadata,
-                similarity,
+                1 - array_distance(embedding, ?::FLOAT[1536]) as similarity,
                 created_at
-            FROM similarity_scores;
-        """, [str(query_embedding.tolist()), str(query_embedding.tolist()), similarity_threshold, limit]).fetchall()
+            FROM memories
+            WHERE 1 - array_distance(embedding, ?::FLOAT[1536]) >= ?
+            ORDER BY array_distance(embedding, ?::FLOAT[1536])
+            LIMIT ?;
+        """, [
+            query_embedding.tolist(),
+            query_embedding.tolist(),
+            similarity_threshold,
+            query_embedding.tolist(),
+            limit
+        ]).fetchall()
         
         return [{
             "content": row[0],
