@@ -7,6 +7,8 @@ from pathlib import Path
 import uuid
 import pandas as pd
 import pyarrow as pa
+from lancedb.pydantic import Vector, LanceModel
+from pydantic import Field
 
 from ..services.llm import LLMService
 from ..services.embedding import EmbeddingService
@@ -29,23 +31,23 @@ class LanceDBMemoryHandler:
         self.db = lancedb.connect(str(self.db_path))
         self._initialize_db()
 
+    class Memory(LanceModel):
+        """Pydantic model for memory table schema"""
+        id: str
+        content: str
+        embedding: Vector(1024)
+        memory_type: str
+        metadata: str  # JSON string
+        tags: List[str]
+        created_at: datetime
+        valid_from: Optional[datetime] = None
+        valid_until: Optional[datetime] = None
+        event_time: Optional[datetime] = None
+
     def _initialize_db(self):
         """Initialize the database table with vector search and full-text search support"""
-        schema = pa.schema([
-            ("id", pa.string()),
-            ("content", pa.string()),
-            ("embedding", pa.list_(pa.float32(), 1024)),
-            ("memory_type", pa.string()),
-            ("metadata", pa.string()),  # JSON string
-            ("tags", pa.list_(pa.string())),
-            ("created_at", pa.timestamp('us')),
-            ("valid_from", pa.timestamp('us')),
-            ("valid_until", pa.timestamp('us')),
-            ("event_time", pa.timestamp('us'))
-        ])
-        
         if "memories" not in self.db.table_names():
-            table = self.db.create_table("memories", schema=schema, mode="create")
+            table = self.db.create_table("memories", schema=self.Memory, mode="create")
             # Create full-text search index on content
             table.create_fts_index(["content"])
 
