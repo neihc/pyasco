@@ -62,9 +62,16 @@ class DuckDBMemoryHandler:
         """
         # Use LLM to extract meaningful memories
         prompt = f"""
-        Process the following content into meaningful memories.
-        Each memory should be self-contained and include relevant metadata.
-        
+        Extract specific, concrete memories from the following content.
+        Focus on distinct, actionable information and avoid generic or abstract concepts.
+        Each memory should capture a single, well-defined piece of information.
+
+        Guidelines:
+        - Include specific details, numbers, dates, names, or actions
+        - Break down complex information into individual memories
+        - Exclude vague or general statements
+        - Focus on factual, verifiable information
+
         CONTENT:
         {content}
         
@@ -76,13 +83,13 @@ class DuckDBMemoryHandler:
         {{
             "memories": [
                 {{
-                    "content": "the actual memory text",
-                    "type": "observation|fact|concept|relationship",
+                    "content": "the specific memory with concrete details",
+                    "type": "observation|fact|relationship",
                     "confidence": 0.0-1.0,
                     "metadata": {{
                         "source": "original text",
                         "extracted_at": "timestamp",
-                        "additional_context": "any relevant context"
+                        "specificity": "description of what makes this memory specific"
                     }}
                 }}
             ]
