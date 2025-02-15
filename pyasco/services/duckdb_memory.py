@@ -242,7 +242,7 @@ class DuckDBMemoryHandler:
         query_embedding = self.embedding_service.get_embedding(query)
         query_embedding = query_embedding[0].tolist()  # Flatten to 1D list
         
-        results = self.conn.execute("""
+        query = """
             SELECT 
                 id,
                 content,
@@ -264,11 +264,13 @@ class DuckDBMemoryHandler:
             )
             ORDER BY array_cosine_distance(embedding, :embedding::FLOAT[1024]) DESC
             LIMIT :limit;
-        """, {
+        """
+        params = {
             'embedding': query_embedding,
             'threshold': similarity_threshold,
             'limit': limit
-        ]).fetchall()
+        }
+        results = self.conn.execute(query, params).fetchall()
         
         memories = []
         for row in results:
