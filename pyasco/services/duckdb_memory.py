@@ -103,8 +103,9 @@ class DuckDBMemoryHandler:
                     }},
                     "metadata": {{
                         "source": "original text",
-                        "extracted_at": "timestamp",
-                        "specificity": "description of what makes this memory specific"
+                        "importance_level": 0.0-1.0,
+                        "last_accessed": null,
+                        "access_count": 0
                     }}
                 }}
             ]
@@ -137,14 +138,19 @@ class DuckDBMemoryHandler:
             # Generate embedding for the memory content
             embedding = self.embedding_service.get_embedding(memory["content"])
             
-            # Combine memory metadata with context
-            metadata = memory.get("metadata", {})
+            # Initialize metadata with defaults
+            metadata = {
+                "source": memory.get("metadata", {}).get("source", "unknown"),
+                "importance_level": memory.get("metadata", {}).get("importance_level", 0.5),
+                "last_accessed": datetime.now().isoformat(),
+                "access_count": 0,
+                "memory_type": memory.get("type", "observation"),
+                "confidence": memory.get("confidence", 1.0)
+            }
+            
+            # Add any additional context
             if context:
                 metadata.update(context)
-            
-            # Add memory type and confidence
-            metadata["memory_type"] = memory.get("type", "observation")
-            metadata["confidence"] = memory.get("confidence", 1.0)
             
             # Store in database with embedding as FLOAT array
             memory_id = str(uuid.uuid4())
@@ -218,16 +224,32 @@ class DuckDBMemoryHandler:
             limit
         ]).fetchall()
         
-        return [{
-            "content": row[0],
-            "metadata": json.loads(row[1]),
-            "similarity": float(row[2]),
-            "created_at": row[3].isoformat() if row[3] else None,
-            "tags": row[4],
-            "valid_from": row[5].isoformat() if row[5] else None,
-            "valid_until": row[6].isoformat() if row[6] else None,
-            "event_time": row[7].isoformat() if row[7] else None
-        } for row in results]
+        memories = []
+        for row in results:
+            # Update access count and last_accessed time
+            metadata = json.loads(row[1])
+            metadata["access_count"] = metadata.get("access_count", 0) + 1
+            metadata["last_accessed"] = datetime.now().isoformat()
+            
+            # Update the metadata in the database
+            self.conn.execute("""
+                UPDATE memories 
+                SET metadata = ? 
+                WHERE content = ?
+            """, [json.dumps(metadata), row[0]])
+            
+            memories.append({
+                "content": row[0],
+                "metadata": metadata,
+                "similarity": float(row[2]),
+                "created_at": row[3].isoformat() if row[3] else None,
+                "tags": row[4],
+                "valid_from": row[5].isoformat() if row[5] else None,
+                "valid_until": row[6].isoformat() if row[6] else None,
+                "event_time": row[7].isoformat() if row[7] else None
+            })
+            
+        return memories
 
     def __del__(self):
         """Cleanup database connection"""
