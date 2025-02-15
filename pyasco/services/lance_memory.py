@@ -279,5 +279,5 @@ class LanceDBMemoryHandler:
 
     def __del__(self):
         """Cleanup database connection"""
-        if hasattr(self, 'db'):
-            self.db.close()
+        # LanceDB handles connection cleanup automatically
+        pass
