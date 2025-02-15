@@ -53,7 +53,7 @@ class DuckDBMemoryHandler:
         
         # Create HNSW index for fast similarity search
         self.conn.execute("""
-            CREATE INDEX IF NOT EXISTS pyasco_db.main.memory_embedding_idx 
+            CREATE INDEX IF NOT EXISTS memory_embedding_idx 
             ON memories 
             USING HNSW (embedding)
             WITH (metric = 'cosine');
