@@ -28,6 +28,7 @@ class DuckDBMemoryHandler:
         # Install and load VSS extension
         self.conn.execute("INSTALL vss;")
         self.conn.execute("LOAD vss;")
+        self.conn.execute("SET hnsw_enable_experimental_persistence=true;")
         
         # Create table with FLOAT[] type for embeddings
         self.conn.execute("""
