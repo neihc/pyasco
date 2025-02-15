@@ -8,7 +8,9 @@ import uuid
 import pandas as pd
 import pyarrow as pa
 from lancedb.pydantic import Vector, LanceModel
+from lancedb.embeddings import EmbeddingFunctionRegistry
 from pydantic import Field
+import os
 
 from ..services.llm import LLMService
 from ..services.embedding import EmbeddingService
@@ -19,13 +21,19 @@ class LanceDBMemoryHandler:
     
     def __init__(self, 
                  llm_service: LLMService,
-                 embedding_service: EmbeddingService,
-                 db_path: str = "~/.pyasco/memories"):
+                 db_path: str = "~/.pyasco/memories",
+                 jina_api_key: Optional[str] = None):
         self.llm_service = llm_service
-        self.embedding_service = embedding_service
         self.code_extractor = CodeSnippetExtractor()
         self.db_path = Path(db_path).expanduser()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Setup Jina embeddings
+        if jina_api_key:
+            os.environ['JINA_API_KEY'] = jina_api_key
+        self.jina_embed = EmbeddingFunctionRegistry.get_instance().get("jina").create(
+            name="jina-embeddings-v2-base-en"
+        )
         
         # Connect to LanceDB
         self.db = lancedb.connect(str(self.db_path))
@@ -34,10 +42,10 @@ class LanceDBMemoryHandler:
     class Memory(LanceModel):
         """Pydantic model for memory table schema"""
         id: str
-        content: str
-        embedding: Vector(1024)
+        content: str = jina_embed.SourceField()
+        vector: Vector(768) = jina_embed.VectorField()  # Jina base model has 768 dimensions
         memory_type: str
-        metadata: str  # JSON string
+        meta str  # JSON string
         tags: List[str]
         created_at: datetime
         valid_from: Optional[datetime] = None
@@ -148,8 +156,7 @@ class LanceDBMemoryHandler:
 
         stored_memories = []
         for memory in memories:
-            # Generate embedding for the memory content
-            embedding = self.embedding_service.get_embedding(memory["content"])
+            # Memory content will be automatically embedded by Jina
             
             # Initialize metadata with defaults
             metadata = {
@@ -179,7 +186,7 @@ class LanceDBMemoryHandler:
             memory_data = {
                 'id': memory_id,
                 'content': memory["content"],
-                'embedding': embedding[0].tolist(),
+                'vector': memory["content"],  # Jina will automatically embed this
                 'memory_type': memory.get("type", "observation"),
                 'metadata': json.dumps(metadata),
                 'tags': tags,
@@ -222,17 +229,15 @@ class LanceDBMemoryHandler:
         Returns:
             List of relevant memories with their metadata
         """
-        # Get embedding and ensure it's the right shape
-        query_embedding = self.embedding_service.get_embedding(query)
-        query_embedding = query_embedding[0].tolist()  # Flatten to 1D list
-        
         table = self.db.open_table("memories")
+        
+        # Jina will handle the embedding automatically
         current_time = datetime.now()
         
         # Perform hybrid search using vector and text query
         results = (
             table.search(query_type="hybrid")
-            .vector(query_embedding)
+            .vector(query)  # Jina will automatically embed the query
             .text(query)
             .limit(limit)
             .to_pandas()
