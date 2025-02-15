@@ -159,7 +159,9 @@ class DuckDBMemoryHandler:
         Returns:
             List of relevant memories with their metadata
         """
+        # Get embedding and ensure it's the right shape
         query_embedding = self.embedding_service.get_embedding(query)
+        query_embedding = query_embedding.flatten().tolist()  # Flatten to 1D list
         
         results = self.conn.execute("""
             SELECT 
@@ -172,10 +174,10 @@ class DuckDBMemoryHandler:
             ORDER BY array_distance(embedding, ?::FLOAT[1024])
             LIMIT ?;
         """, [
-            query_embedding.tolist(),
-            query_embedding.tolist(),
+            query_embedding,
+            query_embedding,
             similarity_threshold,
-            query_embedding.tolist(),
+            query_embedding,
             limit
         ]).fetchall()
         
