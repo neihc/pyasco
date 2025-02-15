@@ -30,7 +30,7 @@ class LanceDBMemoryHandler:
         self._initialize_db()
 
     def _initialize_db(self):
-        """Initialize the database table with vector search support"""
+        """Initialize the database table with vector search and full-text search support"""
         schema = pa.schema([
             ("id", pa.string()),
             ("content", pa.string()),
@@ -45,7 +45,9 @@ class LanceDBMemoryHandler:
         ])
         
         if "memories" not in self.db.table_names():
-            self.db.create_table("memories", schema=schema, mode="create")
+            table = self.db.create_table("memories", schema=schema, mode="create")
+            # Create full-text search index on content
+            table.create_fts_index(["content"])
 
     def remember(self, content: str, context: Optional[Dict[str, Any]] = None, 
                 related_memories: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
@@ -204,14 +206,16 @@ class LanceDBMemoryHandler:
             "memories": stored_memories
         }
 
-    def recall(self, query: str, limit: int = 5, similarity_threshold: float = 0.3) -> List[Dict[str, Any]]:
+    def recall(self, query: str, limit: int = 5, similarity_threshold: float = 0.3, 
+              hybrid_weight: float = 0.5) -> List[Dict[str, Any]]:
         """
-        Recall relevant memories based on semantic similarity
+        Recall relevant memories using hybrid search (vector similarity + full-text)
         
         Args:
             query: The query text to find relevant memories
             limit: Maximum number of memories to return
             similarity_threshold: Minimum similarity score threshold
+            hybrid_weight: Weight between vector (1.0) and text (0.0) search
             
         Returns:
             List of relevant memories with their metadata
@@ -223,8 +227,29 @@ class LanceDBMemoryHandler:
         table = self.db.open_table("memories")
         current_time = datetime.now()
         
-        # Perform vector similarity search
-        results = table.search(query_embedding).metric("cosine").limit(limit).to_df()
+        # Perform hybrid search combining vector and full-text
+        vector_search = table.search(query_embedding).metric("cosine")
+        text_search = table.search(query).fts_query("content")
+        
+        # Combine searches with weighted score
+        results = (
+            vector_search.limit(limit * 2)  # Get more results for reranking
+            .join(
+                text_search.limit(limit * 2),
+                how="outer",
+                on="id"
+            )
+            .select(
+                "*",
+                # Combine scores with weighted average
+                expr=f"coalesce(_distance_1 * {hybrid_weight} + _distance_2 * (1 - {hybrid_weight}), "
+                     f"_distance_1 * {hybrid_weight}, "
+                     f"_distance_2 * (1 - {hybrid_weight})) as hybrid_score"
+            )
+            .sort("hybrid_score")
+            .limit(limit)
+            .to_df()
+        )
         
         memories = []
         for _, row in results.iterrows():
