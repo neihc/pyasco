@@ -4,6 +4,7 @@ import duckdb
 import numpy as np
 from datetime import datetime
 from pathlib import Path
+import uuid
 
 from ..services.llm import LLMService
 from ..services.embedding import EmbeddingService
@@ -33,7 +34,7 @@ class DuckDBMemoryHandler:
         # Create table with FLOAT[] type for embeddings
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS memories (
-                id INTEGER PRIMARY KEY,
+                id UUID PRIMARY KEY,
                 content TEXT NOT NULL,
                 embedding FLOAT[1024] NOT NULL,
                 metadata JSON,
@@ -123,10 +124,11 @@ class DuckDBMemoryHandler:
             metadata["confidence"] = memory.get("confidence", 1.0)
             
             # Store in database with embedding as FLOAT array
+            memory_id = str(uuid.uuid4())
             self.conn.execute("""
-                INSERT INTO memories (content, embedding, metadata)
-                VALUES (?, ?::FLOAT[], ?);
-            """, [memory["content"], embedding[0].tolist(), json.dumps(metadata)])
+                INSERT INTO memories (id, content, embedding, metadata)
+                VALUES (?, ?, ?::FLOAT[], ?);
+            """, [memory_id, memory["content"], embedding[0].tolist(), json.dumps(metadata)])
             
             stored_memories.append({
                 "content": memory["content"],
