@@ -56,20 +56,29 @@ class DuckDBMemoryHandler:
             WITH (metric = 'cosine');
         """)
 
-    def remember(self, content: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def remember(self, content: str, context: Optional[Dict[str, Any]] = None, 
+                related_memories: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """
         Extract meaningful memories from content and store them in the database
         
         Args:
             content: The text content to extract memories from
             context: Optional contextual metadata
+            related_memories: Optional list of related existing memories to consider for updates
             
         Returns:
             Dict containing status and extracted memories
         """
         # Use LLM to extract meaningful memories
+        related_memories_text = ""
+        if related_memories:
+            related_memories_text = "RELATED MEMORIES:\n" + "\n".join(
+                f"ID: {mem.get('id', 'unknown')}\nContent: {mem.get('content', '')}\n"
+                for mem in related_memories
+            )
+
         prompt = f"""
-        Extract specific, concrete memories from the following content.
+        Extract and update memories from the following content, considering any related existing memories.
         Focus on distinct, actionable information and avoid generic or abstract concepts.
         Each memory should capture a single, well-defined piece of information.
 
@@ -80,12 +89,16 @@ class DuckDBMemoryHandler:
         - Focus on factual, verifiable information
         - Identify temporal aspects (when the information is valid or occurred)
         - Assign relevant categorical tags
+        - For existing memories: update, refine, or merge if new information is relevant
+        - Mark conflicts or contradictions with existing memories
 
         CONTENT:
         {content}
         
         CONTEXT:
         {context or {}}
+
+        {related_memories_text}
         
         Return a JSON object wrapped in a code block with this structure:
         ```json
@@ -152,8 +165,8 @@ class DuckDBMemoryHandler:
             if context:
                 metadata.update(context)
             
-            # Store in database with embedding as FLOAT array
-            memory_id = str(uuid.uuid4())
+            # Use existing ID or generate new one
+            memory_id = memory.get("id") or str(uuid.uuid4())
             # Extract temporal data
             temporal = memory.get("temporal", {})
             valid_from = temporal.get("valid_from")
@@ -163,14 +176,33 @@ class DuckDBMemoryHandler:
             # Extract tags
             tags = memory.get("tags", [])
             
-            self.conn.execute("""
-                INSERT INTO memories (
-                    id, content, embedding, metadata, tags,
-                    valid_from, valid_until, event_time
-                )
-                VALUES (?, ?, ?::FLOAT[], ?, ?::TEXT[],
-                        ?::TIMESTAMP, ?::TIMESTAMP, ?::TIMESTAMP);
-            """, [
+            # Check if this is an update to an existing memory
+            if memory.get("id"):
+                self.conn.execute("""
+                    UPDATE memories 
+                    SET content = ?,
+                        embedding = ?::FLOAT[],
+                        metadata = ?,
+                        tags = ?::TEXT[],
+                        valid_from = ?::TIMESTAMP,
+                        valid_until = ?::TIMESTAMP,
+                        event_time = ?::TIMESTAMP
+                    WHERE id = ?;
+                """, [
+                    memory["content"], embedding[0].tolist(),
+                    json.dumps(metadata), tags,
+                    valid_from, valid_until, event_time,
+                    memory_id
+                ])
+            else:
+                self.conn.execute("""
+                    INSERT INTO memories (
+                        id, content, embedding, metadata, tags,
+                        valid_from, valid_until, event_time
+                    )
+                    VALUES (?, ?, ?::FLOAT[], ?, ?::TEXT[],
+                            ?::TIMESTAMP, ?::TIMESTAMP, ?::TIMESTAMP);
+                """, [
                 memory_id, memory["content"], embedding[0].tolist(),
                 json.dumps(metadata), tags,
                 valid_from, valid_until, event_time
