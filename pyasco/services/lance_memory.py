@@ -37,6 +37,21 @@ class LanceDBMemoryHandler:
         
         # Connect to LanceDB
         self.db = lancedb.connect(str(self.db_path))
+        # Define Memory model after jina_embed is initialized
+        class Memory(LanceModel):
+            """Pydantic model for memory table schema"""
+            id: str
+            content: str = self.jina_embed.SourceField()
+            vector: Vector(768) = self.jina_embed.VectorField()  # Jina base model has 768 dimensions
+            memory_type: str
+            meta: str  # JSON string
+            tags: List[str]
+            created_at: datetime
+            valid_from: Optional[datetime] = None
+            valid_until: Optional[datetime] = None
+            event_time: Optional[datetime] = None
+            
+        self.Memory = Memory
         self._initialize_db()
 
     class Memory(LanceModel):
@@ -45,7 +60,7 @@ class LanceDBMemoryHandler:
         content: str = jina_embed.SourceField()
         vector: Vector(768) = jina_embed.VectorField()  # Jina base model has 768 dimensions
         memory_type: str
-        meta str  # JSON string
+        meta: str  # JSON string
         tags: List[str]
         created_at: datetime
         valid_from: Optional[datetime] = None
