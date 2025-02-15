@@ -35,7 +35,7 @@ class DuckDBMemoryHandler:
             CREATE TABLE IF NOT EXISTS memories (
                 id INTEGER PRIMARY KEY,
                 content TEXT NOT NULL,
-                embedding REAL[1536] NOT NULL,
+                embedding FLOAT[] NOT NULL,
                 metadata JSON,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
@@ -45,7 +45,7 @@ class DuckDBMemoryHandler:
         self.conn.execute("""
             CREATE INDEX IF NOT EXISTS memory_embedding_idx 
             ON memories 
-            USING HNSW (embedding);
+            USING HNSW (embedding vector_type='float');
         """)
 
     def remember(self, content: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -86,7 +86,7 @@ class DuckDBMemoryHandler:
             # Store in database with embedding as FLOAT array
             self.conn.execute("""
                 INSERT INTO memories (content, embedding, metadata)
-                VALUES (?, ?::REAL[], ?);
+                VALUES (?, ?::FLOAT[], ?);
             """, [memory, embedding.tolist(), json.dumps(context or {})])
             
             stored_memories.append({
@@ -117,11 +117,11 @@ class DuckDBMemoryHandler:
             SELECT 
                 content,
                 meta:JSON as metadata,
-                1 - array_distance(embedding, ?::REAL[1536]) as similarity,
+                1 - array_distance(embedding, ?::FLOAT[]) as similarity,
                 created_at
             FROM memories
-            WHERE 1 - array_distance(embedding, ?::REAL[1536]) >= ?
-            ORDER BY array_distance(embedding, ?::REAL[1536])
+            WHERE 1 - array_distance(embedding, ?::FLOAT[]) >= ?
+            ORDER BY array_distance(embedding, ?::FLOAT[])
             LIMIT ?;
         """, [
             query_embedding.tolist(),
