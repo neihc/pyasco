@@ -77,10 +77,13 @@ class DuckDBMemoryHandler:
                 for mem in related_memories
             )
 
+        current_time = datetime.now().isoformat()
         prompt = f"""
         Extract and update memories from the following content, considering any related existing memories.
         Focus on distinct, actionable information and avoid generic or abstract concepts.
         Each memory should capture a single, well-defined piece of information.
+
+        Current datetime: {current_time}
 
         Guidelines:
         - Include specific details, numbers, dates, names, or actions
