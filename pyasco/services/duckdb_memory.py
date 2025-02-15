@@ -23,19 +23,21 @@ class DuckDBMemoryHandler:
         self.db_path = Path(db_path).expanduser()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         
-        self.conn = duckdb.connect(str(self.db_path))
+        # Connect to in-memory first to load extensions before attaching
+        self.conn = duckdb.connect(':memory:')
+        self.conn.execute("LOAD vss;")
+        self.conn.execute("SET hnsw_enable_experimental_persistence=true;")
+        self.conn.execute(f"ATTACH '{str(self.db_path)}' AS pyasco_db (READ_WRITE)")
         self._initialize_db()
 
     def _initialize_db(self):
         """Initialize the database schema with VSS extension support"""
-        # Install and load VSS extension
-        self.conn.execute("INSTALL vss;")
-        self.conn.execute("LOAD vss;")
-        self.conn.execute("SET hnsw_enable_experimental_persistence=true;")
+        # Use attached database for all operations
+        self.conn.execute("USE pyasco_db;")
         
         # Create table with FLOAT[] type for embeddings
         self.conn.execute("""
-            CREATE TABLE IF NOT EXISTS memories (
+            CREATE TABLE IF NOT EXISTS pyasco_db.main.memories (
                 id UUID PRIMARY KEY,
                 content TEXT NOT NULL,
                 embedding FLOAT[1024] NOT NULL,
@@ -51,7 +53,7 @@ class DuckDBMemoryHandler:
         
         # Create HNSW index for fast similarity search
         self.conn.execute("""
-            CREATE INDEX IF NOT EXISTS memory_embedding_idx 
+            CREATE INDEX IF NOT EXISTS pyasco_db.main.memory_embedding_idx 
             ON memories 
             USING HNSW (embedding)
             WITH (metric = 'cosine');
