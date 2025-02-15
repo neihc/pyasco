@@ -185,36 +185,45 @@ class DuckDBMemoryHandler:
             if memory.get("id"):
                 self.conn.execute("""
                     UPDATE memories 
-                    SET content = ?,
-                        embedding = ?::FLOAT[],
-                        memory_type = ?,
-                        metadata = ?,
-                        tags = ?::TEXT[],
-                        valid_from = ?::TIMESTAMP,
-                        valid_until = ?::TIMESTAMP,
-                        event_time = ?::TIMESTAMP
-                    WHERE id = ?;
-                """, [
-                    memory["content"], embedding[0].tolist(),
-                    memory.get("type", "observation"),
-                    json.dumps(metadata), tags,
-                    valid_from, valid_until, event_time,
-                    memory_id
-                ])
+                    SET content = $content,
+                        embedding = $embedding::FLOAT[],
+                        memory_type = $memory_type,
+                        metadata = $metadata,
+                        tags = $tags::TEXT[],
+                        valid_from = $valid_from::TIMESTAMP,
+                        valid_until = $valid_until::TIMESTAMP,
+                        event_time = $event_time::TIMESTAMP
+                    WHERE id = $id;
+                """, {
+                    'content': memory["content"],
+                    'embedding': embedding[0].tolist(),
+                    'memory_type': memory.get("type", "observation"),
+                    'metadata': json.dumps(metadata),
+                    'tags': tags,
+                    'valid_from': valid_from,
+                    'valid_until': valid_until,
+                    'event_time': event_time,
+                    'id': memory_id
+                })
             else:
                 self.conn.execute("""
                     INSERT INTO memories (
                         id, content, embedding, memory_type, metadata, tags,
                         valid_from, valid_until, event_time
                     )
-                    VALUES (?, ?, ?::FLOAT[], ?, ?, ?::TEXT[],
-                            ?::TIMESTAMP, ?::TIMESTAMP, ?::TIMESTAMP);
-                """, [
-                memory_id, memory["content"], embedding[0].tolist(),
-                memory.get("type", "observation"),
-                json.dumps(metadata), tags,
-                valid_from, valid_until, event_time
-            ])
+                    VALUES ($id, $content, $embedding::FLOAT[], $memory_type, $metadata, $tags::TEXT[],
+                            $valid_from::TIMESTAMP, $valid_until::TIMESTAMP, $event_time::TIMESTAMP);
+                """, {
+                    'id': memory_id,
+                    'content': memory["content"],
+                    'embedding': embedding[0].tolist(),
+                    'memory_type': memory.get("type", "observation"),
+                    'metadata': json.dumps(metadata),
+                    'tags': tags,
+                    'valid_from': valid_from,
+                    'valid_until': valid_until,
+                    'event_time': event_time
+                })
             
             stored_memories.append({
                 "content": memory["content"],
@@ -247,7 +256,7 @@ class DuckDBMemoryHandler:
                 id,
                 content,
                 metadata,
-                array_cosine_distance(embedding, ?::FLOAT[1024]) as similarity,
+                array_cosine_distance(embedding, $query_embedding::FLOAT[1024]) as similarity,
                 created_at,
                 tags,
                 valid_from,
@@ -255,23 +264,21 @@ class DuckDBMemoryHandler:
                 event_time,
                 embedding
             FROM memories
-            WHERE array_cosine_distance(embedding, ?::FLOAT[1024]) >= ?
+            WHERE array_cosine_distance(embedding, $query_embedding::FLOAT[1024]) >= $similarity_threshold
             AND (
                 (valid_from IS NULL AND valid_until IS NULL) OR
                 (valid_from IS NULL AND valid_until > CURRENT_TIMESTAMP) OR
                 (valid_from <= CURRENT_TIMESTAMP AND valid_until IS NULL) OR
                 (valid_from <= CURRENT_TIMESTAMP AND valid_until > CURRENT_TIMESTAMP)
             )
-            ORDER BY array_cosine_distance(embedding, ?::FLOAT[1024]) DESC
-            LIMIT ?;
+            ORDER BY array_cosine_distance(embedding, $query_embedding::FLOAT[1024]) DESC
+            LIMIT $limit;
         """
-        params = [
-            query_embedding,
-            query_embedding,
-            similarity_threshold,
-            query_embedding,
-            limit
-        ]
+        params = {
+            'query_embedding': query_embedding,
+            'similarity_threshold': similarity_threshold,
+            'limit': limit
+        }
         results = self.conn.execute(query, params).fetchall()
         
         memories = []
@@ -284,9 +291,12 @@ class DuckDBMemoryHandler:
             # Update the metadata in the database
             self.conn.execute("""
                 UPDATE memories 
-                SET metadata = ? 
-                WHERE id = ?
-            """, [json.dumps(metadata), row[0]])  # row[0] is now the id
+                SET metadata = $metadata 
+                WHERE id = $id
+            """, {
+                'metadata': json.dumps(metadata),
+                'id': row[0]  # row[0] is the id
+            })
             
             memories.append({
                 "id": str(row[0]),
