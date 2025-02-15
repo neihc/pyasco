@@ -18,7 +18,7 @@ from ..services.code_snippet_extractor import CodeSnippetExtractor
 
 # Get Jina embedding function
 jina_embed = EmbeddingFunctionRegistry.get_instance().get("jina").create(
-    name="jina-embeddings-v2-base-en"
+    name="jina-embeddings-v3"
 )
 
 class Memory(LanceModel):
@@ -190,7 +190,6 @@ class LanceDBMemoryHandler:
             memory_data = {
                 'id': memory_id,
                 'content': memory["content"],
-                'vector': memory["content"],  # Jina will automatically embed this
                 'memory_type': memory.get("type", "observation"),
                 'metadata': json.dumps(metadata),
                 'tags': tags,
@@ -240,14 +239,13 @@ class LanceDBMemoryHandler:
         
         # Perform hybrid search using vector and text query
         results = (
-            table.search(query_type="hybrid")
-            .vector(query)  # Jina will automatically embed the query
-            .text(query)
+            table.search(query, query_type="hybrid")
             .limit(limit)
             .to_pandas()
         )
         
         memories = []
+        import pdb; pdb.set_trace()
         for _, row in results.iterrows():
             if row._distance > (1 - similarity_threshold):  # Convert cosine similarity to distance
                 continue
