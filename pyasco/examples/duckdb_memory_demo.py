@@ -27,45 +27,9 @@ def demonstrate_memory_operations(memory_handler: DuckDBMemoryHandler, debug: bo
     - Learning through trial and error
     """
     
-    print("\n=== Storing Initial Memories ===")
-    result = memory_handler.remember(conversation, {"source": "example_chat"})
-    print(f"Stored {len(result['memories'])} memories")
-    if debug:
-        for memory in result['memories']:
-            print(f"\nMemory: {memory['content']}")
-            print(f"Meta {memory['metadata']}")
-
-    # Demonstrate updating a memory
-    print("\n=== Updating Memory ===")
-    update_conversation = """
-    User: Actually, I've found that I work best in the early morning, around 5 AM.
-    Assistant: I see, you've updated your work preference:
-    - Most productive in early morning hours
-    - Specifically around 5 AM
-    - This differs from your previous preference for night work
-    """
-    
-    # Get existing memories about work preferences
-    existing_memories = memory_handler.recall("When does the user prefer to work?", limit=1)
-    
-    # Update with new information
-    update_result = memory_handler.remember(
-        update_conversation, 
-        {"source": "example_chat_update"},
-        related_memories=existing_memories
-    )
-    print("Memory updated")
-    
-    if debug:
-        for memory in update_result['memories']:
-            print(f"\nUpdated Memory: {memory['content']}")
-            print(f"Meta {memory['metadata']}")
-
     # Example queries to demonstrate recall
     queries = [
-        "How does the user prefer to work?",
-        "What's the user's learning style?",
-        "When is the user most productive?"
+        "Do you know my name?",
     ]
     
     print("\n=== Recalling Memories ===")
@@ -98,7 +62,6 @@ def main():
     memory_handler = DuckDBMemoryHandler(
         llm_service=llm_service,
         embedding_service=embedding_service,
-        db_path="demo_memories.db"
     )
     
     try:
