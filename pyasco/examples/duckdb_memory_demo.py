@@ -66,8 +66,8 @@ def main():
     config = ConfigManager.load_from_yaml(args.config)
     
     # Initialize services
-    llm_service = LLMService(config.llm)
-    embedding_service = EmbeddingService(config.embedding)
+    llm_service = LLMService()
+    embedding_service = EmbeddingService()
     
     # Initialize memory handler with custom path for demo
     memory_handler = DuckDBMemoryHandler(
