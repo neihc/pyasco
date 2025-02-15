@@ -247,7 +247,7 @@ class DuckDBMemoryHandler:
                 id,
                 content,
                 metadata,
-                array_cosine_distance(embedding, :embedding::FLOAT[1024]) as similarity,
+                array_cosine_distance(embedding, ?::FLOAT[1024]) as similarity,
                 created_at,
                 tags,
                 valid_from,
@@ -255,21 +255,23 @@ class DuckDBMemoryHandler:
                 event_time,
                 embedding
             FROM memories
-            WHERE array_cosine_distance(embedding, :embedding::FLOAT[1024]) >= :threshold
+            WHERE array_cosine_distance(embedding, ?::FLOAT[1024]) >= ?
             AND (
                 (valid_from IS NULL AND valid_until IS NULL) OR
                 (valid_from IS NULL AND valid_until > CURRENT_TIMESTAMP) OR
                 (valid_from <= CURRENT_TIMESTAMP AND valid_until IS NULL) OR
                 (valid_from <= CURRENT_TIMESTAMP AND valid_until > CURRENT_TIMESTAMP)
             )
-            ORDER BY array_cosine_distance(embedding, :embedding::FLOAT[1024]) DESC
-            LIMIT :limit;
+            ORDER BY array_cosine_distance(embedding, ?::FLOAT[1024]) DESC
+            LIMIT ?;
         """
-        params = {
-            'embedding': query_embedding,
-            'threshold': similarity_threshold,
-            'limit': limit
-        }
+        params = [
+            query_embedding,
+            query_embedding,
+            similarity_threshold,
+            query_embedding,
+            limit
+        ]
         results = self.conn.execute(query, params).fetchall()
         
         memories = []
