@@ -251,6 +251,13 @@ class LanceDBMemoryHandler:
             
             # Update the metadata in the database
             table.delete(f"id = '{row.id}'")
+            
+            # Convert timestamps to pandas Timestamp objects
+            valid_from = pd.Timestamp(row.valid_from) if pd.notna(row.valid_from) else None
+            valid_until = pd.Timestamp(row.valid_until) if pd.notna(row.valid_until) else None
+            event_time = pd.Timestamp(row.event_time) if pd.notna(row.event_time) else None
+            created_at = pd.Timestamp(row.created_at) if pd.notna(row.created_at) else pd.Timestamp.now()
+            
             table.add([{
                 'id': row.id,
                 'content': row.content,
@@ -258,10 +265,10 @@ class LanceDBMemoryHandler:
                 'memory_type': row.memory_type,
                 'metadata': json.dumps(metadata),
                 'tags': row.tags,
-                'valid_from': row.valid_from,
-                'valid_until': row.valid_until,
-                'event_time': row.event_time,
-                'created_at': row.created_at
+                'valid_from': valid_from,
+                'valid_until': valid_until,
+                'event_time': event_time,
+                'created_at': created_at
             }])
             
             memories.append({
