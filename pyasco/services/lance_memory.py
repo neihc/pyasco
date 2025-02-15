@@ -231,7 +231,7 @@ class LanceDBMemoryHandler:
         results = (
             table.search(query_type="hybrid")
             .vector(query_embedding)
-            .text(query, column="content")
+            .text(query)
             .limit(limit)
             .to_pandas()
         )
