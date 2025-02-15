@@ -40,7 +40,11 @@ class DuckDBMemoryHandler:
                 content TEXT NOT NULL,
                 embedding FLOAT[1024] NOT NULL,
                 metadata JSON,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                tags TEXT[],
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                valid_from TIMESTAMP,
+                valid_until TIMESTAMP,
+                event_time TIMESTAMP
             );
         """)
         
@@ -74,6 +78,8 @@ class DuckDBMemoryHandler:
         - Break down complex information into individual memories
         - Exclude vague or general statements
         - Focus on factual, verifiable information
+        - Identify temporal aspects (when the information is valid or occurred)
+        - Assign relevant categorical tags
 
         CONTENT:
         {content}
@@ -89,6 +95,12 @@ class DuckDBMemoryHandler:
                     "content": "the specific memory with concrete details",
                     "type": "observation|fact|relationship",
                     "confidence": 0.0-1.0,
+                    "tags": ["tag1", "tag2"],
+                    "temporal": {{
+                        "valid_from": "ISO timestamp or null",
+                        "valid_until": "ISO timestamp or null",
+                        "event_time": "ISO timestamp or null"
+                    }},
                     "metadata": {{
                         "source": "original text",
                         "extracted_at": "timestamp",
@@ -136,10 +148,27 @@ class DuckDBMemoryHandler:
             
             # Store in database with embedding as FLOAT array
             memory_id = str(uuid.uuid4())
+            # Extract temporal data
+            temporal = memory.get("temporal", {})
+            valid_from = temporal.get("valid_from")
+            valid_until = temporal.get("valid_until")
+            event_time = temporal.get("event_time")
+            
+            # Extract tags
+            tags = memory.get("tags", [])
+            
             self.conn.execute("""
-                INSERT INTO memories (id, content, embedding, metadata)
-                VALUES (?, ?, ?::FLOAT[], ?);
-            """, [memory_id, memory["content"], embedding[0].tolist(), json.dumps(metadata)])
+                INSERT INTO memories (
+                    id, content, embedding, metadata, tags,
+                    valid_from, valid_until, event_time
+                )
+                VALUES (?, ?, ?::FLOAT[], ?, ?::TEXT[],
+                        ?::TIMESTAMP, ?::TIMESTAMP, ?::TIMESTAMP);
+            """, [
+                memory_id, memory["content"], embedding[0].tolist(),
+                json.dumps(metadata), tags,
+                valid_from, valid_until, event_time
+            ])
             
             stored_memories.append({
                 "content": memory["content"],
@@ -172,7 +201,11 @@ class DuckDBMemoryHandler:
                 content,
                 metadata,
                 array_cosine_distance(embedding, ?::FLOAT[1024]) as similarity,
-                created_at
+                created_at,
+                tags,
+                valid_from,
+                valid_until,
+                event_time
             FROM memories
             WHERE array_cosine_distance(embedding, ?::FLOAT[1024]) >= ?
             ORDER BY array_cosine_distance(embedding, ?::FLOAT[1024]) DESC
@@ -189,7 +222,11 @@ class DuckDBMemoryHandler:
             "content": row[0],
             "metadata": json.loads(row[1]),
             "similarity": float(row[2]),
-            "created_at": row[3].isoformat()
+            "created_at": row[3].isoformat() if row[3] else None,
+            "tags": row[4],
+            "valid_from": row[5].isoformat() if row[5] else None,
+            "valid_until": row[6].isoformat() if row[6] else None,
+            "event_time": row[7].isoformat() if row[7] else None
         } for row in results]
 
     def __del__(self):
