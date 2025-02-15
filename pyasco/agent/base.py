@@ -266,8 +266,8 @@ class Agent:
                 **self.metadata
             }
             
-            self.logger.info("Storing conversation in memory")
-            self.memory_handler.remember(conversation_text, context)
+            self.logger.info("Storing conversation in memory with related memories")
+            self.memory_handler.remember(conversation_text, context, recalled_memories)
             
         except Exception as e:
             self.logger.error(f"Failed to store conversation in memory: {str(e)}")
