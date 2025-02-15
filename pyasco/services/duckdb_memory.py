@@ -29,7 +29,6 @@ class DuckDBMemoryHandler:
     def _initialize_db(self):
         """Initialize the database schema with VSS extension support"""
         # Install and load VSS extension
-        import pdb; pdb.set_trace()
         self.conn.execute("INSTALL vss;")
         self.conn.execute("LOAD vss;")
         self.conn.execute("SET hnsw_enable_experimental_persistence=true;")
