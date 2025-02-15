@@ -5,6 +5,7 @@ import numpy as np
 from datetime import datetime
 from pathlib import Path
 import uuid
+import pandas as pd
 import pyarrow as pa
 
 from ..services.llm import LLMService
@@ -233,11 +234,11 @@ class LanceDBMemoryHandler:
                 
             # Check temporal validity
             valid = True
-            if row.valid_from is not None and row.valid_until is not None:
+            if pd.notna(row.valid_from) and pd.notna(row.valid_until):
                 valid = row.valid_from <= current_time <= row.valid_until
-            elif row.valid_from is not None:
+            elif pd.notna(row.valid_from):
                 valid = row.valid_from <= current_time
-            elif row.valid_until is not None:
+            elif pd.notna(row.valid_until):
                 valid = current_time <= row.valid_until
                 
             if not valid:
