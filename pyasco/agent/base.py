@@ -55,7 +55,6 @@ class Agent:
             
             self.memory_handler = LanceDBMemoryHandler(
                 llm_service=self.llm_service,
-                embedding_service=self.embedding_service,
                 db_path=config.memory.db_path if hasattr(config.memory, 'db_path') else "~/.pyasco/memories"
             )
         

@@ -9,7 +9,7 @@ import pandas as pd
 import pyarrow as pa
 from lancedb.pydantic import Vector, LanceModel
 from lancedb.embeddings import get_registry
-from lancedb.rerankers import LinearCombinationReranker
+from lancedb.rerankers import JinaReranker
 import os
 
 from ..services.llm import LLMService
@@ -26,7 +26,7 @@ class Memory(LanceModel):
     content: str = jina_embed.SourceField()
     vector: Vector(1024) = jina_embed.VectorField()
     memory_type: str
-    meta: str  # JSON string
+    metadata: str  # JSON string
     tags: List[str]
     created_at: datetime
     valid_from: Optional[datetime] = None
@@ -190,7 +190,7 @@ class LanceDBMemoryHandler:
                 'id': memory_id,
                 'content': memory["content"],
                 'memory_type': memory.get("type", "observation"),
-                'meta': json.dumps(metadata),
+                'metadata': json.dumps(metadata),
                 'tags': tags,
                 'valid_from': valid_from,
                 'valid_until': valid_until,
@@ -236,7 +236,7 @@ class LanceDBMemoryHandler:
         # Jina will handle the embedding automatically
         current_time = datetime.now()
         
-        reranker = LinearCombinationReranker(weight=hybrid_weight)
+        reranker = JinaReranker(column="content")
         # Perform hybrid search using vector and text query
         results = (
             table.search(query, query_type="hybrid")
@@ -246,7 +246,6 @@ class LanceDBMemoryHandler:
         )
         
         memories = []
-        import pdb; pdb.set_trace()
         for _, row in results.iterrows():
             if row._relevance_score < similarity_threshold:  # Check if relevance score is below threshold
                 continue
@@ -282,7 +281,7 @@ class LanceDBMemoryHandler:
                 'content': row.content,
                 'vector': row.vector,  # Use vector instead of embedding
                 'memory_type': row.memory_type,
-                'meta': json.dumps(metadata),  # Use meta instead of metadata to match schema
+                'metadata': json.dumps(metadata),  # Use meta instead of metadata to match schema
                 'tags': row.tags,
                 'valid_from': valid_from,
                 'valid_until': valid_until,
@@ -300,7 +299,6 @@ class LanceDBMemoryHandler:
                 "valid_from": row.valid_from.isoformat() if row.valid_from else None,
                 "valid_until": row.valid_until.isoformat() if row.valid_until else None,
                 "event_time": row.event_time.isoformat() if row.event_time else None,
-                "embedding": row.embedding
             })
             
         return memories
