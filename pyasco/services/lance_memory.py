@@ -94,7 +94,7 @@ class LanceDBMemoryHandler:
         memory_id = memory_id or str(uuid.uuid4())
         
         # Ensure required fields
-        if 'content' not in memory_
+        if 'content' not in memory_data:
             raise ValueError("Memory content is required")
         if 'memory_type' not in memory_
             raise ValueError("Memory type is required")
