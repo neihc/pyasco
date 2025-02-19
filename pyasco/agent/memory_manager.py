@@ -8,13 +8,13 @@ class MemoryManager:
     def __init__(self, memory_handler: LanceDBMemoryHandler):
         self.memory_handler = memory_handler
 
-    def remember(self, content: str, meta Optional[Dict[str, Any]] = None) -> str:
+    def remember(self, content: str, meta: Optional[Dict[str, Any]] = None) -> str:
         """
         Store a new short-term memory
         
         Args:
             content: The content to remember
-            meta Optional metadata about the memory
+            meta: Optional metadata about the memory
             
         Returns:
             str: ID of the created memory
@@ -22,7 +22,7 @@ class MemoryManager:
         memory_data = {
             'content': content,
             'memory_type': MemoryType.SHORT_TERM,
-            'metadata': metadata or {},
+            'metadata': meta or {},
             'tags': []  # Could be enhanced to extract relevant tags
         }
         
