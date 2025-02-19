@@ -65,7 +65,7 @@ async def demonstrate_memory_operations(memory_manager: MemoryManager):
 async def main():
     """Main demo function"""
     # Initialize memory handler
-    memory_handler = await LanceDBMemoryHandler()
+    memory_handler = LanceDBMemoryHandler()
     
     # Create memory manager
     memory_manager = MemoryManager(memory_handler)
