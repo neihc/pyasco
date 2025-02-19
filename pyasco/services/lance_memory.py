@@ -64,16 +64,16 @@ class LanceDBMemoryHandler:
         self._initialize_db()
 
 
-    def _initialize_db(self):
+    async def _initialize_db(self):
         """Initialize the database table with vector search and full-text search support"""
         if "memories" not in self.db.table_names():
             table = self.db.create_table("memories", schema=self.Memory, mode="create")
             # Create full-text search index on content for hybrid search
-            table.create_fts_index(["content"], replace=True)
+            await table.create_fts_index(["content"], replace=True)
 
-    def add_memory(self, 
-                  memory_data: Dict[str, Any],
-                  memory_id: Optional[str] = None) -> str:
+    async def add_memory(self, 
+                        memory_ Dict[str, Any],
+                        memory_id: Optional[str] = None) -> str:
         """
         Add a new memory to the database.
         
@@ -121,15 +121,15 @@ class LanceDBMemoryHandler:
         
         # Add to database
         table = self.db.open_table("memories")
-        table.add([memory])
+        await table.add([memory])
         
         return memory_id
 
-    def search_similar(self, 
-                      query: str, 
-                      limit: int = 5,
-                      score_threshold: float = 0.0,
-                      filter_dict: Optional[Dict] = None) -> List[Dict[str, Any]]:
+    async def search_similar(self, 
+                           query: str, 
+                           limit: int = 5,
+                           score_threshold: float = 0.0,
+                           filter_dict: Optional[Dict] = None) -> List[Dict[str, Any]]:
         """
         Search for similar memories using hybrid search (vector + text) with reranking.
         
@@ -151,9 +151,9 @@ class LanceDBMemoryHandler:
         
         # Apply reranker if available
         if self.reranker:
-            results = search.rerank(reranker=self.reranker).limit(limit).to_list()
+            results = await search.rerank(reranker=self.reranker).limit(limit).to_list()
         else:
-            results = search.limit(limit).to_list()
+            results = await search.limit(limit).to_list()
             
         # Filter by score threshold and convert to dicts
         filtered_results = []

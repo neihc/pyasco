@@ -8,7 +8,7 @@ class MemoryManager:
     def __init__(self, memory_handler: LanceDBMemoryHandler):
         self.memory_handler = memory_handler
 
-    def remember(self, content: str, meta: Optional[Dict[str, Any]] = None) -> str:
+    async def remember(self, content: str, meta: Optional[Dict[str, Any]] = None) -> str:
         """
         Store a new short-term memory
         
@@ -26,9 +26,9 @@ class MemoryManager:
             'tags': []  # Could be enhanced to extract relevant tags
         }
         
-        return self.memory_handler.add_memory(memory_data)
+        return await self.memory_handler.add_memory(memory_data)
 
-    def get_context(self, query: str, limit: int = 5) -> str:
+    async def get_context(self, query: str, limit: int = 5) -> str:
         """
         Query relevant memories and combine them into context
         
@@ -40,7 +40,7 @@ class MemoryManager:
             str: Combined context from relevant memories
         """
         # Search for relevant memories
-        memories = self.memory_handler.search_similar(
+        memories = await self.memory_handler.search_similar(
             query=query,
             limit=limit,
             score_threshold=0.5  # Only include fairly relevant memories
