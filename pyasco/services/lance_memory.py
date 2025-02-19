@@ -54,6 +54,9 @@ class LanceDBMemoryHandler:
         # Setup Jina API key if provided
         if jina_api_key:
             os.environ['JINA_API_KEY'] = jina_api_key
+            
+        # Initialize reranker
+        self.reranker = JinaReranker(api_key=jina_api_key) if jina_api_key else None
         
         # Connect to LanceDB
         self.db = lancedb.connect(str(self.db_path))
@@ -121,3 +124,55 @@ class LanceDBMemoryHandler:
         table.add([memory])
         
         return memory_id
+
+    def search_similar(self, 
+                      query: str, 
+                      limit: int = 5,
+                      query_type: str = "hybrid",
+                      score_threshold: float = 0.0) -> List[Dict[str, Any]]:
+        """
+        Search for similar memories using hybrid search (vector + text) with reranking.
+        
+        Args:
+            query: Search query string
+            limit: Maximum number of results to return
+            query_type: Type of search - "hybrid", "vector", or "fts"
+            score_threshold: Minimum similarity score threshold
+            
+        Returns:
+            List of memory dictionaries with similarity scores
+        """
+        table = self.db.open_table("memories")
+        
+        # Perform search based on query type
+        search = table.search(query, query_type=query_type)
+        
+        # Apply reranker if available
+        if self.reranker:
+            results = search.rerank(reranker=self.reranker).limit(limit).to_list()
+        else:
+            results = search.limit(limit).to_list()
+            
+        # Filter by score threshold and convert to dicts
+        filtered_results = []
+        for result in results:
+            if result.score >= score_threshold:
+                memory_dict = {
+                    "id": result.id,
+                    "content": result.content,
+                    "memory_type": result.memory_type,
+                    "metadata": json.loads(result.metadata),
+                    "tags": result.tags,
+                    "created_at": result.created_at,
+                    "score": result.score
+                }
+                if result.valid_from:
+                    memory_dict["valid_from"] = result.valid_from
+                if result.valid_until:
+                    memory_dict["valid_until"] = result.valid_until
+                if result.event_time:
+                    memory_dict["event_time"] = result.event_time
+                    
+                filtered_results.append(memory_dict)
+                
+        return filtered_results
