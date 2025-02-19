@@ -168,30 +168,16 @@ class LanceDBMemoryHandler:
         df = df.head(limit)
         results = df.to_dict('records')
             
-        # Filter by score threshold and convert to dicts
-        filtered_results = []
-        for result in results:
-            import pdb; pdb.set_trace()
-            if result._relevance_score >= score_threshold:
-                memory_dict = {
-                    "id": result.id,
-                    "content": result.content,
-                    "memory_type": result.memory_type,
-                    "metadata": json.loads(result.metadata),
-                    "tags": result.tags,
-                    "created_at": result.created_at,
-                    "score": result.score
-                }
-                if result.valid_from:
-                    memory_dict["valid_from"] = result.valid_from
-                if result.valid_until:
-                    memory_dict["valid_until"] = result.valid_until
-                if result.event_time:
-                    memory_dict["event_time"] = result.event_time
-                    
-                filtered_results.append(memory_dict)
-                
-        return filtered_results
+        # Filter by score threshold using pandas
+        df = df[df._relevance_score >= score_threshold]
+        
+        # Convert metadata from JSON strings to dicts
+        df['metadata'] = df['metadata'].apply(json.loads)
+        
+        # Convert to dict records, keeping all fields
+        results = df.to_dict('records')
+        
+        return results
 
     async def increment_access_count(self, memory_ids: List[str]) -> None:
         """
