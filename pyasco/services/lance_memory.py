@@ -67,3 +67,57 @@ class LanceDBMemoryHandler:
             table = self.db.create_table("memories", schema=self.Memory, mode="create")
             # Create full-text search index on content
             table.create_fts_index(["content"])
+
+    def add_memory(self, 
+                  memory_data: Dict[str, Any],
+                  memory_id: Optional[str] = None) -> str:
+        """
+        Add a new memory to the database.
+        
+        Args:
+            memory_data: Dictionary containing memory data
+            memory_id: Optional memory ID (UUID generated if not provided)
+            
+        Returns:
+            str: ID of the created memory
+            
+        The memory_data dict should contain:
+            - content: str (required)
+            - memory_type: MemoryType (required)
+            - metadata: dict (will be converted to JSON)
+            - tags: List[str]
+            - valid_from: datetime (optional)
+            - valid_until: datetime (optional) 
+            - event_time: datetime (optional)
+        """
+        # Generate UUID if not provided
+        memory_id = memory_id or str(uuid.uuid4())
+        
+        # Ensure required fields
+        if 'content' not in memory_
+            raise ValueError("Memory content is required")
+        if 'memory_type' not in memory_
+            raise ValueError("Memory type is required")
+            
+        # Convert metadata dict to JSON string if needed
+        if 'metadata' in memory_data and isinstance(memory_data['metadata'], dict):
+            memory_data['metadata'] = json.dumps(memory_data['metadata'])
+        
+        # Create memory record
+        memory = Memory(
+            id=memory_id,
+            content=memory_data['content'],
+            memory_type=memory_data['memory_type'],
+            metadata=memory_data.get('metadata', '{}'),
+            tags=memory_data.get('tags', []),
+            created_at=datetime.now(),
+            valid_from=memory_data.get('valid_from'),
+            valid_until=memory_data.get('valid_until'),
+            event_time=memory_data.get('event_time')
+        )
+        
+        # Add to database
+        table = self.db.open_table("memories")
+        table.add([memory])
+        
+        return memory_id
