@@ -12,57 +12,66 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 async def demonstrate_memory_operations(memory_manager: MemoryManager):
-    """Demonstrate basic memory operations"""
+    """Demonstrate basic memory operations with a simulated conversation"""
     
-    # Store some short-term memories
-    logger.info("Storing short-term memories...")
-    memories = [
-        "The user is working on a Python project using asyncio",
-        "The project involves natural language processing",
-        "The user prefers using type hints in their code",
-        "The last conversation was about memory management",
+    # Simulate a conversation about web frameworks
+    logger.info("Simulating conversation about web frameworks...")
+    web_framework_convo = [
+        "User asked about differences between Django and FastAPI",
+        "Agent explained that Django is a full-featured framework while FastAPI is more lightweight",
+        "User mentioned they prefer FastAPI's async capabilities",
+        "Agent discussed FastAPI's modern features like automatic OpenAPI docs",
+        "User shared their experience with FastAPI's dependency injection system"
     ]
     
-    for memory in memories:
+    for memory in web_framework_convo:
         memory_id = await memory_manager.remember(
             content=memory,
-            meta={"timestamp": datetime.now().isoformat()}
+            meta={"timestamp": datetime.now().isoformat(), "topic": "web_frameworks"}
         )
-        logger.info(f"Stored memory with ID: {memory_id}")
+        logger.info(f"Stored conversation memory: {memory}")
     
-    # Get context for a query
-    query = "What programming preferences does the user have?"
+    # Query about web framework preferences
+    query = "What does the user think about web frameworks?"
     logger.info(f"\nGetting context for query: {query}")
     context = await memory_manager.get_context(query)
     logger.info(f"Retrieved context:\n{context}")
     
-    # Add some older memories to demonstrate decay
-    logger.info("\nAdding older memories...")
-    old_memories = [
-        "The user previously worked on a Django project",
-        "The user mentioned they like VS Code",
+    # Simulate time passing (8 days) and new conversation about a different topic
+    logger.info("\nSimulating new conversation after time passage...")
+    
+    # Add old conversation memories with timestamp 8 days ago
+    old_timestamp = (datetime.now() - timedelta(days=8)).isoformat()
+    for memory in web_framework_convo:
+        await memory_manager.remember(
+            content=memory,
+            meta={"timestamp": old_timestamp, "topic": "web_frameworks"}
+        )
+    
+    # New conversation about data science
+    data_science_convo = [
+        "User is starting a new data science project",
+        "They're considering using pandas and scikit-learn",
+        "Agent suggested using jupyter notebooks for exploration",
+        "User mentioned they prefer VS Code's jupyter integration"
     ]
     
-    for memory in old_memories:
-        # Set creation time to 8 days ago to trigger decay
-        old_timestamp = (datetime.now() - timedelta(days=8)).isoformat()
+    # Add new memories with current timestamp
+    for memory in data_science_convo:
         memory_id = await memory_manager.remember(
             content=memory,
-            meta={"timestamp": old_timestamp}
+            meta={"timestamp": datetime.now().isoformat(), "topic": "data_science"}
         )
-        logger.info(f"Stored old memory with ID: {memory_id}")
+        logger.info(f"Stored new memory: {memory}")
     
-    # Force decay check by adding a new memory
-    logger.info("\nTriggering memory decay...")
-    await memory_manager.remember(
-        "This new memory will trigger decay of old memories",
-        meta={"timestamp": datetime.now().isoformat()}
-    )
+    # Query about both topics to see decay effects
+    logger.info("\nQuerying about web frameworks (should show decay):")
+    web_context = await memory_manager.get_context("What does the user know about web frameworks?")
+    logger.info(f"Web frameworks context:\n{web_context}")
     
-    # Get updated context
-    logger.info("\nGetting updated context after decay:")
-    context = await memory_manager.get_context(query)
-    logger.info(f"Retrieved context:\n{context}")
+    logger.info("\nQuerying about data science (should be fresh):")
+    ds_context = await memory_manager.get_context("What is the user's data science experience?")
+    logger.info(f"Data science context:\n{ds_context}")
 
 async def main():
     """Main demo function"""
