@@ -218,7 +218,7 @@ class MemoryManager:
         # Score all memories using combined factors
         all_memories = []
         for memory in short_term + long_term + reflection:
-            relevance_score = memory.get('score', 0.5)  # Default to 0.5 for short-term
+            relevance_score = memory.get('_relevance_score', 0.5)  # Default to 0.5 for short-term
             final_score = self._calculate_memory_score(memory, relevance_score)
             memory['final_score'] = final_score
             all_memories.append(memory)
