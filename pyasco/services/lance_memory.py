@@ -96,7 +96,7 @@ class LanceDBMemoryHandler:
         # Ensure required fields
         if 'content' not in memory_data:
             raise ValueError("Memory content is required")
-        if 'memory_type' not in memory_
+        if 'memory_type' not in memory_data:
             raise ValueError("Memory type is required")
             
         # Convert metadata dict to JSON string if needed
