@@ -238,5 +238,10 @@ class MemoryManager:
             else:
                 break
 
+        # Log scores and content before formatting
+        logger.info("Selected memories with scores:")
+        for memory in final_memories:
+            logger.info(f"Score: {memory['final_score']:.3f} | Content: {memory['content'][:100]}...")
+
         # Format and return the context
         return self._format_memories_by_type(final_memories)
