@@ -72,7 +72,7 @@ class LanceDBMemoryHandler:
             await table.create_fts_index(["content"], replace=True)
 
     async def add_memory(self, 
-                        memory_ Dict[str, Any],
+                        memory_data: Dict[str, Any],
                         memory_id: Optional[str] = None) -> str:
         """
         Add a new memory to the database.
