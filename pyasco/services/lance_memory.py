@@ -130,7 +130,9 @@ class LanceDBMemoryHandler:
                            query: str, 
                            limit: int = 5,
                            score_threshold: float = 0.0,
-                           filter_dict: Optional[Dict] = None) -> List[Dict[str, Any]]:
+                           filter_dict: Optional[Dict] = None,
+                           sort_by: Optional[str] = None,
+                           ascending: bool = True) -> List[Dict[str, Any]]:
         """
         Search for similar memories using hybrid search (vector + text) with reranking.
         
@@ -139,6 +141,8 @@ class LanceDBMemoryHandler:
             limit: Maximum number of results to return
             score_threshold: Minimum similarity score threshold
             filter_dict: Optional dictionary of filters to apply (e.g., {"memory_type": "long_term"})
+            sort_by: Optional field name to sort results by
+            ascending: Sort direction (True for ascending, False for descending)
             
         Returns:
             List of memory dictionaries with similarity scores
@@ -149,6 +153,10 @@ class LanceDBMemoryHandler:
         search = table.search(query, query_type="hybrid")
         if filter_dict:
             search = search.where(filter_dict)
+            
+        # Apply sorting if specified
+        if sort_by:
+            search = search.sort(sort_by, ascending=ascending)
         
         # Apply reranker if available
         if self.reranker:
