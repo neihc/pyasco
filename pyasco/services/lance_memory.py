@@ -217,3 +217,24 @@ class LanceDBMemoryHandler:
         # Replace the records
         await table.delete(id_filter)
         await table.add(updated_memories)
+
+    async def delete_memory(self, memory_id: str) -> bool:
+        """
+        Delete a memory by its ID.
+        
+        Args:
+            memory_id: ID of the memory to delete
+            
+        Returns:
+            bool: True if memory was found and deleted, False otherwise
+        """
+        table = self.db.open_table("memories")
+        
+        # Check if memory exists
+        existing = await table.where(f"id = '{memory_id}'").to_list()
+        if not existing:
+            return False
+            
+        # Delete the memory
+        await table.delete(f"id = '{memory_id}'")
+        return True
