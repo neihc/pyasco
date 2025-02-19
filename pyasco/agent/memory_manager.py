@@ -79,7 +79,7 @@ class MemoryManager:
         short_term_memories = await self.memory_handler.search_similar(
             query="",
             limit=100,  # Reasonable batch size
-            filter_dict=f"memory_type = '{MemoryType.SHORT_TERM}'",
+            filter_dict=f"memory_type = '{MemoryType.SHORT_TERM.value}'",
             sort_by="created_at",
             ascending=True
         )
@@ -91,7 +91,7 @@ class MemoryManager:
         latest_memory = await self.memory_handler.search_similar(
             query="",
             limit=1,
-            filter_dict={"memory_type": MemoryType.SHORT_TERM},
+            filter_dict={"memory_type": MemoryType.SHORT_TERM.value},
             sort_by="created_at",
             ascending=False
         )
@@ -114,14 +114,14 @@ class MemoryManager:
                     limit=1,
                     filter_dict=f"id = '{memory['id']}'"
                 )
-                if relevance and relevance[0]['score'] < self.relevance_threshold:
+                if relevance and relevance[0]['_relevance_score'] < self.relevance_threshold:
                     should_decay = True
             
             if should_decay:
                 # Move to long-term memory
                 memory_data = {
                     'content': memory['content'],
-                    'memory_type': MemoryType.LONG_TERM,
+                    'memory_type': MemoryType.LONG_TERM.value,
                     'metadata': memory['metadata'],
                     'tags': memory['tags']
                 }
@@ -145,7 +145,7 @@ class MemoryManager:
         """
         memory_data = {
             'content': content,
-            'memory_type': MemoryType.SHORT_TERM,
+            'memory_type': MemoryType.SHORT_TERM.value,
             'metadata': meta or {},
             'tags': []  # Could be enhanced to extract relevant tags
         }
@@ -172,21 +172,21 @@ class MemoryManager:
             return await self.memory_handler.search_similar(
                 query="",  # Empty query to get latest
                 limit=10,
-                filter_dict={"memory_type": MemoryType.SHORT_TERM}
+                filter_dict={"memory_type": MemoryType.SHORT_TERM.value}
             )
 
         async def get_long_term():
             return await self.memory_handler.search_similar(
                 query=query,
                 limit=10,
-                filter_dict=f"memory_type = '{MemoryType.LONG_TERM}'"
+                filter_dict=f"memory_type = '{MemoryType.LONG_TERM.value}'"
             )
 
         async def get_reflection():
             return await self.memory_handler.search_similar(
                 query=query,
                 limit=5,
-                filter_dict=f"memory_type = '{MemoryType.REFLECTION}'"
+                filter_dict=f"memory_type = '{MemoryType.REFLECTION.value}'"
             )
 
         # Gather all memory fetching tasks
