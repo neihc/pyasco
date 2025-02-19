@@ -128,24 +128,26 @@ class LanceDBMemoryHandler:
     def search_similar(self, 
                       query: str, 
                       limit: int = 5,
-                      query_type: str = "hybrid",
-                      score_threshold: float = 0.0) -> List[Dict[str, Any]]:
+                      score_threshold: float = 0.0,
+                      filter_dict: Optional[Dict] = None) -> List[Dict[str, Any]]:
         """
         Search for similar memories using hybrid search (vector + text) with reranking.
         
         Args:
             query: Search query string
             limit: Maximum number of results to return
-            query_type: Type of search - "hybrid", "vector", or "fts"
             score_threshold: Minimum similarity score threshold
+            filter_dict: Optional dictionary of filters to apply (e.g., {"memory_type": "long_term"})
             
         Returns:
             List of memory dictionaries with similarity scores
         """
         table = self.db.open_table("memories")
         
-        # Perform search based on query type
-        search = table.search(query, query_type=query_type)
+        # Perform hybrid search with optional filter
+        search = table.search(query, query_type="hybrid")
+        if filter_dict:
+            search = search.where(filter_dict)
         
         # Apply reranker if available
         if self.reranker:
