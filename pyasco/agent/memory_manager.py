@@ -13,12 +13,41 @@ class MemoryManager:
         self.memory_handler = memory_handler
         self.token_window = token_window
 
-    def _calculate_decay_score(self, memory: Dict[str, Any]) -> float:
-        """Calculate time-based decay score for a memory"""
+    def _calculate_memory_score(self, memory: Dict[str, Any], relevance_score: float = 0.5) -> float:
+        """
+        Calculate combined memory score based on multiple factors
+        
+        Args:
+            memory: Memory dictionary containing metadata
+            relevance_score: Similarity/relevance score from search (default 0.5)
+            
+        Returns:
+            float: Combined score between 0 and 1
+        """
+        # Time decay score (7 days half-life)
         now = datetime.now()
         age = (now - memory['created_at']).total_seconds()
-        # Decay factor: newer memories get higher scores
-        return math.exp(-age / (7 * 24 * 3600))  # 7 days half-life
+        decay_score = math.exp(-age / (7 * 24 * 3600))
+        
+        # Frequency score based on access count
+        access_count = memory.get('access_count', 0)
+        frequency_score = 1 - math.exp(-access_count / 5)  # Saturates around 15 accesses
+        
+        # Weights for different factors
+        weights = {
+            'decay': 0.3,      # Recent memories
+            'relevance': 0.4,  # Search relevance
+            'frequency': 0.3   # Access frequency
+        }
+        
+        # Calculate weighted sum
+        final_score = (
+            weights['decay'] * decay_score +
+            weights['relevance'] * relevance_score +
+            weights['frequency'] * frequency_score
+        )
+        
+        return final_score
 
     def _estimate_tokens(self, text: str) -> int:
         """Rough estimate of token count"""
@@ -98,12 +127,11 @@ class MemoryManager:
             get_reflection()
         )
 
-        # Combine and score all memories
+        # Score all memories using combined factors
         all_memories = []
         for memory in short_term + long_term + reflection:
-            decay_score = self._calculate_decay_score(memory)
             relevance_score = memory.get('score', 0.5)  # Default to 0.5 for short-term
-            final_score = (decay_score + relevance_score) / 2
+            final_score = self._calculate_memory_score(memory, relevance_score)
             memory['final_score'] = final_score
             all_memories.append(memory)
 
