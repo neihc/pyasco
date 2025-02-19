@@ -40,6 +40,7 @@ class Memory(LanceModel):
     valid_from: Optional[datetime] = None
     valid_until: Optional[datetime] = None
     event_time: Optional[datetime] = None
+    access_count: int = 0
 
 class LanceDBMemoryHandler:
     """Handler for processing and storing memories using LanceDB"""
@@ -176,5 +177,32 @@ class LanceDBMemoryHandler:
                     memory_dict["event_time"] = result.event_time
                     
                 filtered_results.append(memory_dict)
+                # Increment access count for retrieved memory
+                await self.increment_access_count(result.id)
                 
         return filtered_results
+
+    async def increment_access_count(self, memory_id: str) -> None:
+        """
+        Increment the access count for a specific memory.
+        
+        Args:
+            memory_id: ID of the memory to update
+        """
+        table = self.db.open_table("memories")
+        
+        # Get current memory
+        current = await table.where(f"id = '{memory_id}'").to_list()
+        if not current:
+            raise ValueError(f"Memory with ID {memory_id} not found")
+            
+        # Update access count
+        memory = current[0]
+        updated_memory = Memory(
+            **{**memory.dict(), 
+               "access_count": memory.access_count + 1}
+        )
+        
+        # Replace the record
+        await table.delete(f"id = '{memory_id}'")
+        await table.add([updated_memory])
