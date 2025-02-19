@@ -1,6 +1,8 @@
 import asyncio
 import logging
+import shutil
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Dict, Any, List
 from ..services.lance_memory import LanceDBMemoryHandler, MemoryType
 from ..agent.memory_manager import MemoryManager
@@ -64,17 +66,27 @@ async def demonstrate_memory_operations(memory_manager: MemoryManager):
 
 async def main():
     """Main demo function"""
-    # Initialize memory handler
-    memory_handler = LanceDBMemoryHandler()
-    
-    # Create memory manager
-    memory_manager = MemoryManager(memory_handler)
+    # Create temporary demo database path
+    demo_db_path = Path.home() / ".pyasco" / "demo_memories"
     
     try:
+        # Initialize memory handler with demo database
+        memory_handler = LanceDBMemoryHandler(db_path=str(demo_db_path))
+        
+        # Create memory manager
+        memory_manager = MemoryManager(memory_handler)
+        
+        # Run demo operations
         await demonstrate_memory_operations(memory_manager)
+        
     except Exception as e:
         logger.error(f"Error during demo: {e}")
         raise
+    finally:
+        # Clean up demo database
+        if demo_db_path.exists():
+            shutil.rmtree(demo_db_path)
+            logger.info(f"Cleaned up demo database at {demo_db_path}")
 
 if __name__ == "__main__":
     asyncio.run(main())
