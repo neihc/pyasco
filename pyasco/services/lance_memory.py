@@ -68,8 +68,8 @@ class LanceDBMemoryHandler:
         """Initialize the database table with vector search and full-text search support"""
         if "memories" not in self.db.table_names():
             table = self.db.create_table("memories", schema=self.Memory, mode="create")
-            # Create full-text search index on content
-            table.create_fts_index(["content"])
+            # Create full-text search index on content for hybrid search
+            table.create_fts_index(["content"], replace=True)
 
     def add_memory(self, 
                   memory_data: Dict[str, Any],
