@@ -1,4 +1,5 @@
 from typing import List, Dict, Any, Optional
+from enum import Enum
 import json
 import lancedb
 import numpy as np
@@ -20,12 +21,19 @@ jina_embed = get_registry().get("jina").create(
     name="jina-embeddings-v3"
 )
 
+class MemoryType(str, Enum):
+    """Types of memories that can be stored"""
+    SHORT_TERM = "short_term"    # Recent, temporary memories
+    LONG_TERM = "long_term"      # Important, permanent memories
+    REFLECTION = "reflection"     # Meta-cognitive memories about learning and understanding
+    PROCEDURAL = "procedural"    # Task-related memories about how to do things
+
 class Memory(LanceModel):
     """Pydantic model for memory table schema"""
     id: str
     content: str = jina_embed.SourceField()
     vector: Vector(1024) = jina_embed.VectorField()
-    memory_type: str
+    memory_type: MemoryType
     metadata: str  # JSON string
     tags: List[str]
     created_at: datetime
