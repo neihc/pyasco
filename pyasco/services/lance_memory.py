@@ -45,9 +45,9 @@ class Memory(LanceModel):
 class LanceDBMemoryHandler:
     """Handler for processing and storing memories using LanceDB"""
     
-    def __init__(self, 
-                 db_path: str = "~/.pyasco/memories",
-                 jina_api_key: Optional[str] = None):
+    async def __init__(self, 
+                       db_path: str = "~/.pyasco/memories",
+                       jina_api_key: Optional[str] = None):
         self.code_extractor = CodeSnippetExtractor()
         self.db_path = Path(db_path).expanduser()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -62,7 +62,7 @@ class LanceDBMemoryHandler:
         # Connect to LanceDB
         self.db = lancedb.connect(str(self.db_path))
         self.Memory = Memory  # Use the globally defined Memory class
-        self._initialize_db()
+        await self._initialize_db()
 
 
     async def _initialize_db(self):
@@ -107,18 +107,21 @@ class LanceDBMemoryHandler:
         if 'metadata' in memory_data and isinstance(memory_data['metadata'], dict):
             memory_data['metadata'] = json.dumps(memory_data['metadata'])
         
-        # Create memory record
-        memory = Memory(
-            id=memory_id,
-            content=memory_data['content'],
-            memory_type=memory_data['memory_type'],
-            metadata=memory_data.get('metadata', '{}'),
-            tags=memory_data.get('tags', []),
-            created_at=datetime.now(),
-            valid_from=memory_data.get('valid_from'),
-            valid_until=memory_data.get('valid_until'),
-            event_time=memory_data.get('event_time')
-        )
+        # Create memory record with vector embedding
+        memory_dict = {
+            'id': memory_id,
+            'content': memory_data['content'],
+            'memory_type': memory_data['memory_type'],
+            'metadata': memory_data.get('metadata', '{}'),
+            'tags': memory_data.get('tags', []),
+            'created_at': datetime.now(),
+            'valid_from': memory_data.get('valid_from'),
+            'valid_until': memory_data.get('valid_until'),
+            'event_time': memory_data.get('event_time')
+        }
+        
+        # Let the Jina embedding model handle the vector field
+        memory = Memory(**memory_dict)
         
         # Add to database
         table = self.db.open_table("memories")
