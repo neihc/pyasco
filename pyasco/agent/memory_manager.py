@@ -112,7 +112,7 @@ class MemoryManager:
                 relevance = await self.memory_handler.search_similar(
                     query=latest_content,
                     limit=1,
-                    memory_ids=[memory['id']]
+                    filter_dict={ "id": [memory['id']]}
                 )
                 if relevance and relevance[0]['score'] < self.relevance_threshold:
                     should_decay = True

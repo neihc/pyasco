@@ -154,18 +154,15 @@ class LanceDBMemoryHandler:
         if filter_dict:
             search = search.where(filter_dict)
             
+        if self.reranker:
+            search = await search.rerank(reranker=self.reranker)
+
         # Get all results as pandas DataFrame
         df = search.to_pandas()
         
         # Apply sorting if specified
         if sort_by and sort_by in df.columns:
             df = df.sort_values(by=sort_by, ascending=ascending)
-        
-        # Apply reranker if available
-        if self.reranker:
-            results = await search.rerank(reranker=self.reranker).to_list()
-            # Convert reranked results to DataFrame
-            df = pd.DataFrame(results)
         
         # Apply limit
         df = df.head(limit)
