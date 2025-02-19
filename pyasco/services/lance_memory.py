@@ -177,32 +177,35 @@ class LanceDBMemoryHandler:
                     memory_dict["event_time"] = result.event_time
                     
                 filtered_results.append(memory_dict)
-                # Increment access count for retrieved memory
-                await self.increment_access_count(result.id)
                 
         return filtered_results
 
-    async def increment_access_count(self, memory_id: str) -> None:
+    async def increment_access_count(self, memory_ids: List[str]) -> None:
         """
-        Increment the access count for a specific memory.
+        Increment the access count for multiple memories.
         
         Args:
-            memory_id: ID of the memory to update
+            memory_ids: List of memory IDs to update
         """
         table = self.db.open_table("memories")
         
-        # Get current memory
-        current = await table.where(f"id = '{memory_id}'").to_list()
-        if not current:
-            raise ValueError(f"Memory with ID {memory_id} not found")
-            
-        # Update access count
-        memory = current[0]
-        updated_memory = Memory(
-            **{**memory.dict(), 
-               "access_count": memory.access_count + 1}
-        )
+        # Build ID filter
+        id_filter = " OR ".join([f"id = '{mid}'" for mid in memory_ids])
         
-        # Replace the record
-        await table.delete(f"id = '{memory_id}'")
-        await table.add([updated_memory])
+        # Get current memories
+        current = await table.where(id_filter).to_list()
+        if not current:
+            return  # Skip if no memories found
+            
+        # Update access counts
+        updated_memories = []
+        for memory in current:
+            updated_memory = Memory(
+                **{**memory.dict(),
+                   "access_count": memory.access_count + 1}
+            )
+            updated_memories.append(updated_memory)
+        
+        # Replace the records
+        await table.delete(id_filter)
+        await table.add(updated_memories)
