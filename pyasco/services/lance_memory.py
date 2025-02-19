@@ -171,7 +171,8 @@ class LanceDBMemoryHandler:
         # Filter by score threshold and convert to dicts
         filtered_results = []
         for result in results:
-            if result.score >= score_threshold:
+            import pdb; pdb.set_trace()
+            if result._relevance_score >= score_threshold:
                 memory_dict = {
                     "id": result.id,
                     "content": result.content,
