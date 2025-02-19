@@ -179,7 +179,7 @@ class MemoryManager:
             return await self.memory_handler.search_similar(
                 query=query,
                 limit=10,
-                filter_dict={"memory_type": MemoryType.LONG_TERM}
+                filter_dict=f"memory_type = '{MemoryType.LONG_TERM}'"
             )
 
         async def get_reflection():
