@@ -154,15 +154,22 @@ class LanceDBMemoryHandler:
         if filter_dict:
             search = search.where(filter_dict)
             
+        # Get all results as pandas DataFrame
+        df = search.to_pandas()
+        
         # Apply sorting if specified
-        if sort_by:
-            search = search.sort(sort_by, ascending=ascending)
+        if sort_by and sort_by in df.columns:
+            df = df.sort_values(by=sort_by, ascending=ascending)
         
         # Apply reranker if available
         if self.reranker:
-            results = await search.rerank(reranker=self.reranker).limit(limit).to_list()
-        else:
-            results = await search.limit(limit).to_list()
+            results = await search.rerank(reranker=self.reranker).to_list()
+            # Convert reranked results to DataFrame
+            df = pd.DataFrame(results)
+        
+        # Apply limit
+        df = df.head(limit)
+        results = df.to_dict('records')
             
         # Filter by score threshold and convert to dicts
         filtered_results = []
