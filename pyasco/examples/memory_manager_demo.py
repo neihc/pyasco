@@ -64,15 +64,6 @@ async def demonstrate_memory_operations(memory_manager: MemoryManager):
 
 async def main():
     """Main demo function"""
-    # Initialize with default config
-    config = Config(
-        llm_config=None,  # Not needed for this demo
-        memory_config=None,  # Will use defaults
-        embedding_config=None,  # Will use defaults
-        docker_config=None,  # Not needed for this demo
-        graphdb_config=None,  # Not needed for this demo
-    )
-    
     # Initialize memory handler
     memory_handler = LanceDBMemoryHandler()
     await memory_handler._initialize_db()
@@ -85,9 +76,6 @@ async def main():
     except Exception as e:
         logger.error(f"Error during demo: {e}")
         raise
-    finally:
-        # Cleanup
-        await memory_handler.cleanup()
 
 if __name__ == "__main__":
     asyncio.run(main())
