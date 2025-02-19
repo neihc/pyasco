@@ -167,34 +167,53 @@ class MemoryManager:
         Returns:
             str: Formatted context from relevant memories
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         # Fetch different types of memories in parallel
         async def get_short_term():
-            return await self.memory_handler.search_similar(
-                query="",  # Empty query to get latest
-                limit=10,
-                filter_dict={"memory_type": MemoryType.SHORT_TERM.value}
-            )
+            try:
+                return await self.memory_handler.search_similar(
+                    query="",  # Empty query to get latest
+                    limit=10,
+                    filter_dict={"memory_type": MemoryType.SHORT_TERM.value}
+                )
+            except Exception as e:
+                logger.error(f"Error fetching short-term memories: {e}")
+                return []
 
         async def get_long_term():
-            return await self.memory_handler.search_similar(
-                query=query,
-                limit=10,
-                filter_dict=f"memory_type = '{MemoryType.LONG_TERM.value}'"
-            )
+            try:
+                return await self.memory_handler.search_similar(
+                    query=query,
+                    limit=10,
+                    filter_dict=f"memory_type = '{MemoryType.LONG_TERM.value}'"
+                )
+            except Exception as e:
+                logger.error(f"Error fetching long-term memories: {e}")
+                return []
 
         async def get_reflection():
-            return await self.memory_handler.search_similar(
-                query=query,
-                limit=5,
-                filter_dict=f"memory_type = '{MemoryType.REFLECTION.value}'"
-            )
+            try:
+                return await self.memory_handler.search_similar(
+                    query=query,
+                    limit=5,
+                    filter_dict=f"memory_type = '{MemoryType.REFLECTION.value}'"
+                )
+            except Exception as e:
+                logger.error(f"Error fetching reflection memories: {e}")
+                return []
 
-        # Gather all memory fetching tasks
-        short_term, long_term, reflection = await asyncio.gather(
-            get_short_term(),
-            get_long_term(),
-            get_reflection()
-        )
+        try:
+            # Gather all memory fetching tasks
+            short_term, long_term, reflection = await asyncio.gather(
+                get_short_term(),
+                get_long_term(),
+                get_reflection()
+            )
+        except Exception as e:
+            logger.error(f"Error gathering memories: {e}")
+            short_term, long_term, reflection = [], [], []
 
         # Score all memories using combined factors
         all_memories = []
