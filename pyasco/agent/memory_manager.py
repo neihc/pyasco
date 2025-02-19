@@ -173,11 +173,28 @@ class MemoryManager:
         # Fetch different types of memories in parallel
         async def get_short_term():
             try:
-                return await self.memory_handler.search_similar(
+                # First get latest short term memories
+                memories = await self.memory_handler.search_similar(
                     query="",  # Empty query to get latest
                     limit=10,
                     filter_dict={"memory_type": MemoryType.SHORT_TERM.value}
                 )
+                
+                if not memories:
+                    return []
+                    
+                # Then query again with these IDs to get relevance scores
+                memory_ids = [m['id'] for m in memories]
+                id_filter = f"id IN {str(memory_ids)}"
+                
+                scored_memories = await self.memory_handler.search_similar(
+                    query=query,  # Now use the actual query
+                    limit=len(memory_ids),
+                    filter_dict=id_filter
+                )
+                
+                return scored_memories
+                
             except Exception as e:
                 logger.error(f"Error fetching short-term memories: {e}")
                 return []
