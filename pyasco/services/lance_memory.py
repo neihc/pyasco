@@ -152,7 +152,7 @@ class LanceDBMemoryHandler:
         # Perform hybrid search with optional filter
         search = table.search(query, query_type="hybrid")
         if filter_dict:
-            search = search.where(filter_dict)
+            search = search.where(filter_dict if isinstance(filter_dict, str) else " AND ".join(f"{k} = '{v}'" for k, v in filter_dict.items()))
             
         if self.reranker:
             search = await search.rerank(reranker=self.reranker)

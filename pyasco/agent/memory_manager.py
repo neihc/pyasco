@@ -79,7 +79,7 @@ class MemoryManager:
         short_term_memories = await self.memory_handler.search_similar(
             query="",
             limit=100,  # Reasonable batch size
-            filter_dict={"memory_type": MemoryType.SHORT_TERM},
+            filter_dict=f"memory_type = '{MemoryType.SHORT_TERM}'",
             sort_by="created_at",
             ascending=True
         )
@@ -112,7 +112,7 @@ class MemoryManager:
                 relevance = await self.memory_handler.search_similar(
                     query=latest_content,
                     limit=1,
-                    filter_dict={ "id": [memory['id']]}
+                    filter_dict=f"id = '{memory['id']}'"
                 )
                 if relevance and relevance[0]['score'] < self.relevance_threshold:
                     should_decay = True
@@ -186,7 +186,7 @@ class MemoryManager:
             return await self.memory_handler.search_similar(
                 query=query,
                 limit=5,
-                filter_dict={"memory_type": MemoryType.REFLECTION}
+                filter_dict=f"memory_type = '{MemoryType.REFLECTION}'"
             )
 
         # Gather all memory fetching tasks
