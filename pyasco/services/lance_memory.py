@@ -33,7 +33,7 @@ class Memory(LanceModel):
     id: str
     content: str = jina_embed.SourceField()
     vector: Vector(1024) = jina_embed.VectorField()
-    memory_type: MemoryType
+    memory_type: str
     metadata: str  # JSON string
     tags: List[str]
     created_at: datetime
@@ -45,7 +45,7 @@ class Memory(LanceModel):
 class LanceDBMemoryHandler:
     """Handler for processing and storing memories using LanceDB"""
     
-    async def __init__(self, 
+    def __init__(self, 
                        db_path: str = "~/.pyasco/memories",
                        jina_api_key: Optional[str] = None):
         self.code_extractor = CodeSnippetExtractor()
@@ -62,15 +62,14 @@ class LanceDBMemoryHandler:
         # Connect to LanceDB
         self.db = lancedb.connect(str(self.db_path))
         self.Memory = Memory  # Use the globally defined Memory class
-        await self._initialize_db()
+        self._initialize_db()
 
-
-    async def _initialize_db(self):
+    def _initialize_db(self):
         """Initialize the database table with vector search and full-text search support"""
         if "memories" not in self.db.table_names():
             table = self.db.create_table("memories", schema=self.Memory, mode="create")
             # Create full-text search index on content for hybrid search
-            await table.create_fts_index(["content"], replace=True)
+            table.create_fts_index(["content"], replace=True)
 
     async def add_memory(self, 
                         memory_data: Dict[str, Any],
@@ -117,15 +116,13 @@ class LanceDBMemoryHandler:
             'created_at': datetime.now(),
             'valid_from': memory_data.get('valid_from'),
             'valid_until': memory_data.get('valid_until'),
-            'event_time': memory_data.get('event_time')
+            'event_time': memory_data.get('event_time'),
+            'access_count': 0
         }
-        
-        # Let the Jina embedding model handle the vector field
-        memory = Memory(**memory_dict)
         
         # Add to database
         table = self.db.open_table("memories")
-        await table.add([memory])
+        table.add([memory_dict])
         
         return memory_id
 
