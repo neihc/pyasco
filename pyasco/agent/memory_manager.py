@@ -11,10 +11,18 @@ from .memory_decay import MemoryDecayHandler
 class MemoryManager:
     """Manages memory operations for the agent using LanceDB"""
     
-    def __init__(self, memory_handler: LanceDBMemoryHandler, token_window: int = 2000):
+    def __init__(self, 
+                 memory_handler: LanceDBMemoryHandler, 
+                 llm_service: LLMService,
+                 token_window: int = 2000):
         self.memory_handler = memory_handler
+        self.llm_service = llm_service
         self.token_window = token_window
-        self.decay_handler = MemoryDecayHandler(memory_handler)
+        self.decay_handler = MemoryDecayHandler(
+            memory_handler=memory_handler,
+            llm_service=llm_service,
+            embedding_service=memory_handler.embedding_service
+        )
 
     def _calculate_memory_score(self, memory: Dict[str, Any], relevance_score: float = 0.5) -> float:
         """
@@ -92,8 +100,8 @@ class MemoryManager:
         
         memory_id = await self.memory_handler.add_memory(memory_data)
         
-        # Trigger decay process after adding new memory
-        await self.decay_handler.decay_short_term_memories()
+        # Trigger asynchronous decay process after adding new memory
+        asyncio.create_task(self.decay_handler.decay_short_term_memories())
         
         return memory_id
 
