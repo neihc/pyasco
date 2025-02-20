@@ -137,7 +137,7 @@ class Agent:
         
         # Store user input in memory
         if self.memory_manager:
-            asyncio.run(self.memory_manager.remember(f"user: {user_input}"))
+            await self.memory_manager.remember(f"user: {user_input}")
         
         # Get response from LLM
         response = self.response_handler.handle_response(
