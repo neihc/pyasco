@@ -116,24 +116,10 @@ class Agent:
         """Get response with optional memory recall"""
         self.logger.info(f"Getting response for user input (stream={stream})")
         
-        context = None
-        if self.memory_manager:
-            try:
-                memory_text = asyncio.run(self.memory_manager.get_context(user_input))
-                if memory_text:
-                    context = {
-                        "type": "memory_recall",
-                        "memory_text": memory_text
-                    }
-                    self.logger.info("Retrieved context from memory manager")
-            except Exception as e:
-                self.logger.error(f"Failed to get context: {str(e)}")
-
         # Add message to conversation and memory
         self.conversation.add_message(
             role="user",
-            content=user_input,
-            context=context
+            content=user_input
         )
         
         if self.memory_manager:
