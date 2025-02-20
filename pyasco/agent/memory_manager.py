@@ -198,7 +198,6 @@ class MemoryManager:
             else:
                 break
 
-        # Log scores and content before formatting
         logger.info("Selected memories with scores:")
         for memory in final_memories:
             logger.info(f"Score: {memory['final_score']:.3f} | Content: {memory['content'][:100]}...")
@@ -206,18 +205,18 @@ class MemoryManager:
         # Format and return the context
         return self._format_memories_by_type(final_memories)
 
-        async def trigger_decay(self) -> None:
-            """
-            Trigger the memory decay process to consolidate short-term memories into long-term memories.
-            This process:
-            1. Identifies old or frequently accessed short-term memories
-            2. Clusters related memories
-            3. Uses LLM to process and integrate them into long-term memories
-            4. Removes processed short-term memories
-            """
-            try:
-                await self.decay_handler.decay_short_term_memories()
-            except Exception as e:
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.error(f"Error during memory decay process: {e}")
+    async def trigger_decay(self) -> None:
+        """
+        Trigger the memory decay process to consolidate short-term memories into long-term memories.
+        This process:
+        1. Identifies old or frequently accessed short-term memories
+        2. Clusters related memories
+        3. Uses LLM to process and integrate them into long-term memories
+        4. Removes processed short-term memories
+        """
+        try:
+            await self.decay_handler.decay_short_term_memories()
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error during memory decay process: {e}")
