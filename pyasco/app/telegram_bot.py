@@ -139,7 +139,7 @@ class TelegramInterface:
     async def remember_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Store the current conversation in memory."""
         try:
-            self.agent.remember_conversation()
+            await self.agent.remember_conversation()
             await update.message.reply_text("✅ Conversation stored in memory!")
         except Exception as e:
             await update.message.reply_text(f"❌ Error storing conversation: {str(e)}")

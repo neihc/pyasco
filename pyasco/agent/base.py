@@ -213,7 +213,7 @@ class Agent:
         last_message = self.conversation.last_message
         return bool(last_message and last_message.tools)
 
-    def remember_conversation(self):
+    async def remember_conversation(self):
         """Trigger memory decay process"""
         if not self.memory_manager:
             self.logger.debug("Memory handling not enabled, skipping memory decay")
@@ -221,7 +221,7 @@ class Agent:
             
         try:
             self.logger.info("Triggering memory decay process")
-            asyncio.run(self.memory_manager.trigger_decay())
+            await self.memory_manager.trigger_decay()
         except Exception as e:
             self.logger.error(f"Failed to trigger memory decay: {str(e)}")
 
