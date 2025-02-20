@@ -80,6 +80,7 @@ class MemoryDecayHandler:
         
         # Prepare detailed memory context
         memory_contexts = [self._prepare_memory_for_llm(memory) for memory in cluster]
+        import pdb; pdb.set_trace()
 
         prompt = f"""
         Analyze these related memories and break them down into independent memory units.
