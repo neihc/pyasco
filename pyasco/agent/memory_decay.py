@@ -166,10 +166,10 @@ class MemoryDecayHandler:
 
         Response format:
         ```json
-        {
+        {{
             "should_integrate": true/false,
             "reasoning": "detailed explanation of the decision",
-            "integrated_memory": {  # Only if should_integrate is true
+            "integrated_memory": {{  \# Only if should_integrate is true
                 "content": "merged content",
                 "summary": "updated summary",
                 "tags": ["tag1", "tag2"],
@@ -177,8 +177,8 @@ class MemoryDecayHandler:
                 "valid_from": "2024-02-20T00:00:00Z",
                 "valid_until": "2024-12-31T23:59:59Z",
                 "event_time": "2024-02-20T10:00:00Z"
-            }
-        }
+            }}
+        }}
         ```
         """
 
