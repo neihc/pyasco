@@ -59,8 +59,11 @@ class MemoryDecayHandler:
 
         return list(clusters.values())
 
-    async def process_with_llm(self, cluster: List[Dict]) -> Dict:
-        """Enhanced LLM processing with detailed content analysis"""
+    async def process_with_llm(self, cluster: List[Dict]) -> List[Dict]:
+        """
+        Process memory cluster with LLM and return list of independent memories
+        Returns list of dicts with processed memory data
+        """
         existing_tags = await self.memory_handler.get_all_tags()
         
         # Prepare detailed memory context
@@ -75,26 +78,56 @@ class MemoryDecayHandler:
             memory_contexts.append(context)
 
         prompt = f"""
-        Analyze these related memories and provide a JSON response with:
-        1. A detailed summary that preserves key information
-        2. Relevant tags (considering existing tags: {existing_tags})
-        3. Importance score (0-1)
-        4. Key entities and relationships
-        5. Temporal context analysis
+        Analyze these related memories and break them down into independent memory units.
+        For each memory unit, provide:
 
-        Memory contexts:
-        {json.dumps(memory_contexts, indent=2)}
+        1. A concise summary
+        2. Original content
+        3. Relevant tags (from existing: {existing_tags})
+        4. Importance score (0-1)
+        5. Event time (when the event occurred)
+        6. Valid from (when this memory becomes relevant)
+        7. Valid until (when this memory stops being relevant)
 
-        Response format:
+        Format each memory as markdown with JSON:
+
+        # Memory Unit
+        
+        Summary: <summary text>
+        
         ```json
-        [
-            {}
-        ]
+        {{
+            "summary": "detailed summary",
+            "content": "original content",
+            "tags": ["tag1", "tag2"],
+            "importance_score": 0.8,
+            "event_time": "2024-02-20T10:00:00Z",
+            "valid_from": "2024-02-20T00:00:00Z", 
+            "valid_until": "2024-12-31T23:59:59Z"
+        }}
         ```
+
+        Memory contexts to analyze:
+        {json.dumps(memory_contexts, indent=2)}
         """
         
         llm_response = await self.llm_service.generate(prompt)
-        return json.loads(llm_response)
+        
+        # Extract JSON from markdown response
+        code_extractor = CodeSnippetExtractor()
+        snippets = code_extractor.extract_snippets(llm_response)
+        
+        # Parse each JSON snippet into a memory dict
+        processed_memories = []
+        for snippet in snippets:
+            if snippet.language == 'json':
+                try:
+                    memory_data = json.loads(snippet.content)
+                    processed_memories.append(memory_data)
+                except json.JSONDecodeError:
+                    continue
+                    
+        return processed_memories
 
     async def resolve_conflicts(self, new_memory: Dict, existing_memory: Dict) -> Dict:
         """Use LLM to intelligently resolve conflicts between memories"""
@@ -151,22 +184,23 @@ class MemoryDecayHandler:
         # 3 & 4. Enhanced LLM Processing and Integration
         for cluster in memory_clusters:
             try:
-                llm_result = await self.process_with_llm(cluster)
+                processed_memories = await self.process_with_llm(cluster)
                 
-                new_memory_data = {
-                    'content': llm_result['summary'],
-                    'memory_type': MemoryType.LONG_TERM.value,
-                    'metadata': {
-                        'importance_score': llm_result['importance_score'],
-                        'original_memories': [m['id'] for m in cluster],
-                        'consolidated_at': datetime.now().isoformat(),
-                        'entities': llm_result['entities'],
-                        'relationships': llm_result['relationships'],
-                        'temporal_analysis': llm_result['temporal_analysis'],
-                        'key_points': llm_result['key_points']
-                    },
-                    'tags': llm_result['tags']
-                }
+                for memory in processed_memories:
+                    new_memory_data = {
+                        'content': memory['content'],
+                        'memory_type': MemoryType.LONG_TERM.value,
+                        'metadata': {
+                            'summary': memory['summary'],
+                            'importance_score': memory['importance_score'],
+                            'original_memories': [m['id'] for m in cluster],
+                            'consolidated_at': datetime.now().isoformat(),
+                            'event_time': memory['event_time'],
+                            'valid_from': memory['valid_from'],
+                            'valid_until': memory['valid_until']
+                        },
+                        'tags': memory['tags']
+                    }
 
                 # Check for similar existing memories
                 existing_similar = await self.memory_handler.search_similar(
