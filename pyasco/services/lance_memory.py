@@ -57,7 +57,10 @@ class LanceDBMemoryHandler:
             os.environ['JINA_API_KEY'] = jina_api_key
             
         # Initialize reranker
-        self.reranker = JinaReranker(api_key=jina_api_key) if jina_api_key else None
+        self.reranker = JinaReranker(
+            api_key=os.environ['JINA_API_KEY'],
+            column="content"
+        ) if os.environ['JINA_API_KEY'] else None
         
         # Connect to LanceDB
         self.db = lancedb.connect(str(self.db_path))
@@ -155,7 +158,7 @@ class LanceDBMemoryHandler:
             search = search.where(filter_dict if isinstance(filter_dict, str) else " AND ".join(f"{k} = '{v}'" for k, v in filter_dict.items()))
             
         if self.reranker:
-            search = await search.rerank(reranker=self.reranker)
+            search = search.rerank(reranker=self.reranker)
 
         # Get all results as pandas DataFrame
         df = search.to_pandas()
@@ -222,10 +225,10 @@ class LanceDBMemoryHandler:
         table = self.db.open_table("memories")
         
         # Check if memory exists
-        existing = await table.where(f"id = '{memory_id}'").to_list()
+        existing = table.search().where(f"id = '{memory_id}'").to_list()
         if not existing:
             return False
             
         # Delete the memory
-        await table.delete(f"id = '{memory_id}'")
+        table.delete(f"id = '{memory_id}'")
         return True
