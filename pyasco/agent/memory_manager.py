@@ -43,18 +43,23 @@ class MemoryManager:
         access_count = memory.get('access_count', 0)
         frequency_score = 1 - math.exp(-access_count / 5)  # Saturates around 15 accesses
         
+        # Get importance score from memory or default to 0.5
+        importance_score = memory.get('importance_score', 0.5)
+        
         # Weights for different factors
         weights = {
-            'decay': 0.3,      # Recent memories
-            'relevance': 0.4,  # Search relevance
-            'frequency': 0.3   # Access frequency
+            'decay': 0.25,      # Recent memories
+            'relevance': 0.3,   # Search relevance
+            'frequency': 0.2,   # Access frequency
+            'importance': 0.25  # Explicit importance
         }
         
         # Calculate weighted sum
         final_score = (
             weights['decay'] * decay_score +
             weights['relevance'] * relevance_score +
-            weights['frequency'] * frequency_score
+            weights['frequency'] * frequency_score +
+            weights['importance'] * importance_score
         )
         
         return final_score
