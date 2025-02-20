@@ -1,11 +1,12 @@
 from typing import Dict, Any, Optional, List
 import math
-from datetime import datetime, timedelta
+from datetime import datetime
 from collections import defaultdict
 import asyncio
 from dataclasses import dataclass
 from ..services.llm import LLMService
 from ..services.lance_memory import LanceDBMemoryHandler, MemoryType
+from .memory_decay import MemoryDecayHandler
 
 class MemoryManager:
     """Manages memory operations for the agent using LanceDB"""
@@ -13,8 +14,7 @@ class MemoryManager:
     def __init__(self, memory_handler: LanceDBMemoryHandler, token_window: int = 2000):
         self.memory_handler = memory_handler
         self.token_window = token_window
-        self.decay_threshold_days = 7  # Days after which to consider decay
-        self.relevance_threshold = 0.3  # Minimum relevance score to keep in short-term
+        self.decay_handler = MemoryDecayHandler(memory_handler)
 
     def _calculate_memory_score(self, memory: Dict[str, Any], relevance_score: float = 0.5) -> float:
         """
@@ -71,66 +71,6 @@ class MemoryManager:
 
         return "\n".join(sections).strip()
 
-    async def _decay_short_term_memories(self):
-        """
-        Move old or irrelevant short-term memories to long-term storage
-        """
-        # Get all short-term memories sorted by creation time
-        short_term_memories = await self.memory_handler.search_similar(
-            query="",
-            limit=100,  # Reasonable batch size
-            filter_dict=f"memory_type = '{MemoryType.SHORT_TERM.value}'",
-            sort_by="created_at",
-            ascending=True
-        )
-
-        if not short_term_memories:
-            return
-
-        # Get the most recent memory for relevance comparison
-        latest_memory = await self.memory_handler.search_similar(
-            query="",
-            limit=1,
-            filter_dict={"memory_type": MemoryType.SHORT_TERM.value},
-            sort_by="created_at",
-            ascending=False
-        )
-        latest_content = latest_memory[0]['content'] if latest_memory else ""
-
-        decay_threshold = datetime.now() - timedelta(days=self.decay_threshold_days)
-        
-        for memory in short_term_memories:
-            should_decay = False
-            created_at = memory['created_at']
-            
-            # Check time-based decay
-            if created_at < decay_threshold:
-                should_decay = True
-            
-            # Check relevance-based decay
-            if not should_decay and latest_content:
-                relevance = await self.memory_handler.search_similar(
-                    query=latest_content,
-                    limit=1,
-                    filter_dict=f"id = '{memory['id']}'"
-                )
-                if relevance and relevance[0]['_relevance_score'] < self.relevance_threshold:
-                    should_decay = True
-            
-            if should_decay:
-                # Move to long-term memory
-                memory_data = {
-                    'content': memory['content'],
-                    'memory_type': MemoryType.LONG_TERM.value,
-                    'metadata': memory['metadata'],
-                    'tags': memory['tags']
-                }
-                
-                # Create new long-term memory
-                await self.memory_handler.add_memory(memory_data)
-                
-                # Delete the short-term memory
-                await self.memory_handler.delete_memory(memory['id'])
 
     async def remember(self, content: str, meta: Optional[Dict[str, Any]] = None) -> str:
         """
@@ -153,7 +93,7 @@ class MemoryManager:
         memory_id = await self.memory_handler.add_memory(memory_data)
         
         # Trigger decay process after adding new memory
-        await self._decay_short_term_memories()
+        await self.decay_handler.decay_short_term_memories()
         
         return memory_id
 
