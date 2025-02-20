@@ -201,8 +201,8 @@ class LanceDBMemoryHandler:
         """
         table = self.db.open_table("memories")
         
-        # Build ID filter
-        id_filter = " OR ".join([f"id = '{mid}'" for mid in memory_ids])
+        # Build ID filter with proper parentheses
+        id_filter = f"({' OR '.join([f"id = '{mid}'" for mid in memory_ids]})"
         
         # Get current memories
         current = table.search().where(id_filter).to_list()
@@ -212,13 +212,12 @@ class LanceDBMemoryHandler:
         # Update access counts
         updated_memories = []
         for memory in current:
-            updated_memory = dict(
-                **{**memory,
-                   "access_count": memory.get('access_count', 0) + 1}
-            )
-            updated_memories.append(updated_memory)
+            # Create a clean copy without vector field
+            memory_copy = {k: v for k, v in memory.items() if k != 'vector'}
+            memory_copy['access_count'] = memory_copy.get('access_count', 0) + 1
+            updated_memories.append(memory_copy)
         
-        # Replace the records
+        # Replace the records - wrap filter in parentheses for SQL parsing
         table.delete(id_filter)
         table.add(updated_memories)
 
