@@ -166,10 +166,11 @@ class MemoryDecayHandler:
         {json.dumps(existing_memory, indent=2)}
 
         Response format:
-        {{
+        ```json
+        {
             "should_integrate": true/false,
             "reasoning": "detailed explanation of the decision",
-            "integrated_memory": {{  # Only if should_integrate is true
+            "integrated_memory": {  # Only if should_integrate is true
                 "content": "merged content",
                 "summary": "updated summary",
                 "tags": ["tag1", "tag2"],
@@ -177,8 +178,9 @@ class MemoryDecayHandler:
                 "valid_from": "2024-02-20T00:00:00Z",
                 "valid_until": "2024-12-31T23:59:59Z",
                 "event_time": "2024-02-20T10:00:00Z"
-            }}
-        }}
+            }
+        }
+        ```
         """
 
         llm_response = await self.llm_service.get_response([{"role": "user", "content": prompt}])
@@ -276,7 +278,7 @@ class MemoryDecayHandler:
                         query=memory['summary'],
                         limit=5,  # Get more potential matches
                         filter_dict=f"memory_type = '{MemoryType.LONG_TERM.value}'",
-                        threshold=0.6  # Lower threshold to catch more potential matches
+                        score_threshold=0.3  # Lower threshold to catch more potential matches
                     )
 
                     integrated = False
