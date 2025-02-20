@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Tuple
 import json
@@ -123,9 +124,28 @@ class MemoryDecayHandler:
         for snippet in snippets:
             if snippet.language == 'json':
                 try:
-                    memory_data = json.loads(snippet.content)
+                    data = json.loads(snippet.content)
+                    memory_data = {
+                        'id': str(uuid.uuid4()),
+                        'content': data['content'],
+                        'memory_type': MemoryType.LONG_TERM.value,
+                        'metadata': json.dumps({
+                            'event_time': data['event_time'],
+                            'valid_from': data['valid_from'],
+                            'valid_until': data['valid_until'],
+                            'consolidated_at': datetime.now().isoformat()
+                        }),
+                        'tags': data['tags'],
+                        'created_at': datetime.now(),
+                        'valid_from': datetime.fromisoformat(data['valid_from']),
+                        'valid_until': datetime.fromisoformat(data['valid_until']),
+                        'event_time': datetime.fromisoformat(data['event_time']),
+                        'access_count': 0,
+                        'importance_score': data['importance_score'],
+                        'summary': data['summary']
+                    }
                     processed_memories.append(memory_data)
-                except json.JSONDecodeError:
+                except (json.JSONDecodeError, KeyError):
                     continue
                     
         return processed_memories
@@ -189,18 +209,21 @@ class MemoryDecayHandler:
                 
                 for memory in processed_memories:
                     new_memory_data = {
+                        'id': str(uuid.uuid4()),
                         'content': memory['content'],
                         'memory_type': MemoryType.LONG_TERM.value,
-                        'metadata': {
-                            'summary': memory['summary'],
-                            'importance_score': memory['importance_score'],
+                        'metadata': json.dumps({
                             'original_memories': [m['id'] for m in cluster],
-                            'consolidated_at': datetime.now().isoformat(),
-                            'event_time': memory['event_time'],
-                            'valid_from': memory['valid_from'],
-                            'valid_until': memory['valid_until']
-                        },
-                        'tags': memory['tags']
+                            'consolidated_at': datetime.now().isoformat()
+                        }),
+                        'tags': memory['tags'],
+                        'created_at': datetime.now(),
+                        'valid_from': memory.get('valid_from'),
+                        'valid_until': memory.get('valid_until'),
+                        'event_time': memory.get('event_time'),
+                        'access_count': 0,
+                        'importance_score': memory['importance_score'],
+                        'summary': memory['summary']
                     }
 
                     # Check for similar existing memories
