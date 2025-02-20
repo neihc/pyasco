@@ -182,10 +182,24 @@ class MemoryDecayHandler:
         """
 
         llm_response = await self.llm_service.get_response([{"role": "user", "content": prompt}])
-        result = json.loads(llm_response)
         
-        if result["should_integrate"]:
-            integrated = result["integrated_memory"]
+        # Extract JSON using CodeSnippetExtractor
+        code_extractor = CodeSnippetExtractor()
+        snippets = code_extractor.extract_snippets(llm_response)
+        
+        # Find the JSON snippet
+        for snippet in snippets:
+            if snippet.language == 'json':
+                try:
+                    result = json.loads(snippet.content)
+                    break
+                except json.JSONDecodeError:
+                    continue
+        else:
+            return False, None
+            
+        if result.get("should_integrate"):
+            integrated = result.get("integrated_memory", {})
             # Preserve the existing memory's ID and metadata structure
             memory_data = {
                 'id': existing_memory['id'],
