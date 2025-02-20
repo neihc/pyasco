@@ -31,9 +31,8 @@ class MemoryDecayHandler:
         if not memories:
             return []
 
-        # Get embeddings for all memories
-        texts = [memory['content'] for memory in memories]
-        embeddings = await self.embedding_service.get_embeddings(texts)
+        # Use existing embeddings from memories
+        embeddings = np.array([memory['vector'] for memory in memories])
         
         # Normalize timestamps
         timestamps = np.array([m['created_at'].timestamp() for m in memories])
