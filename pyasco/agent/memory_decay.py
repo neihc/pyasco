@@ -106,7 +106,12 @@ class MemoryDecayHandler:
         1. A concise summary
         2. Original content
         3. Relevant tags (from existing: {existing_tags})
-        4. Importance score (0-1)
+        4. Importance score (0-1) based on these criteria:
+           - 0.8-1.0: Critical information (core concepts, key decisions, major events)
+           - 0.6-0.8: Important details (specific examples, implementation details)
+           - 0.4-0.6: Supporting information (context, background, minor details)
+           - 0.2-0.4: Supplementary details (temporary notes, partial information)
+           - 0.0-0.2: Trivial information (redundant or obsolete details)
         5. Event time (when the event occurred)
         6. Valid from (when this memory becomes relevant)
         7. Valid until (when this memory stops being relevant)
