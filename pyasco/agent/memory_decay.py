@@ -112,7 +112,7 @@ class MemoryDecayHandler:
         {json.dumps(memory_contexts, indent=2)}
         """
         
-        llm_response = await self.llm_service.generate(prompt)
+        llm_response = await self.llm_service.get_response([{"role": "user", "content": prompt}])
         
         # Extract JSON from markdown response
         code_extractor = CodeSnippetExtractor()
@@ -154,7 +154,7 @@ class MemoryDecayHandler:
         }}
         """
 
-        llm_response = await self.llm_service.generate(prompt)
+        llm_response = await self.llm_service.get_response([{"role": "user", "content": prompt}])
         return json.loads(llm_response)
 
     async def decay_short_term_memories(self):
