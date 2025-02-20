@@ -210,7 +210,7 @@ class LanceDBMemoryHandler:
         if not current:
             return  # Skip if no memories found
             
-        # Update access counts
+        # Update access counts using merge_insert
         updated_memories = []
         for memory in current:
             # Create a clean copy without vector field
@@ -218,9 +218,13 @@ class LanceDBMemoryHandler:
             memory_copy['access_count'] = memory_copy.get('access_count', 0) + 1
             updated_memories.append(memory_copy)
         
-        # Replace the records - wrap filter in parentheses for SQL parsing
-        table.delete(id_filter)
-        table.add(updated_memories)
+        # Use merge_insert for atomic update
+        (
+            table.merge_insert("id")
+            .when_matched_update_all()
+            .when_not_matched_insert_all()
+            .execute(updated_memories)
+        )
 
     async def delete_memory(self, memory_id: str) -> bool:
         """
@@ -266,9 +270,13 @@ class LanceDBMemoryHandler:
         memory_dict.update(updates)
         memory_dict.pop('vector')
         
-        # Delete old record and add updated one
-        table.delete(f"id = '{memory_id}'")
-        await self.add_memory(memory_dict, memory_id)
+        # Use merge_insert for atomic update
+        (
+            table.merge_insert("id")
+            .when_matched_update_all()
+            .when_not_matched_insert_all()
+            .execute([memory_dict])
+        )
         
         return True
 
