@@ -111,7 +111,7 @@ class Agent:
 
 
 
-    def _get_response_with_recall(self, user_input: str, stream: bool = False) -> Union[Message, Generator[Message, None, None]]:
+    async def _get_response_with_recall(self, user_input: str, stream: bool = False) -> Union[Message, Generator[Message, None, None]]:
         """Get response with memory recall"""
         self.logger.info(f"Getting response for user input with recall (stream={stream})")
         
@@ -122,7 +122,7 @@ class Agent:
         # Get relevant context from memory
         context = ""
         if self.memory_manager:
-            context = asyncio.run(self.memory_manager.get_context(user_input))
+            context = await self.memory_manager.get_context(user_input)
             
         # Combine context with user input if we have context
         content = user_input
@@ -165,11 +165,11 @@ class Agent:
             stream
         )
 
-    def ask(self, user_input: str, stream: bool = False, auto: bool = False, recall: bool = False, max_loops: int = 5) -> Dict:
+    async def ask(self, user_input: str, stream: bool = False, auto: bool = False, recall: bool = False, max_loops: int = 5) -> Dict:
         """Process user input and handle any follow-up interactions"""
         # Use recall if explicitly requested or in auto mode
         if recall or auto:
-            response = self._get_response_with_recall(user_input, stream=stream)
+            response = await self._get_response_with_recall(user_input, stream=stream)
         else:
             response = self.get_response(user_input, stream=stream)
         
@@ -189,7 +189,7 @@ class Agent:
                 
             last_message = self.conversation.last_message
             if self.memory_manager and last_message and last_message.role == "assistant":
-                asyncio.run(self.memory_manager.remember(f"assistant: {last_message.content}"))
+                await self.memory_manager.remember(f"assistant: {last_message.content}")
 
             results = self.tool_handler.execute_tools(last_message.tools if last_message else [])
             if not results:

@@ -248,7 +248,7 @@ class TelegramInterface:
             
             # Get response from agent
             logger.debug("Sending request to agent")
-            response = self.agent.ask(user_input, stream=False, auto=self.auto)
+            response = await self.agent.ask(user_input, stream=False, auto=self.auto)
             logger.debug(f"Got response from agent: {response.content}")
 
             # Check for workspace files first
