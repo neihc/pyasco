@@ -37,6 +37,8 @@ class Memory(LanceModel):
     valid_until: Optional[datetime] = None
     event_time: Optional[datetime] = None
     access_count: int = 0
+    importance_score: float = 0.0
+    summary: Optional[str] = None
 
 class LanceDBMemoryHandler:
     """Handler for processing and storing memories using LanceDB"""
@@ -116,7 +118,9 @@ class LanceDBMemoryHandler:
             'valid_from': memory_data.get('valid_from'),
             'valid_until': memory_data.get('valid_until'),
             'event_time': memory_data.get('event_time'),
-            'access_count': 0
+            'access_count': 0,
+            'summary': '',
+            'importance_score': memory_data.get('importance_score', 0),
         }
         
         # Add to database
@@ -271,7 +275,7 @@ class LanceDBMemoryHandler:
         all_tags = set()
         
         for memory in all_memories:
-            if memory.tags:
-                all_tags.update(memory.tags)
+            if memory['tags']:
+                all_tags.update(memory['tags'])
                 
         return sorted(list(all_tags))
