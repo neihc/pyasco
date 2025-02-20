@@ -165,10 +165,13 @@ class Agent:
             stream
         )
 
-    def ask(self, user_input: str, stream: bool = False, auto: bool = False, max_loops: int = 5) -> Dict:
+    def ask(self, user_input: str, stream: bool = False, auto: bool = False, recall: bool = False, max_loops: int = 5) -> Dict:
         """Process user input and handle any follow-up interactions"""
-        # Initial response uses recall for user messages
-        response = self._get_response_with_recall(user_input, stream=stream)
+        # Use recall if explicitly requested or in auto mode
+        if recall or auto:
+            response = self._get_response_with_recall(user_input, stream=stream)
+        else:
+            response = self.get_response(user_input, stream=stream)
         
         if not auto:
             return response
