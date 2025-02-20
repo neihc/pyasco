@@ -1,25 +1,134 @@
 from datetime import datetime, timedelta
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
+import json
+from sklearn.cluster import DBSCAN
+import numpy as np
 from ..services.lance_memory import LanceDBMemoryHandler, MemoryType
+from ..services.llm_service import LLMService
+from ..services.embedding_service import EmbeddingService  # Assume this exists
 
 class MemoryDecayHandler:
-    """Handles the decay of short-term memories to long-term storage"""
-    
-    def __init__(self, memory_handler: LanceDBMemoryHandler, 
+    def __init__(self,
+                 memory_handler: LanceDBMemoryHandler,
+                 llm_service: LLMService,
+                 embedding_service: EmbeddingService,
                  decay_threshold_days: int = 7,
-                 relevance_threshold: float = 0.3):
+                 relevance_threshold: float = 0.3,
+                 access_threshold: int = 3):
         self.memory_handler = memory_handler
+        self.llm_service = llm_service
+        self.embedding_service = embedding_service
         self.decay_threshold_days = decay_threshold_days
         self.relevance_threshold = relevance_threshold
+        self.access_threshold = access_threshold
+
+    async def get_memory_clusters(self, memories: List[Dict]) -> List[List[Dict]]:
+        """
+        Efficient clustering using DBSCAN on embeddings and temporal data
+        """
+        if not memories:
+            return []
+
+        # Get embeddings for all memories
+        texts = [memory['content'] for memory in memories]
+        embeddings = await self.embedding_service.get_embeddings(texts)
+        
+        # Normalize timestamps
+        timestamps = np.array([m['created_at'].timestamp() for m in memories])
+        timestamps_normalized = (timestamps - timestamps.min()) / (timestamps.max() - timestamps.min())
+        
+        # Combine embeddings with normalized timestamps
+        combined_features = np.column_stack([
+            np.array(embeddings),
+            timestamps_normalized.reshape(-1, 1) * 0.2  # Weight for temporal aspect
+        ])
+
+        # Apply DBSCAN clustering
+        clustering = DBSCAN(
+            eps=0.3,  # Distance threshold
+            min_samples=2,  # Minimum cluster size
+            metric='cosine'
+        ).fit(combined_features)
+
+        # Group memories by cluster
+        clusters = {}
+        for idx, label in enumerate(clustering.labels_):
+            if label not in clusters:
+                clusters[label] = []
+            clusters[label].append(memories[idx])
+
+        return list(clusters.values())
+
+    async def process_with_llm(self, cluster: List[Dict]) -> Dict:
+        """Enhanced LLM processing with detailed content analysis"""
+        existing_tags = await self.memory_handler.get_all_tags()
+        
+        # Prepare detailed memory context
+        memory_contexts = []
+        for memory in cluster:
+            context = {
+                'content': memory['content'],
+                'created_at': memory['created_at'].isoformat(),
+                'tags': memory.get('tags', []),
+                'metadata': memory.get('metadata', {})
+            }
+            memory_contexts.append(context)
+
+        prompt = f"""
+        Analyze these related memories and provide a JSON response with:
+        1. A detailed summary that preserves key information
+        2. Relevant tags (considering existing tags: {existing_tags})
+        3. Importance score (0-1)
+        4. Key entities and relationships
+        5. Temporal context analysis
+
+        Memory contexts:
+        {json.dumps(memory_contexts, indent=2)}
+
+        Response format:
+        ```json
+        [
+            {}
+        ]
+        ```
+        """
+        
+        llm_response = await self.llm_service.generate(prompt)
+        return json.loads(llm_response)
+
+    async def resolve_conflicts(self, new_memory: Dict, existing_memory: Dict) -> Dict:
+        """Use LLM to intelligently resolve conflicts between memories"""
+        prompt = f"""
+        Analyze these two memories and provide a merged version that preserves all important information.
+        Resolve any conflicts and provide reasoning.
+
+        New Memory:
+        {json.dumps(new_memory, indent=2)}
+
+        Existing Memory:
+        {json.dumps(existing_memory, indent=2)}
+
+        Response format:
+        {{
+            "merged_content": "consolidated content",
+            "merged_tags": ["tag1", "tag2"],
+            "merged_metadata": {{
+                "importance_score": 0.8,
+                "reasoning": "explanation of merge decisions",
+                "preserved_elements": ["element1", "element2"]
+            }}
+        }}
+        """
+
+        llm_response = await self.llm_service.generate(prompt)
+        return json.loads(llm_response)
 
     async def decay_short_term_memories(self):
-        """
-        Move old or irrelevant short-term memories to long-term storage
-        """
-        # Get all short-term memories sorted by creation time
+        """Enhanced decay process with improved clustering and LLM integration"""
+        # 1. Selection Process
         short_term_memories = await self.memory_handler.search_similar(
             query="",
-            limit=100,  # Reasonable batch size
+            limit=100,
             filter_dict=f"memory_type = '{MemoryType.SHORT_TERM.value}'",
             sort_by="created_at",
             ascending=True
@@ -28,47 +137,67 @@ class MemoryDecayHandler:
         if not short_term_memories:
             return
 
-        # Get the most recent memory for relevance comparison
-        latest_memory = await self.memory_handler.search_similar(
-            query="",
-            limit=1,
-            filter_dict={"memory_type": MemoryType.SHORT_TERM.value},
-            sort_by="created_at",
-            ascending=False
-        )
-        latest_content = latest_memory[0]['content'] if latest_memory else ""
-
         decay_threshold = datetime.now() - timedelta(days=self.decay_threshold_days)
         
-        for memory in short_term_memories:
-            should_decay = False
-            created_at = memory['created_at']
-            
-            # Check time-based decay
-            if created_at < decay_threshold:
-                should_decay = True
-            
-            # Check relevance-based decay
-            if not should_decay and latest_content:
-                relevance = await self.memory_handler.search_similar(
-                    query=latest_content,
-                    limit=1,
-                    filter_dict=f"id = '{memory['id']}'"
-                )
-                if relevance and relevance[0]['_relevance_score'] < self.relevance_threshold:
-                    should_decay = True
-            
-            if should_decay:
-                # Move to long-term memory
-                memory_data = {
-                    'content': memory['content'],
+        memories_to_decay = [
+            memory for memory in short_term_memories
+            if (memory['created_at'] < decay_threshold or
+                memory.get('access_count', 0) < self.access_threshold)
+        ]
+
+        # 2. Enhanced Memory Clustering
+        memory_clusters = await self.get_memory_clusters(memories_to_decay)
+
+        # 3 & 4. Enhanced LLM Processing and Integration
+        for cluster in memory_clusters:
+            try:
+                llm_result = await self.process_with_llm(cluster)
+                
+                new_memory_data = {
+                    'content': llm_result['summary'],
                     'memory_type': MemoryType.LONG_TERM.value,
-                    'metadata': memory['metadata'],
-                    'tags': memory['tags']
+                    'metadata': {
+                        'importance_score': llm_result['importance_score'],
+                        'original_memories': [m['id'] for m in cluster],
+                        'consolidated_at': datetime.now().isoformat(),
+                        'entities': llm_result['entities'],
+                        'relationships': llm_result['relationships'],
+                        'temporal_analysis': llm_result['temporal_analysis'],
+                        'key_points': llm_result['key_points']
+                    },
+                    'tags': llm_result['tags']
                 }
-                
-                # Create new long-term memory
-                await self.memory_handler.add_memory(memory_data)
-                
-                # Delete the short-term memory
-                await self.memory_handler.delete_memory(memory['id'])
+
+                # Check for similar existing memories
+                existing_similar = await self.memory_handler.search_similar(
+                    query=llm_result['summary'],
+                    limit=1,
+                    filter_dict=f"memory_type = '{MemoryType.LONG_TERM.value}'",
+                    threshold=0.9
+                )
+
+                if existing_similar:
+                    # Use LLM to resolve conflicts and merge memories
+                    merged_result = await self.resolve_conflicts(
+                        new_memory_data, 
+                        existing_similar[0]
+                    )
+
+                    await self.memory_handler.update_memory(
+                        existing_similar[0]['id'],
+                        {
+                            'content': merged_result['merged_content'],
+                            'tags': merged_result['merged_tags'],
+                            'metadata': merged_result['merged_metadata']
+                        }
+                    )
+                else:
+                    await self.memory_handler.add_memory(new_memory_data)
+
+                # Delete processed short-term memories
+                for memory in cluster:
+                    await self.memory_handler.delete_memory(memory['id'])
+
+            except Exception as e:
+                print(f"Error processing cluster: {e}")
+                continue
