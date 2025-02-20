@@ -15,12 +15,30 @@ class MemoryDecayHandler:
     def _prepare_memory_for_llm(self, memory: Dict) -> Dict:
         """Prepare memory dict for LLM by removing vector and making JSON-safe"""
         memory_copy = copy.deepcopy(memory)
+        
         # Remove vector field which isn't JSON serializable
         memory_copy.pop('vector', None)
-        # Convert datetime objects to ISO format strings
+        memory_copy.pop('_relevance_score', None)
+        
+        # Convert numpy arrays to lists
+        if 'tags' in memory_copy and isinstance(memory_copy['tags'], np.ndarray):
+            memory_copy['tags'] = memory_copy['tags'].tolist()
+            
+        # Convert datetime objects and handle NaT values
         for field in ['created_at', 'valid_from', 'valid_until', 'event_time']:
-            if field in memory_copy and isinstance(memory_copy[field], datetime):
-                memory_copy[field] = memory_copy[field].isoformat()
+            if field in memory_copy:
+                if isinstance(memory_copy[field], datetime):
+                    memory_copy[field] = memory_copy[field].isoformat()
+                elif isinstance(memory_copy[field], str) and memory_copy[field] == 'NaT':
+                    memory_copy[field] = None
+                    
+        # Convert metadata to proper dict if it's a string
+        if isinstance(memory_copy.get('metadata'), str):
+            try:
+                memory_copy['metadata'] = json.loads(memory_copy['metadata'])
+            except json.JSONDecodeError:
+                memory_copy['metadata'] = {}
+                
         return memory_copy
 
     def __init__(self,
