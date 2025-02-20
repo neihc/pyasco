@@ -117,7 +117,8 @@ class Agent:
         self.logger.info(f"Getting response for user input with recall (stream={stream})")
         
         # Reset conversation before starting
-        self.reset()
+        self.conversation.clear()
+        self._initialize_chat()
         
         # Get relevant context from memory
         context = ""
