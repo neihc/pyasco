@@ -21,7 +21,6 @@ class MemoryManager:
         self.decay_handler = MemoryDecayHandler(
             memory_handler=memory_handler,
             llm_service=llm_service,
-            embedding_service=memory_handler.embedding_service
         )
 
     def _calculate_memory_score(self, memory: Dict[str, Any], relevance_score: float = 0.5) -> float:
@@ -99,10 +98,6 @@ class MemoryManager:
         }
         
         memory_id = await self.memory_handler.add_memory(memory_data)
-        
-        # Trigger asynchronous decay process after adding new memory
-        asyncio.create_task(self.decay_handler.decay_short_term_memories())
-        
         return memory_id
 
     async def get_context(self, query: str) -> str:
