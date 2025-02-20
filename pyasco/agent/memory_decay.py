@@ -6,6 +6,7 @@ import numpy as np
 from ..services.lance_memory import LanceDBMemoryHandler, MemoryType
 from ..services.llm_service import LLMService
 from ..services.embedding_service import EmbeddingService  # Assume this exists
+from ..services.code_snippet_extractor import CodeSnippetExtractor
 
 class MemoryDecayHandler:
     def __init__(self,
@@ -204,7 +205,7 @@ class MemoryDecayHandler:
 
                 # Check for similar existing memories
                 existing_similar = await self.memory_handler.search_similar(
-                    query=llm_result['summary'],
+                    query=memory['summary'],
                     limit=1,
                     filter_dict=f"memory_type = '{MemoryType.LONG_TERM.value}'",
                     threshold=0.9
