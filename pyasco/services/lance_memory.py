@@ -47,7 +47,10 @@ class LanceDBMemoryHandler:
     
     def __init__(self, 
                        db_path: str = "~/.pyasco/memories",
-                       jina_api_key: Optional[str] = None):
+                       jina_api_key: Optional[str] = None,
+                       decay_threshold_days: int = 7,
+                       relevance_threshold: float = 0.3,
+                       access_threshold: int = 3):
         self.code_extractor = CodeSnippetExtractor()
         self.db_path = Path(db_path).expanduser()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -66,6 +69,11 @@ class LanceDBMemoryHandler:
         self.db = lancedb.connect(str(self.db_path))
         self.Memory = Memory  # Use the globally defined Memory class
         self._initialize_db()
+        
+        # Memory decay settings
+        self.decay_threshold_days = decay_threshold_days
+        self.relevance_threshold = relevance_threshold 
+        self.access_threshold = access_threshold
 
     def _initialize_db(self):
         """Initialize the database table with vector search and full-text search support"""
@@ -232,3 +240,50 @@ class LanceDBMemoryHandler:
         # Delete the memory
         table.delete(f"id = '{memory_id}'")
         return True
+
+    async def update_memory(self, memory_id: str, updates: Dict[str, Any]) -> bool:
+        """
+        Update specific fields of a memory.
+        
+        Args:
+            memory_id: ID of the memory to update
+            updates: Dictionary of fields to update
+            
+        Returns:
+            bool: True if memory was found and updated, False otherwise
+        """
+        table = self.db.open_table("memories")
+        
+        # Get existing memory
+        existing = table.search().where(f"id = '{memory_id}'").to_list()
+        if not existing:
+            return False
+            
+        # Update memory with new values
+        memory_dict = existing[0].dict()
+        memory_dict.update(updates)
+        
+        # Delete old record and add updated one
+        table.delete(f"id = '{memory_id}'")
+        table.add([Memory(**memory_dict)])
+        
+        return True
+
+    async def get_all_tags(self) -> List[str]:
+        """
+        Get all unique tags used across memories.
+        
+        Returns:
+            List[str]: List of unique tags
+        """
+        table = self.db.open_table("memories")
+        
+        # Get all memories and extract tags
+        all_memories = table.search().to_list()
+        all_tags = set()
+        
+        for memory in all_memories:
+            if memory.tags:
+                all_tags.update(memory.tags)
+                
+        return sorted(list(all_tags))
