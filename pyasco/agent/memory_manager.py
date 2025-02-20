@@ -184,7 +184,7 @@ class MemoryManager:
                     return []
                     
                 # Then query again with these IDs to get relevance scores
-                memory_ids = [m['id'] for m in memories]
+                memory_ids = [f"'{m['id']}'" for m in memories]
                 id_filter = f"id IN ({', '.join(memory_ids)})"
                 
                 scored_memories = await self.memory_handler.search_similar(
