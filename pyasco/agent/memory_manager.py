@@ -68,8 +68,12 @@ class MemoryManager:
         """Rough estimate of token count"""
         return len(text.split()) * 1.3  # Rough approximation
 
-    def _format_memories_by_type(self, memories: List[Dict[str, Any]]) -> str:
+    async def _format_memories_by_type(self, memories: List[Dict[str, Any]]) -> str:
         """Format memories grouped by type"""
+        # Increment access count for all memories being accessed
+        memory_ids = [memory['id'] for memory in memories]
+        await self.memory_handler.increment_access_count(memory_ids)
+        
         grouped = defaultdict(list)
         for memory in memories:
             grouped[memory['memory_type']].append(memory['content'])
@@ -208,7 +212,7 @@ class MemoryManager:
             logger.info(f"Score: {memory['final_score']:.3f} | Content: {memory['content'][:100]}...")
 
         # Format and return the context
-        return self._format_memories_by_type(final_memories)
+        return await self._format_memories_by_type(final_memories)
 
     async def trigger_decay(self) -> None:
         """
