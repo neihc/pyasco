@@ -150,11 +150,14 @@ class MemoryDecayHandler:
                     
         return processed_memories
 
-    async def resolve_conflicts(self, new_memory: Dict, existing_memory: Dict) -> Dict:
-        """Use LLM to intelligently resolve conflicts between memories"""
+    async def should_integrate_memories(self, new_memory: Dict, existing_memory: Dict) -> Tuple[bool, Dict]:
+        """Use LLM to decide if and how to integrate memories"""
         prompt = f"""
-        Analyze these two memories and provide a merged version that preserves all important information.
-        Resolve any conflicts and provide reasoning.
+        Analyze these two memories and decide if they should be integrated.
+        Consider:
+        1. Are they truly about the same topic/event?
+        2. Would combining them preserve more useful information?
+        3. How should they be merged if integration is recommended?
 
         New Memory:
         {json.dumps(new_memory, indent=2)}
@@ -164,18 +167,46 @@ class MemoryDecayHandler:
 
         Response format:
         {{
-            "merged_content": "consolidated content",
-            "merged_tags": ["tag1", "tag2"],
-            "merged_metadata": {{
+            "should_integrate": true/false,
+            "reasoning": "detailed explanation of the decision",
+            "integrated_memory": {{  # Only if should_integrate is true
+                "content": "merged content",
+                "summary": "updated summary",
+                "tags": ["tag1", "tag2"],
                 "importance_score": 0.8,
-                "reasoning": "explanation of merge decisions",
-                "preserved_elements": ["element1", "element2"]
+                "valid_from": "2024-02-20T00:00:00Z",
+                "valid_until": "2024-12-31T23:59:59Z",
+                "event_time": "2024-02-20T10:00:00Z"
             }}
         }}
         """
 
         llm_response = await self.llm_service.get_response([{"role": "user", "content": prompt}])
-        return json.loads(llm_response)
+        result = json.loads(llm_response)
+        
+        if result["should_integrate"]:
+            integrated = result["integrated_memory"]
+            # Preserve the existing memory's ID and metadata structure
+            memory_data = {
+                'id': existing_memory['id'],
+                'content': integrated['content'],
+                'memory_type': MemoryType.LONG_TERM.value,
+                'metadata': json.dumps({
+                    'original_memories': json.loads(existing_memory['metadata']).get('original_memories', []) + [new_memory['id']],
+                    'integrated_at': datetime.now().isoformat()
+                }),
+                'tags': integrated['tags'],
+                'created_at': existing_memory['created_at'],
+                'valid_from': datetime.fromisoformat(integrated['valid_from']),
+                'valid_until': datetime.fromisoformat(integrated['valid_until']),
+                'event_time': datetime.fromisoformat(integrated['event_time']),
+                'access_count': existing_memory['access_count'],
+                'importance_score': integrated['importance_score'],
+                'summary': integrated['summary']
+            }
+            return True, memory_data
+        
+        return False, None
 
     async def decay_short_term_memories(self):
         """Enhanced decay process with improved clustering and LLM integration"""
@@ -226,30 +257,30 @@ class MemoryDecayHandler:
                         'summary': memory['summary']
                     }
 
-                    # Check for similar existing memories
+                    # Check for similar existing memories with lower threshold
                     existing_similar = await self.memory_handler.search_similar(
                         query=memory['summary'],
-                        limit=1,
+                        limit=5,  # Get more potential matches
                         filter_dict=f"memory_type = '{MemoryType.LONG_TERM.value}'",
-                        threshold=0.9
+                        threshold=0.6  # Lower threshold to catch more potential matches
                     )
 
-                    if existing_similar:
-                        # Use LLM to resolve conflicts and merge memories
-                        merged_result = await self.resolve_conflicts(
-                            new_memory_data, 
-                            existing_similar[0]
+                    integrated = False
+                    for existing in existing_similar:
+                        should_integrate, integrated_memory = await self.should_integrate_memories(
+                            new_memory_data,
+                            existing
                         )
-
-                        await self.memory_handler.update_memory(
-                            existing_similar[0]['id'],
-                            {
-                                'content': merged_result['merged_content'],
-                                'tags': merged_result['merged_tags'],
-                                'metadata': merged_result['merged_metadata']
-                            }
-                        )
-                    else:
+                        
+                        if should_integrate:
+                            await self.memory_handler.update_memory(
+                                existing['id'],
+                                integrated_memory
+                            )
+                            integrated = True
+                            break
+                    
+                    if not integrated:
                         await self.memory_handler.add_memory(new_memory_data)
 
                 # Delete processed short-term memories
