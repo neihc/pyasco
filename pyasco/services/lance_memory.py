@@ -202,7 +202,8 @@ class LanceDBMemoryHandler:
         table = self.db.open_table("memories")
         
         # Build ID filter with proper parentheses
-        id_filter = f"({' OR '.join([f"id = '{mid}'" for mid in memory_ids]})"
+        id_conditions = [f"id = '{mid}'" for mid in memory_ids]
+        id_filter = f"({' OR '.join(id_conditions)})"
         
         # Get current memories
         current = table.search().where(id_filter).to_list()
