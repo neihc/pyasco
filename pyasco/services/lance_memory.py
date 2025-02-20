@@ -1,19 +1,15 @@
+import os
 from typing import List, Dict, Any, Optional
 from enum import Enum
 import json
-import lancedb
-import numpy as np
 from datetime import datetime
 from pathlib import Path
 import uuid
-import pandas as pd
-import pyarrow as pa
+import lancedb
 from lancedb.pydantic import Vector, LanceModel
 from lancedb.embeddings import get_registry
 from lancedb.rerankers import JinaReranker
-import os
 
-from ..services.llm import LLMService
 from ..services.code_snippet_extractor import CodeSnippetExtractor
 
 # Get Jina embedding function
@@ -46,11 +42,8 @@ class LanceDBMemoryHandler:
     """Handler for processing and storing memories using LanceDB"""
     
     def __init__(self, 
-                       db_path: str = "~/.pyasco/memories",
-                       jina_api_key: Optional[str] = None,
-                       decay_threshold_days: int = 7,
-                       relevance_threshold: float = 0.3,
-                       access_threshold: int = 3):
+                 db_path: str = "~/.pyasco/memories",
+                 jina_api_key: Optional[str] = None):
         self.code_extractor = CodeSnippetExtractor()
         self.db_path = Path(db_path).expanduser()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -69,11 +62,6 @@ class LanceDBMemoryHandler:
         self.db = lancedb.connect(str(self.db_path))
         self.Memory = Memory  # Use the globally defined Memory class
         self._initialize_db()
-        
-        # Memory decay settings
-        self.decay_threshold_days = decay_threshold_days
-        self.relevance_threshold = relevance_threshold 
-        self.access_threshold = access_threshold
 
     def _initialize_db(self):
         """Initialize the database table with vector search and full-text search support"""

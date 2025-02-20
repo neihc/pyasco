@@ -203,31 +203,31 @@ class MemoryDecayHandler:
                         'tags': memory['tags']
                     }
 
-                # Check for similar existing memories
-                existing_similar = await self.memory_handler.search_similar(
-                    query=memory['summary'],
-                    limit=1,
-                    filter_dict=f"memory_type = '{MemoryType.LONG_TERM.value}'",
-                    threshold=0.9
-                )
-
-                if existing_similar:
-                    # Use LLM to resolve conflicts and merge memories
-                    merged_result = await self.resolve_conflicts(
-                        new_memory_data, 
-                        existing_similar[0]
+                    # Check for similar existing memories
+                    existing_similar = await self.memory_handler.search_similar(
+                        query=memory['summary'],
+                        limit=1,
+                        filter_dict=f"memory_type = '{MemoryType.LONG_TERM.value}'",
+                        threshold=0.9
                     )
 
-                    await self.memory_handler.update_memory(
-                        existing_similar[0]['id'],
-                        {
-                            'content': merged_result['merged_content'],
-                            'tags': merged_result['merged_tags'],
-                            'metadata': merged_result['merged_metadata']
-                        }
-                    )
-                else:
-                    await self.memory_handler.add_memory(new_memory_data)
+                    if existing_similar:
+                        # Use LLM to resolve conflicts and merge memories
+                        merged_result = await self.resolve_conflicts(
+                            new_memory_data, 
+                            existing_similar[0]
+                        )
+
+                        await self.memory_handler.update_memory(
+                            existing_similar[0]['id'],
+                            {
+                                'content': merged_result['merged_content'],
+                                'tags': merged_result['merged_tags'],
+                                'metadata': merged_result['merged_metadata']
+                            }
+                        )
+                    else:
+                        await self.memory_handler.add_memory(new_memory_data)
 
                 # Delete processed short-term memories
                 for memory in cluster:
