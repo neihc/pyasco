@@ -1,11 +1,13 @@
 from typing import List, Dict, Optional, Generator, Union, Any
 from datetime import datetime
 import re
+import asyncio
 
 from ..logger_config import setup_logger
 from .conversation import Conversation
 from ..services.lance_memory import LanceDBMemoryHandler
 from ..services.embedding import EmbeddingService
+from .memory_manager import MemoryManager
 from .prompt import (
     DEFAULT_SYSTEM_PROMPT,
     FOLLOW_UP_PROMPT
@@ -49,6 +51,7 @@ class Agent:
         # Initialize memory services if configured
         self.embedding_service = None
         self.memory_handler = None
+        self.memory_manager = None
         
         if hasattr(config, 'memory') and config.memory.enabled:
             self.embedding_service = EmbeddingService()
@@ -56,6 +59,11 @@ class Agent:
             self.memory_handler = LanceDBMemoryHandler(
                 llm_service=self.llm_service,
                 db_path=config.memory.db_path if hasattr(config.memory, 'db_path') else "~/.pyasco/memories"
+            )
+            
+            self.memory_manager = MemoryManager(
+                memory_handler=self.memory_handler,
+                llm_service=self.llm_service
             )
         
         # Initialize handlers
@@ -138,39 +146,42 @@ class Agent:
         self.logger.info(f"Getting response for user input (stream={stream})")
         
         context = None
-        recalled_memories = []
-        self.logger.info(self.memory_handler)
-        if self.memory_handler and self._needs_recall(user_input):
+        if self.memory_manager and self._needs_recall(user_input):
             try:
-                recalled_memories = self.memory_handler.recall(user_input, similarity_threshold=0)
-                self.logger.info(recalled_memories)
-                if recalled_memories:
-                    # Format memories for context
-                    memory_text = "\n\n".join([
-                        f"Memory from {mem.get('created_at', 'unknown time')}:\n{mem.get('content', '')}"
-                        for mem in recalled_memories
-                    ])
+                memory_text = asyncio.run(self.memory_manager.get_context(user_input))
+                if memory_text:
                     context = {
                         "type": "memory_recall",
-                        "recalled": recalled_memories,
                         "memory_text": memory_text
                     }
-                    self.logger.info(f"Recalled {len(recalled_memories)} relevant memories")
+                    self.logger.info("Retrieved context from memory manager")
             except Exception as e:
-                self.logger.error(f"Failed to recall context: {str(e)}")
+                self.logger.error(f"Failed to get context: {str(e)}")
 
+        # Add message to conversation and memory
         self.conversation.add_message(
             role="user",
             content=user_input,
             context=context
         )
         
-        return self.response_handler.handle_response(
+        if self.memory_manager:
+            asyncio.run(self.memory_manager.remember(f"user: {user_input}"))
+        
+        response = self.response_handler.handle_response(
             self.conversation.to_llm_format(),
             self.model,
             self.conversation,
             stream
         )
+        
+        # Store assistant response in memory
+        if self.memory_manager and not stream:
+            last_message = self.conversation.last_message
+            if last_message and last_message.role == "assistant":
+                asyncio.run(self.memory_manager.remember(f"assistant: {last_message.content}"))
+        
+        return response
 
     def get_response(self, user_input: str, stream: bool = False) -> Union[Message, Generator[Message, None, None]]:
         """Get response without recall for follow-up messages"""
@@ -231,50 +242,16 @@ class Agent:
         return bool(last_message and last_message.tools)
 
     def remember_conversation(self):
-        """Store the current conversation in memory if memory handling is enabled"""
-        if not self.memory_handler:
-            self.logger.debug("Memory handling not enabled, skipping conversation storage")
+        """Trigger memory decay process"""
+        if not self.memory_manager:
+            self.logger.debug("Memory handling not enabled, skipping memory decay")
             return
             
         try:
-            # Convert conversation to storable format
-            messages_data = []
-            recalled_memories = []
-            
-            for msg in self.conversation.messages:
-                if msg.role == "system":  # Skip system messages
-                    continue
-                
-                message_text = f"{msg.role}: {msg.content}"
-                
-                # Collect recalled memories from context
-                if msg.context and msg.context.get("type") == "memory_recall":
-                    recalled = msg.context.get("recalled", [])
-                    recalled_memories.extend(recalled)
-                
-                messages_data.append(message_text)
-            
-            conversation_text = "\n".join(messages_data)
-            
-            if not conversation_text.strip():
-                self.logger.debug("No conversation content to store")
-                return
-            
-            # Add context about the conversation
-            context = {
-                "type": "conversation",
-                "conversation_id": self.conversation_id,
-                "timestamp": str(datetime.now()),
-                "message_count": len(self.conversation.messages),
-                "recalled_memories": recalled_memories,
-                **self.metadata
-            }
-            
-            self.logger.info("Storing conversation in memory with related memories")
-            self.memory_handler.remember(conversation_text, context, recalled_memories)
-            
+            self.logger.info("Triggering memory decay process")
+            asyncio.run(self.memory_manager.trigger_decay())
         except Exception as e:
-            self.logger.error(f"Failed to store conversation in memory: {str(e)}")
+            self.logger.error(f"Failed to trigger memory decay: {str(e)}")
 
     def reset(self):
         self.logger.info("Resetting agent state")
