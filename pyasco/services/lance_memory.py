@@ -263,19 +263,19 @@ class LanceDBMemoryHandler:
 
     async def get_all_tags(self) -> List[str]:
         """
-        Get all unique tags used across memories.
+        Get all unique tags used across memories using pandas for efficiency.
         
         Returns:
             List[str]: List of unique tags
         """
         table = self.db.open_table("memories")
         
-        # Get all memories and extract tags
-        all_memories = table.search().to_list()
-        all_tags = set()
+        # Get all memories as pandas DataFrame
+        df = table.to_pandas()
         
-        for memory in all_memories:
-            if memory['tags']:
-                all_tags.update(memory['tags'])
-                
-        return sorted(list(all_tags))
+        # Explode the tags column and get unique values
+        if not df.empty and 'tags' in df.columns:
+            all_tags = df['tags'].explode().dropna().unique().tolist()
+            return sorted(all_tags)
+        
+        return []
