@@ -147,12 +147,6 @@ class Agent:
             stream
         )
         
-        # Store assistant response in memory
-        if self.memory_manager and not stream:
-            last_message = self.conversation.last_message
-            if last_message and last_message.role == "assistant":
-                asyncio.run(self.memory_manager.remember(f"assistant: {last_message.content}"))
-        
         return response
 
     def get_response(self, user_input: str, stream: bool = False) -> Union[Message, Generator[Message, None, None]]:
@@ -191,6 +185,9 @@ class Agent:
                 break
                 
             last_message = self.conversation.last_message
+            if self.memory_manager and last_message and last_message.role == "assistant":
+                asyncio.run(self.memory_manager.remember(f"assistant: {last_message.content}"))
+
             results = self.tool_handler.execute_tools(last_message.tools if last_message else [])
             if not results:
                 break
