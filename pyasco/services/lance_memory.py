@@ -152,16 +152,26 @@ class LanceDBMemoryHandler:
         """
         table = self.db.open_table("memories")
         
-        # Perform hybrid search with optional filter
-        search = table.search(query, query_type="hybrid")
-        if filter_dict:
-            search = search.where(filter_dict if isinstance(filter_dict, str) else " AND ".join(f"{k} = '{v}'" for k, v in filter_dict.items()))
-            
-        if self.reranker:
-            search = search.rerank(reranker=self.reranker)
+        try:
+            # Perform hybrid search with optional filter
+            search = table.search(query, query_type="hybrid")
+            if filter_dict:
+                search = search.where(filter_dict if isinstance(filter_dict, str) else " AND ".join(f"{k} = '{v}'" for k, v in filter_dict.items()))
+                
+            if self.reranker:
+                search = search.rerank(reranker=self.reranker)
 
-        # Get all results as pandas DataFrame
-        df = search.to_pandas()
+            # Get all results as pandas DataFrame
+            df = search.to_pandas()
+        except ValueError as e:
+            if "not enough values to unpack" in str(e):
+                # Return empty DataFrame if no results found
+                import pandas as pd
+                df = pd.DataFrame(columns=['id', 'content', 'memory_type', 'metadata', 'tags', 
+                                         'created_at', 'valid_from', 'valid_until', 'event_time',
+                                         'access_count', 'importance_score', 'summary', '_relevance_score'])
+            else:
+                raise
         
         # Apply sorting if specified
         if sort_by and sort_by in df.columns:
