@@ -205,22 +205,22 @@ class LanceDBMemoryHandler:
         id_filter = " OR ".join([f"id = '{mid}'" for mid in memory_ids])
         
         # Get current memories
-        current = await table.where(id_filter).to_list()
+        current = table.search().where(id_filter).to_list()
         if not current:
             return  # Skip if no memories found
             
         # Update access counts
         updated_memories = []
         for memory in current:
-            updated_memory = Memory(
-                **{**memory.dict(),
-                   "access_count": memory.access_count + 1}
+            updated_memory = dict(
+                **{**memory,
+                   "access_count": memory.get('access_count', 0) + 1}
             )
             updated_memories.append(updated_memory)
         
         # Replace the records
-        await table.delete(id_filter)
-        await table.add(updated_memories)
+        table.delete(id_filter)
+        table.add(updated_memories)
 
     async def delete_memory(self, memory_id: str) -> bool:
         """
@@ -262,12 +262,13 @@ class LanceDBMemoryHandler:
             return False
             
         # Update memory with new values
-        memory_dict = existing[0].dict()
+        memory_dict = existing[0]
         memory_dict.update(updates)
+        memory_dict.pop('vector')
         
         # Delete old record and add updated one
         table.delete(f"id = '{memory_id}'")
-        table.add([Memory(**memory_dict)])
+        await self.add_memory(memory_dict, memory_id)
         
         return True
 
