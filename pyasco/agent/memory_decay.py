@@ -183,6 +183,14 @@ class MemoryDecayHandler:
         1. Are they truly about the same topic/event?
         2. Would combining them preserve more useful information?
         3. How should they be merged if integration is recommended?
+        4. Calculate importance score (0-1) for integrated memory based on:
+           - 0.8-1.0: Critical information (core concepts, key decisions, major events)
+           - 0.6-0.8: Important details (specific examples, implementation details)
+           - 0.4-0.6: Supporting information (context, background, minor details)
+           - 0.2-0.4: Supplementary details (temporary notes, partial information)
+           - 0.0-0.2: Trivial information (redundant or obsolete details)
+           The integrated memory should have an importance score >= max(existing_score, new_score)
+           if it contains more complete/valuable information.
 
         New Memory:
         {json.dumps(self._prepare_memory_for_llm(new_memory), indent=2)}
