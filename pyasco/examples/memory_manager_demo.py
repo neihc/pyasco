@@ -40,14 +40,6 @@ async def demonstrate_memory_operations(memory_manager: MemoryManager):
     # Simulate time passing (8 days) and new conversation about a different topic
     logger.info("\nSimulating new conversation after time passage...")
     
-    # Add old conversation memories with timestamp 8 days ago
-    old_timestamp = (datetime.now() - timedelta(days=8)).isoformat()
-    for memory in web_framework_convo:
-        await memory_manager.remember(
-            content=memory,
-            meta={"timestamp": old_timestamp, "topic": "web_frameworks"}
-        )
-    
     # New conversation about data science
     data_science_convo = [
         "User is starting a new data science project",
