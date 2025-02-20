@@ -113,18 +113,33 @@ class Agent:
 
 
     def _get_response_with_recall(self, user_input: str, stream: bool = False) -> Union[Message, Generator[Message, None, None]]:
-        """Get response with optional memory recall"""
-        self.logger.info(f"Getting response for user input (stream={stream})")
+        """Get response with memory recall"""
+        self.logger.info(f"Getting response for user input with recall (stream={stream})")
         
-        # Add message to conversation and memory
+        # Reset conversation before starting
+        self.reset()
+        
+        # Get relevant context from memory
+        context = ""
+        if self.memory_manager:
+            context = asyncio.run(self.memory_manager.get_context(user_input))
+            
+        # Combine context with user input if we have context
+        content = user_input
+        if context:
+            content = f"Context from previous conversations:\n{context}\n\nCurrent input:\n{user_input}"
+            
+        # Add combined message to conversation
         self.conversation.add_message(
             role="user",
-            content=user_input
+            content=content
         )
         
+        # Store user input in memory
         if self.memory_manager:
             asyncio.run(self.memory_manager.remember(f"user: {user_input}"))
         
+        # Get response from LLM
         response = self.response_handler.handle_response(
             self.conversation.to_llm_format(),
             self.model,
