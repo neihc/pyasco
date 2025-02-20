@@ -2,24 +2,23 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Tuple
 import json
-from sklearn.cluster import DBSCAN
 import numpy as np
+
+from sklearn.cluster import DBSCAN
+
 from ..services.lance_memory import LanceDBMemoryHandler, MemoryType
-from ..services.llm_service import LLMService
-from ..services.embedding_service import EmbeddingService  # Assume this exists
+from ..services.llm import LLMService
 from ..services.code_snippet_extractor import CodeSnippetExtractor
 
 class MemoryDecayHandler:
     def __init__(self,
                  memory_handler: LanceDBMemoryHandler,
                  llm_service: LLMService,
-                 embedding_service: EmbeddingService,
                  decay_threshold_days: int = 7,
                  relevance_threshold: float = 0.3,
                  access_threshold: int = 3):
         self.memory_handler = memory_handler
         self.llm_service = llm_service
-        self.embedding_service = embedding_service
         self.decay_threshold_days = decay_threshold_days
         self.relevance_threshold = relevance_threshold
         self.access_threshold = access_threshold
@@ -251,6 +250,7 @@ class MemoryDecayHandler:
         # 3 & 4. Enhanced LLM Processing and Integration
         for cluster in memory_clusters:
             try:
+                import pdb; pdb.set_trace()
                 processed_memories = await self.process_with_llm(cluster)
                 
                 for memory in processed_memories:
