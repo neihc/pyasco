@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Tuple
 import json
+import copy
 import numpy as np
 
 from sklearn.cluster import DBSCAN
@@ -11,6 +12,17 @@ from ..services.llm import LLMService
 from ..services.code_snippet_extractor import CodeSnippetExtractor
 
 class MemoryDecayHandler:
+    def _prepare_memory_for_llm(self, memory: Dict) -> Dict:
+        """Prepare memory dict for LLM by removing vector and making JSON-safe"""
+        memory_copy = copy.deepcopy(memory)
+        # Remove vector field which isn't JSON serializable
+        memory_copy.pop('vector', None)
+        # Convert datetime objects to ISO format strings
+        for field in ['created_at', 'valid_from', 'valid_until', 'event_time']:
+            if field in memory_copy and isinstance(memory_copy[field], datetime):
+                memory_copy[field] = memory_copy[field].isoformat()
+        return memory_copy
+
     def __init__(self,
                  memory_handler: LanceDBMemoryHandler,
                  llm_service: LLMService,
@@ -67,15 +79,7 @@ class MemoryDecayHandler:
         existing_tags = await self.memory_handler.get_all_tags()
         
         # Prepare detailed memory context
-        memory_contexts = []
-        for memory in cluster:
-            context = {
-                'content': memory['content'],
-                'created_at': memory['created_at'].isoformat(),
-                'tags': memory.get('tags', []),
-                'metadata': memory.get('metadata', {})
-            }
-            memory_contexts.append(context)
+        memory_contexts = [self._prepare_memory_for_llm(memory) for memory in cluster]
 
         prompt = f"""
         Analyze these related memories and break them down into independent memory units.
@@ -158,10 +162,10 @@ class MemoryDecayHandler:
         3. How should they be merged if integration is recommended?
 
         New Memory:
-        {json.dumps(new_memory, indent=2)}
+        {json.dumps(self._prepare_memory_for_llm(new_memory), indent=2)}
 
         Existing Memory:
-        {json.dumps(existing_memory, indent=2)}
+        {json.dumps(self._prepare_memory_for_llm(existing_memory), indent=2)}
 
         Response format:
         ```json
