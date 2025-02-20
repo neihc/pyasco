@@ -98,7 +98,6 @@ class MemoryDecayHandler:
         
         # Prepare detailed memory context
         memory_contexts = [self._prepare_memory_for_llm(memory) for memory in cluster]
-        import pdb; pdb.set_trace()
 
         prompt = f"""
         Analyze these related memories and break them down into independent memory units.
@@ -134,7 +133,7 @@ class MemoryDecayHandler:
         {json.dumps(memory_contexts, indent=2)}
         """
         
-        llm_response = await self.llm_service.get_response([{"role": "user", "content": prompt}])
+        llm_response = self.llm_service.get_response([{"role": "user", "content": prompt}])
         
         # Extract JSON from markdown response
         code_extractor = CodeSnippetExtractor()
@@ -204,7 +203,7 @@ class MemoryDecayHandler:
         ```
         """
 
-        llm_response = await self.llm_service.get_response([{"role": "user", "content": prompt}])
+        llm_response = self.llm_service.get_response([{"role": "user", "content": prompt}])
         
         # Extract JSON using CodeSnippetExtractor
         code_extractor = CodeSnippetExtractor()
