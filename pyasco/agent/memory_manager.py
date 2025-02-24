@@ -3,10 +3,12 @@ import math
 from datetime import datetime
 from collections import defaultdict
 import asyncio
+import logging
 from dataclasses import dataclass
 from ..services.llm import LLMService
 from ..services.lance_memory import LanceDBMemoryHandler, MemoryType
 from .memory_decay import MemoryDecayHandler
+from ..logger_config import setup_logger
 
 class MemoryManager:
     """Manages memory operations for the agent using LanceDB"""
@@ -18,6 +20,7 @@ class MemoryManager:
         self.memory_handler = memory_handler
         self.llm_service = llm_service
         self.token_window = token_window
+        self.logger = setup_logger('memory_manager', log_file='~/.pyasco/memory.log')
         self.decay_handler = MemoryDecayHandler(
             memory_handler=memory_handler,
             llm_service=llm_service,
@@ -107,6 +110,7 @@ class MemoryManager:
         }
         
         memory_id = await self.memory_handler.add_memory(memory_data)
+        self.logger.info(f"Created new memory with ID: {memory_id}")
         return memory_id
 
     async def get_context(self, query: str) -> str:
@@ -213,8 +217,13 @@ class MemoryManager:
         for memory in final_memories:
             logger.info(f"Score: {memory['final_score']:.3f} | Content: {memory['content'][:100]}...")
 
+        self.logger.info(f"Retrieved {len(final_memories)} relevant memories")
+        self.logger.debug(f"Memory scores: {[m['final_score'] for m in final_memories]}")
+        
         # Format and return the context
-        return await self._format_memories_by_type(final_memories)
+        formatted_context = await self._format_memories_by_type(final_memories)
+        self.logger.debug(f"Formatted context length: {len(formatted_context)}")
+        return formatted_context
 
     async def trigger_decay(self) -> None:
         """
@@ -225,9 +234,9 @@ class MemoryManager:
         3. Uses LLM to process and integrate them into long-term memories
         4. Removes processed short-term memories
         """
+        self.logger.info("Starting memory decay process")
         try:
             await self.decay_handler.decay_short_term_memories()
+            self.logger.info("Memory decay process completed successfully")
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Error during memory decay process: {e}")
+            self.logger.error(f"Error during memory decay process: {e}", exc_info=True)
