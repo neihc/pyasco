@@ -37,7 +37,7 @@ class MemoryManager:
         # Time decay score (7 days half-life)
         now = datetime.now()
         age = (now - memory['created_at']).total_seconds()
-        decay_score = math.exp(-age / (7 * 24 * 3600))
+        decay_score = math.exp(-age / (3600))
         
         # Frequency score based on access count
         access_count = memory.get('access_count', 0)
@@ -48,10 +48,10 @@ class MemoryManager:
         
         # Weights for different factors
         weights = {
-            'decay': 0.25,      # Recent memories
+            'decay': 0.35,      # Recent memories
             'relevance': 0.3,   # Search relevance
             'frequency': 0.2,   # Access frequency
-            'importance': 0.25  # Explicit importance
+            'importance': 0.15  # Explicit importance
         }
         
         # Calculate weighted sum
@@ -129,7 +129,9 @@ class MemoryManager:
                 memories = await self.memory_handler.search_similar(
                     query="",  # Empty query to get latest
                     limit=10,
-                    filter_dict={"memory_type": MemoryType.SHORT_TERM.value}
+                    filter_dict={"memory_type": MemoryType.SHORT_TERM.value},
+                    sort_by='created_at',
+                    ascending=False
                 )
                 
                 if not memories:
@@ -180,6 +182,7 @@ class MemoryManager:
                 get_long_term(),
                 get_reflection()
             )
+            import pdb; pdb.set_trace()
         except Exception as e:
             logger.error(f"Error gathering memories: {e}")
             short_term, long_term, reflection = [], [], []
@@ -194,7 +197,7 @@ class MemoryManager:
 
         # Sort by final score and filter low scores
         scored_memories = sorted(all_memories, key=lambda x: x['final_score'], reverse=True)
-        filtered_memories = [m for m in scored_memories if m['final_score'] > 0.3]
+        filtered_memories = [m for m in scored_memories if m['final_score'] > 0.2]
 
         # Trim to fit token window
         current_tokens = 0
