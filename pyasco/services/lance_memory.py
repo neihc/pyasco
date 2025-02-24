@@ -276,14 +276,28 @@ class LanceDBMemoryHandler:
             query: SQL query string to execute
             
         Returns:
-            List[Dict[str, Any]]: Query results as list of dictionaries
+            List[Dict[str, Any]]: Query results as list of dictionaries with decoded metadata
         """
         table = self.db.open_table("memories")
         arrow_table = table.to_lance()
         
-        # Execute query and convert results to list of dicts
+        # Execute query and get results
         result = duckdb.query(query, arrow_table)
-        return result.fetchall()
+        rows = result.fetchall()
+        
+        # Process results to decode metadata JSON
+        processed_rows = []
+        for row in rows:
+            row_dict = dict(row)
+            if 'metadata' in row_dict and isinstance(row_dict['metadata'], str):
+                try:
+                    row_dict['metadata'] = json.loads(row_dict['metadata'])
+                except json.JSONDecodeError:
+                    # Keep original if not valid JSON
+                    pass
+            processed_rows.append(row_dict)
+            
+        return processed_rows
 
     async def get_all_tags(self) -> List[str]:
         """
