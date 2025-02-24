@@ -259,15 +259,17 @@ class MemoryDecayHandler:
 
     async def decay_short_term_memories(self):
         """Enhanced decay process with improved clustering and LLM integration"""
-        # 1. Selection Process
-        short_term_memories = await self.memory_handler.search_similar(
-            query="",
-            limit=100,
-            filter_dict=f"memory_type = '{MemoryType.SHORT_TERM.value}'",
-            sort_by="created_at",
-            ascending=True
-        )
-
+        # 1. Selection Process - Using SQL query
+        query = f"""
+        SELECT *
+        FROM memories 
+        WHERE memory_type = '{MemoryType.SHORT_TERM.value}'
+        ORDER BY created_at ASC
+        LIMIT 100
+        """
+        
+        short_term_memories = await self.memory_handler.sql_query(query)
+        
         if not short_term_memories:
             return
 
