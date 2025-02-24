@@ -28,6 +28,7 @@ class Memory(LanceModel):
     """Pydantic model for memory table schema"""
     id: str
     content: str = jina_embed.SourceField()
+    summary: Optional[str] = None
     vector: Vector(1024) = jina_embed.VectorField()
     memory_type: str
     metadata: str  # JSON string
@@ -38,7 +39,6 @@ class Memory(LanceModel):
     event_time: Optional[datetime] = None
     access_count: int = 0
     importance_score: float = 0.0
-    summary: Optional[str] = None
 
 class LanceDBMemoryHandler:
     """Handler for processing and storing memories using LanceDB"""
@@ -154,7 +154,7 @@ class LanceDBMemoryHandler:
         
         try:
             # Perform hybrid search with optional filter
-            search = table.search(query, query_type="hybrid")
+            search = table.search(query, query_type="hybrid").limit(limit)
             if filter_dict:
                 search = search.where(filter_dict if isinstance(filter_dict, str) else " AND ".join(f"{k} = '{v}'" for k, v in filter_dict.items()))
                 
@@ -180,6 +180,7 @@ class LanceDBMemoryHandler:
         # Apply limit
         df = df.head(limit)
         results = df.to_dict('records')
+        import pdb; pdb.set_trace()
             
         # Filter by score threshold using pandas
         df = df[df._relevance_score >= score_threshold]
@@ -199,6 +200,8 @@ class LanceDBMemoryHandler:
         Args:
             memory_ids: List of memory IDs to update
         """
+        if not memory_ids:
+            return
         table = self.db.open_table("memories")
         
         # Build ID filter with proper parentheses
@@ -268,6 +271,7 @@ class LanceDBMemoryHandler:
         # Update memory with new values
         memory_dict = existing[0]
         memory_dict.update(updates)
+        memory_dict['metadata'] = json.dumps(memory_dict.get('metadata', {}))
         memory_dict.pop('vector')
         
         # Use merge_insert for atomic update
