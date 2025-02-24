@@ -125,14 +125,15 @@ class MemoryManager:
         # Fetch different types of memories in parallel
         async def get_short_term():
             try:
-                # First get latest short term memories
-                memories = await self.memory_handler.search_similar(
-                    query="",  # Empty query to get latest
-                    limit=10,
-                    filter_dict={"memory_type": MemoryType.SHORT_TERM.value},
-                    sort_by='created_at',
-                    ascending=False
-                )
+                # First get latest short term memories using SQL
+                query = """
+                SELECT *
+                FROM memories 
+                WHERE memory_type = 'short_term'
+                ORDER BY created_at DESC
+                LIMIT 10
+                """
+                memories = await self.memory_handler.sql_query(query)
                 
                 if not memories:
                     return []
