@@ -281,24 +281,25 @@ class LanceDBMemoryHandler:
         table = self.db.open_table("memories")
         arrow_table = table.to_lance()
         
-        # Execute query and get results
-        duck_query = duckdb.arrow(arrow_table)
-        result = duck_query.query('memories', query)
-        rows = result.fetchall()
+        # Create DuckDB connection and register arrow table
+        con = duckdb.connect()
+        con.register('memories', arrow_table)
         
-        # Process results to decode metadata JSON
-        processed_rows = []
-        for row in rows:
-            row_dict = dict(row)
-            if 'metadata' in row_dict and isinstance(row_dict['metadata'], str):
+        # Execute query and get results as pandas DataFrame
+        df = con.execute(query).df()
+        
+        # Convert to dict records and process metadata
+        results = df.to_dict('records')
+        
+        # Process metadata JSON strings
+        for row in results:
+            if 'metadata' in row and isinstance(row['metadata'], str):
                 try:
-                    row_dict['metadata'] = json.loads(row_dict['metadata'])
+                    row['metadata'] = json.loads(row['metadata'])
                 except json.JSONDecodeError:
-                    # Keep original if not valid JSON
                     pass
-            processed_rows.append(row_dict)
-            
-        return processed_rows
+                    
+        return results
 
     async def get_all_tags(self) -> List[str]:
         """
