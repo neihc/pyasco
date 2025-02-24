@@ -178,19 +178,17 @@ class MemoryManager:
 
         try:
             # Gather all memory fetching tasks
-            short_term, long_term, reflection = await asyncio.gather(
+            short_term, long_term = await asyncio.gather(
                 get_short_term(),
                 get_long_term(),
-                get_reflection()
             )
-            import pdb; pdb.set_trace()
         except Exception as e:
             logger.error(f"Error gathering memories: {e}")
-            short_term, long_term, reflection = [], [], []
+            short_term, long_term = [], []
 
         # Score all memories using combined factors
         all_memories = []
-        for memory in short_term + long_term + reflection:
+        for memory in short_term + long_term:
             relevance_score = memory.get('_relevance_score', 0.5)  # Default to 0.5 for short-term
             final_score = self._calculate_memory_score(memory, relevance_score)
             memory['final_score'] = final_score
@@ -198,7 +196,7 @@ class MemoryManager:
 
         # Sort by final score and filter low scores
         scored_memories = sorted(all_memories, key=lambda x: x['final_score'], reverse=True)
-        filtered_memories = [m for m in scored_memories if m['final_score'] > 0.2]
+        filtered_memories = [m for m in scored_memories if m['final_score'] > 0.3]
 
         # Trim to fit token window
         current_tokens = 0
