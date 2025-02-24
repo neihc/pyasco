@@ -5,6 +5,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 import uuid
+import duckdb
 import lancedb
 from lancedb.pydantic import Vector, LanceModel
 from lancedb.embeddings import get_registry
@@ -133,9 +134,7 @@ class LanceDBMemoryHandler:
                            query: str, 
                            limit: int = 5,
                            score_threshold: float = 0.0,
-                           filter_dict: Optional[Dict] = None,
-                           sort_by: Optional[str] = None,
-                           ascending: bool = True) -> List[Dict[str, Any]]:
+                           filter_dict: Optional[Dict] = None) -> List[Dict[str, Any]]:
         """
         Search for similar memories using hybrid search (vector + text) with reranking.
         
@@ -144,8 +143,6 @@ class LanceDBMemoryHandler:
             limit: Maximum number of results to return
             score_threshold: Minimum similarity score threshold
             filter_dict: Optional dictionary of filters to apply (e.g., {"memory_type": "long_term"})
-            sort_by: Optional field name to sort results by
-            ascending: Sort direction (True for ascending, False for descending)
             
         Returns:
             List of memory dictionaries with similarity scores
@@ -173,16 +170,8 @@ class LanceDBMemoryHandler:
             else:
                 raise
         
-        # Apply sorting if specified
-        if sort_by and sort_by in df.columns:
-            df = df.sort_values(by=sort_by, ascending=ascending)
-        
-        # Apply limit
+        # Apply limit and filter by score threshold
         df = df.head(limit)
-        results = df.to_dict('records')
-        import pdb; pdb.set_trace()
-            
-        # Filter by score threshold using pandas
         df = df[df._relevance_score >= score_threshold]
         
         # Convert metadata from JSON strings to dicts
@@ -283,6 +272,23 @@ class LanceDBMemoryHandler:
         )
         
         return True
+
+    async def sql_query(self, query: str) -> List[Dict[str, Any]]:
+        """
+        Execute a SQL query against the memories table using DuckDB.
+        
+        Args:
+            query: SQL query string to execute
+            
+        Returns:
+            List[Dict[str, Any]]: Query results as list of dictionaries
+        """
+        table = self.db.open_table("memories")
+        arrow_table = table.to_lance()
+        
+        # Execute query and convert results to list of dicts
+        result = duckdb.query(query, arrow_table)
+        return result.fetchall()
 
     async def get_all_tags(self) -> List[str]:
         """
