@@ -282,7 +282,8 @@ class LanceDBMemoryHandler:
         arrow_table = table.to_lance()
         
         # Execute query and get results
-        result = duckdb.query(query, arrow_table)
+        duck_query = duckdb.arrow(arrow_table)
+        result = duck_query.query('memories', query)
         rows = result.fetchall()
         
         # Process results to decode metadata JSON
