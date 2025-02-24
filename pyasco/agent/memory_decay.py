@@ -240,10 +240,10 @@ class MemoryDecayHandler:
                 'id': existing_memory['id'],
                 'content': integrated['content'],
                 'memory_type': MemoryType.LONG_TERM.value,
-                'metadata': json.dumps({
-                    'original_memories': json.loads(existing_memory['metadata']).get('original_memories', []) + [new_memory['id']],
+                'metadata': {
+                    'intergrated_reason': result.get('reasoning', ''),
                     'integrated_at': datetime.now().isoformat()
-                }),
+                },
                 'tags': integrated['tags'],
                 'created_at': existing_memory['created_at'],
                 'valid_from': datetime.fromisoformat(integrated['valid_from']),
@@ -285,7 +285,6 @@ class MemoryDecayHandler:
         # 3 & 4. Enhanced LLM Processing and Integration
         for cluster in memory_clusters:
             try:
-                import pdb; pdb.set_trace()
                 processed_memories = await self.process_with_llm(cluster)
                 
                 for memory in processed_memories:
