@@ -149,36 +149,31 @@ class LanceDBMemoryHandler:
         """
         table = self.db.open_table("memories")
         
-        try:
-            # Perform hybrid search with optional filter
-            search = table.search(query, query_type="hybrid").limit(limit)
-            if filter_dict:
-                search = search.where(filter_dict if isinstance(filter_dict, str) else " AND ".join(f"{k} = '{v}'" for k, v in filter_dict.items()))
-                
-            if self.reranker:
-                search = search.rerank(reranker=self.reranker)
+        # Perform hybrid search with optional filter
+        search = table.search(query, query_type="hybrid").limit(limit)
+        if filter_dict:
+            search = search.where(filter_dict if isinstance(filter_dict, str) else " AND ".join(f"{k} = '{v}'" for k, v in filter_dict.items()))
+            
+        if self.reranker:
+            search = search.rerank(reranker=self.reranker)
 
-            # Get all results as pandas DataFrame
-            df = search.to_pandas()
+        # Get results as list of dicts
+        try:
+            results = search.to_list()
         except ValueError as e:
             if "not enough values to unpack" in str(e):
-                # Return empty DataFrame if no results found
-                import pandas as pd
-                df = pd.DataFrame(columns=['id', 'content', 'memory_type', 'metadata', 'tags', 
-                                         'created_at', 'valid_from', 'valid_until', 'event_time',
-                                         'access_count', 'importance_score', 'summary', '_relevance_score'])
-            else:
-                raise
-        
-        # Apply limit and filter by score threshold
-        df = df.head(limit)
-        df = df[df._relevance_score >= score_threshold]
-        
-        # Convert metadata from JSON strings to dicts
-        df['metadata'] = df['metadata'].apply(json.loads)
-        
-        # Convert to dict records, keeping all fields
-        results = df.to_dict('records')
+                return []  # Return empty list if no results found
+            raise
+
+        # Filter by score threshold and process results
+        results = [
+            {
+                **result,
+                'metadata': json.loads(result['metadata'])
+            }
+            for result in results 
+            if result.get('_relevance_score', 0) >= score_threshold
+        ]
         
         return results
 
