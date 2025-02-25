@@ -138,6 +138,7 @@ def main():
         
         loop_count = 0
         user_input = None  # Initialize user_input
+        recall = True
         while True:
             if not user_input:  # Only ask for input if we don't have follow-up
                 user_input = session.prompt("\nYou> ")
@@ -161,11 +162,12 @@ def main():
                 
             # Get streaming response
             console.print("\n[bold purple]Assistant[/bold purple]")
-            response = agent.ask(user_input, stream=True)
+            response = agent.ask(user_input, recall=recall, stream=True)
             stream_response(response)
             
             # Check if we should ask user for code execution
             user_input = None
+            recall = True
             if agent.should_ask_user():
                 if Confirm.ask("\nDo you want to execute the code snippets?"):
                     results = agent.confirm()
@@ -175,6 +177,7 @@ def main():
                             console.print(result)
                         
                         user_input = agent.get_follow_up(results)
+                        recall = False
                         loop_count += 1
                         if agent.should_stop_follow_up(loop_count, MAX_FOLLOW_UP_LOOPS):
                             console.print("\n[bold yellow]Maximum follow-up iterations reached![/bold yellow]")
