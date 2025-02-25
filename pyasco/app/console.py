@@ -19,10 +19,11 @@ Options:
     --skills-path TEXT    Path to skills directory (default: skills)
 """
 
-from typing import Optional, Union, List
+from typing import Optional, Union, List, AsyncGenerator
 import argparse
 import os
 import warnings
+import asyncio
 warnings.filterwarnings("ignore")
 from rich.console import Console
 from ..config import ConfigManager
@@ -79,11 +80,11 @@ def display_markdown(text: str) -> None:
     md = Markdown(text)
     console.print(text)
 
-def stream_response(response_generator) -> None:
+async def stream_response(response_generator: AsyncGenerator) -> None:
     """Stream and display response chunks"""
     buffer = ""
     with Live(Markdown(""), refresh_per_second=10) as live:
-        for chunk in response_generator:
+        async for chunk in response_generator:
             if chunk.content:
                 buffer += chunk.content
                 live.update(Markdown(buffer))
@@ -112,7 +113,7 @@ def parse_args():
                        help="Path to skills directory")
     return parser.parse_args()
 
-def main():
+async def main():
     """Main console application loop"""
     args = parse_args()
     
@@ -162,8 +163,8 @@ def main():
                 
             # Get streaming response
             console.print("\n[bold purple]Assistant[/bold purple]")
-            response = agent.ask(user_input, recall=recall, stream=True)
-            stream_response(response)
+            response = await agent.ask(user_input, recall=recall, stream=True)
+            await stream_response(response)
             
             # Check if we should ask user for code execution
             user_input = None
@@ -190,4 +191,4 @@ def main():
         agent.cleanup()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
