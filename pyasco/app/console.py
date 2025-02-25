@@ -31,10 +31,11 @@ from rich.markdown import Markdown
 from rich.prompt import Confirm, Prompt
 from rich.live import Live
 from rich import print as rprint
-from prompt_toolkit import PromptSession
+from prompt_toolkit.shortcuts.prompt import PromptSession
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.styles import Style
+from prompt_toolkit.application.current import get_app
 from ..agent import Agent
 
 console = Console()
@@ -142,7 +143,7 @@ async def main():
         recall = True
         while True:
             if not user_input:  # Only ask for input if we don't have follow-up
-                user_input = session.prompt("\nYou> ")
+                user_input = await session.prompt_async("\nYou> ")
                 loop_count = 0  # Reset counter on new user input
                 
                 if user_input.startswith('%'):
