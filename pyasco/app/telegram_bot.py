@@ -258,9 +258,13 @@ class TelegramInterface:
                 current_response = response
                 
                 while self.agent.should_ask_user() and loop_count < max_loops:
+                    # Send "Actioning..." message
+                    action_msg = await update.message.reply_text("Actioning... 🔄")
+                    
                     # Execute current tools
                     results = self.agent.confirm()
                     if not results:
+                        await action_msg.delete()
                         break
                         
                     # Send execution output
@@ -284,8 +288,12 @@ class TelegramInterface:
                     if self.agent.memory_manager and last_message and last_message.role == "assistant":
                         await self.agent.memory_manager.remember(f"assistant: {last_message.content}")
                     
+                    # Delete "Actioning..." message
+                    await action_msg.delete()
+                    
                     # Get follow-up response
                     follow_up = self.agent.get_follow_up(results)
+                    await update.message.reply_text("Re-attempting with previous output... 🔄")
                     current_response = await self.agent.get_response(follow_up, stream=False)
                     response = current_response
                     loop_count += 1
