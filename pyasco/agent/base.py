@@ -98,10 +98,14 @@ class Agent:
             env_file=config.docker.env_file
         )
 
-    def _initialize_chat(self) -> None:
+    def _initialize_chat(self, context: str = "") -> None:
         system_info = get_system_info(self.python_executor)
         base_prompt = f"{DEFAULT_SYSTEM_PROMPT}\n\n{system_info}"
         system_content = f"{base_prompt}\n\n{self.custom_instructions}" if self.custom_instructions else base_prompt
+        
+        if context:
+            system_content = f"{system_content}\n\nContext from previous conversations:\n{context}"
+            
         self.logger.info(system_content)
         
         self.conversation.add_message(
@@ -138,19 +142,16 @@ class Agent:
         
         
         if new_session:
-            # Reset conversation before starting new session
-            self.conversation.clear()
-            self._initialize_chat()
-            
             # Get relevant context from memory
             context = ""
             if self.memory_manager:
                 context = await self.memory_manager.get_context(user_input)
-                
-            # Combine context with user input if we have context
+            
+            # Reset conversation before starting new session
+            self.conversation.clear()
+            self._initialize_chat(context)
+            
             content = user_input
-            if context:
-                content = f"Context from previous conversations:\n{context}\n\nCurrent input:\n{user_input}"
         else:
             content = user_input
             
