@@ -109,9 +109,6 @@ class Agent:
             content=system_content
         )
 
-
-
-
     async def get_response(self, user_input: str, stream: bool = False) -> Union[Message, Generator[Message, None, None]]:
         """Get response without recall for follow-up messages"""
         self.logger.info(f"Getting response for user input (stream={stream})")
@@ -120,9 +117,6 @@ class Agent:
             role="user",
             content=user_input
         )
-        # Store user input in memory
-        if self.memory_manager:
-            await self.memory_manager.remember(f"user: {user_input}")
         
         return self.response_handler.handle_response(
             self.conversation.to_llm_format(),
