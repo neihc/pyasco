@@ -69,7 +69,7 @@ class MemoryConsole:
             context = await self.memory_manager.get_context(query)
             if context:
                 console.print("\n[blue]Retrieved context:[/blue]")
-                console.print(Markdown(context))
+                console.print(context)
             else:
                 console.print("[yellow]No relevant context found[/yellow]")
         except Exception as e:
