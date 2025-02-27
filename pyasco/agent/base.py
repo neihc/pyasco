@@ -111,43 +111,6 @@ class Agent:
 
 
 
-    async def _get_response_with_recall(self, user_input: str, stream: bool = False) -> Union[Message, Generator[Message, None, None]]:
-        """Get response with memory recall"""
-        self.logger.info(f"Getting response for user input with recall (stream={stream})")
-        
-        # Reset conversation before starting
-        self.conversation.clear()
-        self._initialize_chat()
-        
-        # Get relevant context from memory
-        context = ""
-        if self.memory_manager:
-            context = await self.memory_manager.get_context(user_input)
-            
-        # Combine context with user input if we have context
-        content = user_input
-        if context:
-            content = f"Context from previous conversations:\n{context}\n\nCurrent input:\n{user_input}"
-            
-        # Add combined message to conversation
-        self.conversation.add_message(
-            role="user",
-            content=content
-        )
-        
-        # Store user input in memory
-        if self.memory_manager:
-            await self.memory_manager.remember(f"user: {user_input}")
-        
-        # Get response from LLM
-        response = self.response_handler.handle_response(
-            self.conversation.to_llm_format(),
-            self.model,
-            self.conversation,
-            stream
-        )
-        
-        return response
 
     async def get_response(self, user_input: str, stream: bool = False) -> Union[Message, Generator[Message, None, None]]:
         """Get response without recall for follow-up messages"""
@@ -168,11 +131,44 @@ class Agent:
             stream
         )
 
-    async def ask(self, user_input: str, stream: bool = False, recall: bool = False) -> Dict:
+    async def ask(self, user_input: str, stream: bool = False, new_session: bool = False) -> Dict:
         """Process user input and get response"""
-        if recall:
-            return await self._get_response_with_recall(user_input, stream=stream)
-        return await self.get_response(user_input, stream=stream)
+        self.logger.info(f"Getting response for user input (stream={stream}, new_session={new_session})")
+        
+        if new_session:
+            # Reset conversation before starting new session
+            self.conversation.clear()
+            self._initialize_chat()
+            
+            # Get relevant context from memory
+            context = ""
+            if self.memory_manager:
+                context = await self.memory_manager.get_context(user_input)
+                
+            # Combine context with user input if we have context
+            content = user_input
+            if context:
+                content = f"Context from previous conversations:\n{context}\n\nCurrent input:\n{user_input}"
+        else:
+            content = user_input
+            
+        # Add message to conversation
+        self.conversation.add_message(
+            role="user",
+            content=content
+        )
+        
+        # Store user input in memory
+        if self.memory_manager:
+            await self.memory_manager.remember(f"user: {user_input}")
+        
+        # Get response from LLM
+        return self.response_handler.handle_response(
+            self.conversation.to_llm_format(),
+            self.model,
+            self.conversation,
+            stream
+        )
 
     def get_follow_up(self, results: List[str]) -> str:
         return FOLLOW_UP_PROMPT.format(output=chr(10).join(results))

@@ -248,7 +248,7 @@ class TelegramInterface:
             
             # Get initial response from agent
             logger.debug("Sending request to agent")
-            response = await self.agent.ask(user_input, stream=False)
+            response = await self.agent.ask(user_input, stream=False, new_session=True)
             logger.debug(f"Got response from agent: {response.content}")
             
             # Handle auto execution mode
