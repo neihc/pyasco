@@ -20,7 +20,6 @@ import glob
 import shutil
 from typing import Optional, Dict, List, Tuple
 from pathlib import Path
-from io import BytesIO
 import asyncio
 from telegram import Update, InputFile
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler
@@ -28,8 +27,6 @@ from rich.console import Console
 from ..config import ConfigManager
 from ..agent import Agent
 from ..logger_config import setup_logger
-from ..services.code_to_image import CodeToImage
-from ..services.code_snippet_extractor import CodeSnippetExtractor
 
 # Maximum length for telegram messages
 MAX_MESSAGE_LENGTH = 4096
@@ -50,8 +47,6 @@ class TelegramInterface:
         self.agent = agent
         self.auto = auto
         self.user_states: Dict[int, dict] = {}
-        self.code_to_image = CodeToImage()
-        self.code_extractor = CodeSnippetExtractor()
         self.workspace_dir = os.path.expanduser("~/.pyasco/workspace")
         self.archive_dir = os.path.join(self.workspace_dir, "archived")
         
@@ -304,46 +299,9 @@ class TelegramInterface:
             # Delete processing message
             await processing_message.delete()
             
-            # Prepare all messages to send
-            messages_to_send = []
-            
-            # Extract code snippets and convert to images
-            snippets = self.code_extractor.extract_snippets(response.content)
-            
-            if snippets:
-                # Get text response with code blocks removed
-                text_response = self.code_extractor.omit_snippets(response.content)
-                
-                # Add cleaned text response if not empty
-                if text_response:
-                    messages_to_send.append(("text", text_response, None))
-                
-                # Prepare code snippets as images
-                for snippet in snippets:
-                    image_bytes = self.code_to_image.convert(
-                        snippet.content,
-                        snippet.language
-                    )
-                    messages_to_send.append(
-                        ("photo", 
-                         image_bytes, 
-                         f"Code snippet ({snippet.language or 'unknown language'})")
-                    )
-            else:
-                # No code snippets, just text response
-                messages_to_send.append(("text", response.content, None))
-            
-            # Send all messages at once
-            for msg_type, content, caption in messages_to_send:
-                if msg_type == "text":
-                    await update.message.reply_text(content)
-                elif msg_type == "photo":
-                    await update.message.reply_photo(
-                        InputFile(content, filename='code.png'),
-                        caption=caption
-                    )
-            
-            logger.debug(f"Sent {len(messages_to_send)} messages to user")
+            # Send the response text
+            await update.message.reply_text(response.content)
+            logger.debug("Sent response to user")
 
             # If there's code to execute, ask user only if not in auto mode
             if self.agent.should_ask_user() and not self.auto:
