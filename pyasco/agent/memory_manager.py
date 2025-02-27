@@ -20,7 +20,7 @@ class MemoryManager:
         self.memory_handler = memory_handler
         self.llm_service = llm_service
         self.token_window = token_window
-        self.logger = setup_logger('memory_manager', log_file='~/.pyasco/memory.log')
+        self.logger = setup_logger('memory_manager', log_file='memory.log')
         self.decay_handler = MemoryDecayHandler(
             memory_handler=memory_handler,
             llm_service=llm_service,
@@ -51,10 +51,10 @@ class MemoryManager:
         
         # Weights for different factors
         weights = {
-            'decay': 0.35,      # Recent memories
-            'relevance': 0.3,   # Search relevance
-            'frequency': 0.2,   # Access frequency
-            'importance': 0.15  # Explicit importance
+            'decay': 0.25,      # Recent memories
+            'relevance': 0.25,   # Search relevance
+            'frequency': 0.25,   # Access frequency
+            'importance': 0.25  # Explicit importance
         }
         
         # Calculate weighted sum
