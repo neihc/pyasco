@@ -224,20 +224,34 @@ class MemoryManager:
             memory['final_score'] = final_score
             all_memories.append(memory)
 
-        # Sort by final score and filter low scores
-        scored_memories = sorted(all_memories, key=lambda x: x['final_score'], reverse=True)
-        filtered_memories = [m for m in scored_memories if m['final_score'] > 0.3]
+        # First get X most recent memories
+        recent_count = 5  # X recent memories
+        scored_count = 10  # Y scored memories
+        
+        # Sort by timestamp for recent memories
+        recent_memories = sorted(short_term, key=lambda x: x['created_at'], reverse=True)[:recent_count]
+        recent_ids = {m['id'] for m in recent_memories}
+        
+        # Sort remaining memories by score and filter low scores
+        remaining_memories = [m for m in all_memories if m['id'] not in recent_ids]
+        scored_memories = sorted(remaining_memories, key=lambda x: x['final_score'], reverse=True)
+        filtered_memories = [m for m in scored_memories if m['final_score'] > 0.3][:scored_count]
 
-        # Trim to fit token window
+        # Combine recent and scored memories
+        final_memories = recent_memories + filtered_memories
+
+        # Trim to fit token window if needed
         current_tokens = 0
-        final_memories = []
-        for memory in filtered_memories:
+        token_limited_memories = []
+        for memory in final_memories:
             tokens = self._estimate_tokens(memory['content'])
             if current_tokens + tokens <= self.token_window:
-                final_memories.append(memory)
+                token_limited_memories.append(memory)
                 current_tokens += tokens
             else:
                 break
+                
+        final_memories = token_limited_memories
 
         logger.info("Selected memories with scores:")
         for memory in final_memories:
