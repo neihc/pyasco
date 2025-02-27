@@ -199,7 +199,7 @@ class TelegramInterface:
                 # Handle follow-up if needed
                 follow_up = self.agent.get_follow_up(results)
                 if follow_up:
-                    response = self.agent.get_response(follow_up, stream=False)
+                    response = await self.agent.get_response(follow_up, stream=False)
                     await query.message.reply_text(response.content)
                     
                     # If there's more code to execute, ask again

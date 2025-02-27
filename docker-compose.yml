@@ -1,20 +1,6 @@
 version: '3.8'
 
 services:
-  pyasco:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    volumes:
-      - .:/app
-      - ~/.pyasco:/root/.pyasco
-    env_file: .env
-    environment:
-      - PYTHONPATH=/app
-    ports:
-      - "8080:8080"
-    command: python -m pyasco.app.console --config /app/config.yml
-
   telegram-bot:
     build:
       context: .
@@ -26,4 +12,4 @@ services:
     environment:
       - PYTHONPATH=/app
     restart: unless-stopped
-    command: python -m pyasco.app.telegram_bot --config /app/config.yml --telegram-token ${TELEGRAM_BOT_TOKEN}
+    command: uv run -m pyasco.app.telegram_bot --config /app/config.yml --telegram-token ${TELEGRAM_BOT_TOKEN}
