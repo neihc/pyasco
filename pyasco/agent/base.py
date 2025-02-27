@@ -58,7 +58,7 @@ class Agent:
             
             self.memory_handler = LanceDBMemoryHandler(
                 db_path=config.memory.db_path if hasattr(config.memory, 'db_path') else "~/.pyasco/memories"
-            )
+           )
             
             self.memory_manager = MemoryManager(
                 memory_handler=self.memory_handler,
@@ -149,7 +149,7 @@ class Agent:
         
         return response
 
-    def get_response(self, user_input: str, stream: bool = False) -> Union[Message, Generator[Message, None, None]]:
+    async def get_response(self, user_input: str, stream: bool = False) -> Union[Message, Generator[Message, None, None]]:
         """Get response without recall for follow-up messages"""
         self.logger.info(f"Getting response for user input (stream={stream})")
         
@@ -157,6 +157,9 @@ class Agent:
             role="user",
             content=user_input
         )
+        # Store user input in memory
+        if self.memory_manager:
+            await self.memory_manager.remember(f"user: {user_input}")
         
         return self.response_handler.handle_response(
             self.conversation.to_llm_format(),
@@ -171,7 +174,7 @@ class Agent:
         if recall or auto:
             response = await self._get_response_with_recall(user_input, stream=stream)
         else:
-            response = self.get_response(user_input, stream=stream)
+            response = await self.get_response(user_input, stream=stream)
         
         if not auto:
             return response
@@ -189,6 +192,7 @@ class Agent:
                 
             last_message = self.conversation.last_message
             if self.memory_manager and last_message and last_message.role == "assistant":
+                self.logger.info(f"Remembering assistant message")
                 await self.memory_manager.remember(f"assistant: {last_message.content}")
 
             results = self.tool_handler.execute_tools(last_message.tools if last_message else [])
@@ -197,7 +201,7 @@ class Agent:
                 
             follow_up = self.get_follow_up(results)
             # Use regular get_response for follow-ups (no recall)
-            current_response = self.get_response(follow_up, stream=stream)
+            current_response = await self.get_response(follow_up, stream=stream)
             if auto:
                 # Execute any tools from the follow-up response
                 if self.should_ask_user():
