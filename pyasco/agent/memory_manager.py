@@ -51,9 +51,9 @@ class MemoryManager:
         
         # Weights for different factors
         weights = {
-            'decay': 0.25,      # Recent memories
-            'relevance': 0.25,   # Search relevance
-            'frequency': 0.25,   # Access frequency
+            'decay': 0.35,      # Recent memories
+            'relevance': 0.15,   # Search relevance
+            'frequency': 0.15,   # Access frequency
             'importance': 0.25  # Explicit importance
         }
         
@@ -160,9 +160,10 @@ class MemoryManager:
                 FROM memories 
                 WHERE memory_type = 'short_term'
                 ORDER BY created_at DESC
-                LIMIT 10
+                LIMIT 20
                 """
                 memories = await self.memory_handler.sql_query(query)
+                import pdb; pdb.set_trace()
                 
                 if not memories:
                     return []
