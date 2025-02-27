@@ -81,14 +81,20 @@ def display_markdown(text: str) -> None:
     md = Markdown(text)
     console.print(text)
 
-async def stream_response(response_generator: AsyncGenerator) -> None:
+async def stream_response(response_generator: Union[AsyncGenerator, Generator]) -> None:
     """Stream and display response chunks"""
     buffer = ""
     with Live(Markdown(""), refresh_per_second=10) as live:
-        async for chunk in response_generator:
-            if chunk.content:
-                buffer += chunk.content
-                live.update(Markdown(buffer))
+        if hasattr(response_generator, '__aiter__'):  # AsyncGenerator
+            async for chunk in response_generator:
+                if chunk.content:
+                    buffer += chunk.content
+                    live.update(Markdown(buffer))
+        else:  # Regular Generator
+            for chunk in response_generator:
+                if chunk.content:
+                    buffer += chunk.content
+                    live.update(Markdown(buffer))
 
 # Maximum number of follow-up iterations
 MAX_FOLLOW_UP_LOOPS = 5
