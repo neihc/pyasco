@@ -21,6 +21,7 @@ import shutil
 from typing import Optional, Dict, List, Tuple
 from pathlib import Path
 import asyncio
+from io import BytesIO
 from telegram import Update, InputFile
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler
 from rich.console import Console
