@@ -279,18 +279,14 @@ class TelegramInterface:
                     if sent_files:
                         self._archive_files([f[0] for f in sent_files])
                     
-                    # Remember assistant messages
-                    last_message = self.agent.conversation.last_message
-                    if self.agent.memory_manager and last_message and last_message.role == "assistant":
-                        await self.agent.memory_manager.remember(f"assistant: {last_message.content}")
-                    
                     # Delete "Actioning..." message
                     await action_msg.delete()
                     
                     # Get follow-up response
                     follow_up = self.agent.get_follow_up(results)
-                    await update.message.reply_text("Re-attempting with previous output... 🔄")
+                    re_attemping_message = await update.message.reply_text("Re-attempting with previous output... 🔄")
                     current_response = await self.agent.get_response(follow_up, stream=False)
+                    await re_attemping_message.delete()
                     response = current_response
                     loop_count += 1
                 
