@@ -77,16 +77,41 @@ class MemoryManager:
         memory_ids = [memory['id'] for memory in memories]
         await self.memory_handler.increment_access_count(memory_ids)
         
+        # Group memories by type
         grouped = defaultdict(list)
         for memory in memories:
-            grouped[memory['memory_type']].append(memory['content'])
+            grouped[memory['memory_type']].append(memory)
 
         sections = []
-        for memory_type in [MemoryType.SHORT_TERM, MemoryType.LONG_TERM, MemoryType.REFLECTION]:
-            if memory_type in grouped:
-                sections.append(f"{memory_type.upper()}:")
-                sections.extend(grouped[memory_type])
-                sections.append("")  # Empty line between sections
+        
+        # Format short-term memories (conversation) - sorted by created_at ascending
+        if MemoryType.SHORT_TERM in grouped:
+            sections.append("<current conversation>")
+            # Sort by created_at in ascending order
+            sorted_memories = sorted(grouped[MemoryType.SHORT_TERM], 
+                                    key=lambda x: x['created_at'])
+            for memory in sorted_memories:
+                sections.append(memory['content'])
+            sections.append("</current conversation>")
+            sections.append("")  # Empty line between sections
+        
+        # Format long-term memories (reference) with dividers
+        if MemoryType.LONG_TERM in grouped:
+            sections.append("<reference memory>")
+            for i, memory in enumerate(grouped[MemoryType.LONG_TERM]):
+                if i > 0:
+                    sections.append("------")  # Divider between references
+                sections.append(memory['content'])
+            sections.append("</reference memory>")
+            sections.append("")  # Empty line between sections
+            
+        # Format reflection memories if any
+        if MemoryType.REFLECTION in grouped:
+            sections.append("<reflection>")
+            for memory in grouped[MemoryType.REFLECTION]:
+                sections.append(memory['content'])
+            sections.append("</reflection>")
+            sections.append("")  # Empty line between sections
 
         return "\n".join(sections).strip()
 
