@@ -25,6 +25,11 @@ dependencies = [
     "python-telegram-bot>=21.9",
     "code2image>=0.0.3",
     "neo4j>=5.27.0",
+    "scikit-learn>=1.6.1",
+    "lancedb>=0.19.0",
+    "tantivy>=0.22.0",
+    "pandas>=2.2.3",
+    "voyageai>=0.3.2",
 ]
 
 [project.scripts]
