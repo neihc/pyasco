@@ -168,47 +168,11 @@ class Agent:
             stream
         )
 
-    async def ask(self, user_input: str, stream: bool = False, auto: bool = False, recall: bool = False, max_loops: int = 5) -> Dict:
-        """Process user input and handle any follow-up interactions"""
-        # Use recall if explicitly requested or in auto mode
-        if recall or auto:
-            response = await self._get_response_with_recall(user_input, stream=stream)
-        else:
-            response = await self.get_response(user_input, stream=stream)
-        
-        if not auto:
-            return response
-            
-        loop_count = 0
-        current_response = response
-        
-        while True:
-            if not self.should_ask_user():
-                break
-                
-            if loop_count >= max_loops:
-                self.logger.warning(f"Reached maximum follow-up iterations ({max_loops})")
-                break
-                
-            last_message = self.conversation.last_message
-            if self.memory_manager and last_message and last_message.role == "assistant":
-                self.logger.info(f"Remembering assistant message")
-                await self.memory_manager.remember(f"assistant: {last_message.content}")
-
-            results = self.tool_handler.execute_tools(last_message.tools if last_message else [])
-            if not results:
-                break
-                
-            follow_up = self.get_follow_up(results)
-            # Use regular get_response for follow-ups (no recall)
-            current_response = await self.get_response(follow_up, stream=stream)
-            if auto:
-                # Execute any tools from the follow-up response
-                if self.should_ask_user():
-                    results = self.confirm()
-            loop_count += 1
-            
-        return current_response
+    async def ask(self, user_input: str, stream: bool = False, recall: bool = False) -> Dict:
+        """Process user input and get response"""
+        if recall:
+            return await self._get_response_with_recall(user_input, stream=stream)
+        return await self.get_response(user_input, stream=stream)
 
     def get_follow_up(self, results: List[str]) -> str:
         return FOLLOW_UP_PROMPT.format(output=chr(10).join(results))

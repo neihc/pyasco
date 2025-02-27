@@ -246,25 +246,25 @@ class TelegramInterface:
             # Send processing message
             processing_message = await update.message.reply_text("Processing your message... 🤔")
             
-            # Get response from agent
+            # Get initial response from agent
             logger.debug("Sending request to agent")
-            response = await self.agent.ask(user_input, stream=False, auto=self.auto)
+            response = await self.agent.ask(user_input, stream=False)
             logger.debug(f"Got response from agent: {response.content}")
-
-            # Check for workspace files first
-            sent_files = await self._send_workspace_files(update.message)
-            if sent_files:
-                self._archive_files([f[0] for f in sent_files])
-
-            # If in auto mode, handle execution automatically
-            if self.auto and self.agent.should_ask_user():
-                results = self.agent.confirm()
-                if results:
-                    output_message = "Execution Output:\n"
-                    for result in results:
-                        output_message += f"{result}\n"
-                    
+            
+            # Handle auto execution mode
+            if self.auto:
+                max_loops = 5
+                loop_count = 0
+                current_response = response
+                
+                while self.agent.should_ask_user() and loop_count < max_loops:
+                    # Execute current tools
+                    results = self.agent.confirm()
+                    if not results:
+                        break
+                        
                     # Send execution output
+                    output_message = "Execution Output:\n" + "\n".join(results)
                     if len(output_message) > MAX_MESSAGE_LENGTH:
                         output_file = BytesIO(output_message.encode('utf-8'))
                         await update.message.reply_document(
@@ -274,10 +274,24 @@ class TelegramInterface:
                     else:
                         await update.message.reply_text(output_message)
                     
-                    # Check for any new workspace files after execution
+                    # Check for workspace files
                     sent_files = await self._send_workspace_files(update.message)
                     if sent_files:
                         self._archive_files([f[0] for f in sent_files])
+                    
+                    # Remember assistant messages
+                    last_message = self.agent.conversation.last_message
+                    if self.agent.memory_manager and last_message and last_message.role == "assistant":
+                        await self.agent.memory_manager.remember(f"assistant: {last_message.content}")
+                    
+                    # Get follow-up response
+                    follow_up = self.agent.get_follow_up(results)
+                    current_response = await self.agent.get_response(follow_up, stream=False)
+                    response = current_response
+                    loop_count += 1
+                
+                if loop_count >= max_loops:
+                    logger.warning("Reached maximum follow-up iterations")
             
             # Delete processing message
             await processing_message.delete()
