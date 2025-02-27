@@ -11,5 +11,6 @@ services:
     env_file: .env
     environment:
       - PYTHONPATH=/app
+      - PYASCO_AUTO=${PYASCO_AUTO:-false}
     restart: unless-stopped
     command: uv run -m pyasco.app.telegram_bot --config /app/config.yml --telegram-token ${TELEGRAM_BOT_TOKEN}

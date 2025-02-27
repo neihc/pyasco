@@ -346,7 +346,8 @@ def parse_args():
                        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
                        help="Set the logging level")
     parser.add_argument("--auto", action="store_true",
-                       help="Automatically execute code without asking user")
+                       help="Automatically execute code without asking user",
+                       default=os.getenv('PYASCO_AUTO', 'false').lower() == 'true')
     return parser.parse_args()
 
 def main():
