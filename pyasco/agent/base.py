@@ -155,6 +155,11 @@ class Agent:
         # Store user input in memory
         if self.memory_manager:
             await self.memory_manager.remember(f"user: {user_input}")
+            
+            # Get the last assistant message if it exists
+            last_message = self.conversation.last_message
+            if last_message and last_message.role == "assistant":
+                await self.memory_manager.remember(f"assistant: {last_message.content}")
         
         # Get response from LLM
         return self.response_handler.handle_response(
