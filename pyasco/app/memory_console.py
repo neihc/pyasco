@@ -83,10 +83,19 @@ class MemoryConsole:
         except Exception as e:
             console.print(f"[red]Error during memory decay: {str(e)}[/red]")
 
+async def run_auto_decay(memory_console: MemoryConsole, interval: int = 3600):
+    """Run automatic memory decay at specified interval"""
+    while True:
+        await asyncio.sleep(interval)
+        console.print("[yellow]Running scheduled memory decay...[/yellow]")
+        await memory_console.trigger_decay()
+
 async def main():
     parser = argparse.ArgumentParser(description="PyAsco Memory Management Console")
     parser.add_argument("--config", help="Path to YAML configuration file")
     parser.add_argument("--db-path", help="Path to memory database")
+    parser.add_argument("--auto-decay", action="store_true", help="Enable automatic memory decay")
+    parser.add_argument("--decay-interval", type=int, default=3600, help="Decay interval in seconds")
     args = parser.parse_args()
 
     memory_console = MemoryConsole(args.config, args.db_path)
@@ -98,21 +107,32 @@ async def main():
     console.print("  3. decay - Trigger memory decay process")
     console.print("  4. exit - Quit the console\n")
 
-    while True:
-        command = Prompt.ask("Command").lower()
+    if args.auto_decay:
+        # Start auto-decay task
+        decay_task = asyncio.create_task(
+            run_auto_decay(memory_console, args.decay_interval)
+        )
+        console.print(f"[green]Auto-decay enabled, running every {args.decay_interval} seconds[/green]")
+    
+    try:
+        while True:
+            command = Prompt.ask("Command").lower()
 
-        if command == "exit" or command == "4":
-            break
-        elif command == "remember" or command == "1":
-            content = Prompt.ask("Enter memory content")
-            await memory_console.remember(content)
-        elif command == "context" or command == "2":
-            query = Prompt.ask("Enter search query")
-            await memory_console.get_context(query)
-        elif command == "decay" or command == "3":
-            await memory_console.trigger_decay()
-        else:
-            console.print("[yellow]Invalid command[/yellow]")
+            if command == "exit" or command == "4":
+                break
+            elif command == "remember" or command == "1":
+                content = Prompt.ask("Enter memory content")
+                await memory_console.remember(content)
+            elif command == "context" or command == "2":
+                query = Prompt.ask("Enter search query")
+                await memory_console.get_context(query)
+            elif command == "decay" or command == "3":
+                await memory_console.trigger_decay()
+            else:
+                console.print("[yellow]Invalid command[/yellow]")
+    finally:
+        if args.auto_decay:
+            decay_task.cancel()
 
 if __name__ == "__main__":
     asyncio.run(main())

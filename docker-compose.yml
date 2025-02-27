@@ -1,6 +1,19 @@
 version: '3.8'
 
 services:
+  memory-console:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app
+      - ~/.pyasco:/root/.pyasco
+    env_file: .env
+    environment:
+      - PYTHONPATH=/app
+    restart: unless-stopped
+    command: uv run -m pyasco.app.memory_console --config /app/config.yml --auto-decay --decay-interval 3600
+
   telegram-bot:
     build:
       context: .
