@@ -19,7 +19,7 @@ Options:
     --skills-path TEXT    Path to skills directory (default: skills)
 """
 
-from typing import Optional, Union, List, AsyncGenerator
+from typing import Optional, Union, List, AsyncGenerator, Generator
 import argparse
 import os
 import warnings
