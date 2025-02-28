@@ -32,6 +32,25 @@ class ToolHandler:
                 if 'python' in language or 'bash' in language:
                     stdout, stderr, latest_value = self.executor.execute(snippet.content, language)
                     
+                    # Apply compression to raw outputs
+                    if stdout and len(stdout) > 1000:
+                        stdout = self.repr.repr(stdout)
+                    
+                    if stderr and len(stderr) > 1000:
+                        stderr = self.repr.repr(stderr)
+                    
+                    if latest_value:
+                        # Try to parse the latest_value as a Python data structure
+                        parsed_value = self._safe_eval(latest_value)
+                        
+                        # Handle based on the type
+                        if isinstance(parsed_value, (dict, list)) and len(str(parsed_value)) > 1000:
+                            latest_value = self.repr.repr(parsed_value)
+                        elif isinstance(parsed_value, str) and len(parsed_value) > 1000:
+                            latest_value = self.repr.repr(parsed_value)
+                        elif not isinstance(parsed_value, str):
+                            latest_value = str(parsed_value)
+                    
                 if stdout or stderr or latest_value:
                     results.append(f"Output:\n{stdout or ''}")
                     if stderr:
@@ -59,37 +78,20 @@ class ToolHandler:
 
     def compress_results(self, results: List[str]) -> Tuple[str, bool]:
         """
-        Compress large output results to a more manageable size
+        Join results and add compression notice if needed
         
         Args:
             results: List of string results from tool execution
             
         Returns:
             Tuple containing:
-                - The compressed output as a single string
+                - The joined output as a single string
                 - Boolean indicating if any compression was applied
         """
-        compact_results = []
-        was_compressed = False
+        # Check if any result contains the repr format which indicates compression
+        was_compressed = any('...' in result for result in results)
         
-        for result in results:
-            # Try to parse the result as a Python data structure
-            parsed_result = self._safe_eval(result)
-            
-            # Handle based on the type
-            if isinstance(parsed_result, (dict, list)) and len(str(parsed_result)) > 1000:
-                # For dicts and lists, use repr to compress them properly
-                compact_results.append(self.repr.repr(parsed_result))
-                was_compressed = True
-            elif isinstance(parsed_result, str) and len(parsed_result) > 1000:
-                # For strings, use the existing compression
-                compact_results.append(self.repr.repr(parsed_result))
-                was_compressed = True
-            else:
-                # For other types or smaller outputs, keep as is
-                compact_results.append(str(parsed_result) if not isinstance(parsed_result, str) else result)
-        
-        output = chr(10).join(compact_results)
+        output = chr(10).join(results)
         
         # Add compression notice if any output was compressed
         if was_compressed:
