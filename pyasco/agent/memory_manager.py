@@ -16,7 +16,7 @@ class MemoryManager:
     def __init__(self, 
                  memory_handler: LanceDBMemoryHandler, 
                  llm_service: LLMService,
-                 token_window: int = 2000):
+                 token_window: int = 10000):
         self.memory_handler = memory_handler
         self.llm_service = llm_service
         self.token_window = token_window
@@ -163,7 +163,6 @@ class MemoryManager:
                 LIMIT 20
                 """
                 memories = await self.memory_handler.sql_query(query)
-                import pdb; pdb.set_trace()
                 
                 if not memories:
                     return []
@@ -175,7 +174,7 @@ class MemoryManager:
                 scored_memories = await self.memory_handler.search_similar(
                     query=query,  # Now use the actual query
                     limit=len(memory_ids),
-                    filter_dict=id_filter
+                    filter_dict=id_filter,
                 )
                 
                 return scored_memories
@@ -225,8 +224,8 @@ class MemoryManager:
             all_memories.append(memory)
 
         # First get X most recent memories
-        recent_count = 5  # X recent memories
-        scored_count = 10  # Y scored memories
+        recent_count = 10  # X recent memories
+        scored_count = 5  # Y scored memories
         
         # Sort by timestamp for recent memories
         recent_memories = sorted(short_term, key=lambda x: x['created_at'], reverse=True)[:recent_count]
@@ -239,6 +238,7 @@ class MemoryManager:
 
         # Combine recent and scored memories
         final_memories = recent_memories + filtered_memories
+
 
         # Trim to fit token window if needed
         current_tokens = 0
