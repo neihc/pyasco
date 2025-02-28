@@ -150,7 +150,7 @@ class LanceDBMemoryHandler:
         table = self.db.open_table("memories")
         
         # Perform hybrid search with optional filter
-        search = table.search(query, query_type="hybrid").limit(limit)
+        search = table.search(query, query_type="hybrid").phrase_query().limit(limit)
         if filter_dict:
             search = search.where(filter_dict if isinstance(filter_dict, str) else " AND ".join(f"{k} = '{v}'" for k, v in filter_dict.items()))
             
