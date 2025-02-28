@@ -253,6 +253,14 @@ class Agent:
         tool_count = len(last_message.tools)
         self.logger.info(f"Executing {tool_count} tool(s) from last message")
         for i, tool in enumerate(last_message.tools):
-            self.logger.info(f"Tool {i+1}/{tool_count}: {tool.get('type', 'unknown')} - {tool.get('name', 'unnamed')}")
+            tool_type = tool.get('type', 'unknown')
+            tool_name = tool.get('name', 'unnamed')
+            tool_params = tool.get('parameters', {})
+            
+            # Format parameters for logging
+            params_str = ', '.join([f"{k}={repr(v)}" for k, v in tool_params.items()])
+            
+            self.logger.info(f"Tool {i+1}/{tool_count}: {tool_type} - {tool_name}")
+            self.logger.info(f"Parameters: {params_str}")
             
         return self.tool_handler.execute_tools(last_message.tools)
