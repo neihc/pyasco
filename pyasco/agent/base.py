@@ -2,7 +2,6 @@ from typing import List, Dict, Optional, Generator, Union, Any
 from datetime import datetime
 import re
 import asyncio
-import reprlib
 
 from ..logger_config import setup_logger
 from .conversation import Conversation
@@ -162,27 +161,7 @@ class Agent:
         )
 
     def get_follow_up(self, results: List[str]) -> str:
-        # Use reprlib to compact large outputs
-        r = reprlib.Repr()
-        r.maxstring = 1000  # Adjust max string length
-        r.maxother = 1000   # Adjust max length for other objects
-        
-        compact_results = []
-        was_compressed = False
-        
-        for result in results:
-            if len(result) > 1000:
-                compact_results.append(r.repr(result))
-                was_compressed = True
-            else:
-                compact_results.append(result)
-        
-        output = chr(10).join(compact_results)
-        
-        # Add compression notice if any output was compressed
-        if was_compressed:
-            output += "\n\n(This output was compressed due to its large size. Only essential parts are shown. If you need details please change your code to access direcly to the part you want)"
-                
+        output, _ = self.tool_handler.compress_results(results)
         return FOLLOW_UP_PROMPT.format(output=output)
 
     async def should_ask_user(self) -> bool:
