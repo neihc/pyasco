@@ -7,8 +7,12 @@ class ToolHandler:
     def __init__(self, executor: CodeExecutor):
         self.executor = executor
         self.repr = reprlib.Repr()
-        self.repr.maxstring = 1000  # Adjust max string length
-        self.repr.maxother = 1000   # Adjust max length for other objects
+        self.repr.maxstring = 5000  # Adjust max string length
+        self.repr.maxother = 5000   # Adjust max length for other objects
+        self.repr.maxlist = 50      # Show more list items (default is 6)
+        self.repr.maxdict = 20      # Show more dictionary entries (default is 4)
+        self.repr.maxset = 20       # Show more set items (default is 6)
+        self.repr.maxtuple = 20     # Show more tuple items (default is 6)
 
     def execute_tools(self, tools: List[Dict]) -> List[str]:
         """Execute tools and return results"""
