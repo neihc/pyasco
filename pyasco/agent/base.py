@@ -181,7 +181,7 @@ class Agent:
         
         # Add compression notice if any output was compressed
         if was_compressed:
-            output += "\n\n(This output was compressed due to its large size. Only essential parts are shown.)"
+            output += "\n\n(This output was compressed due to its large size. Only essential parts are shown. If you need details please change your code to access direcly to the part you want)"
                 
         return FOLLOW_UP_PROMPT.format(output=output)
 
