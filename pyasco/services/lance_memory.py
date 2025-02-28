@@ -2,7 +2,7 @@ import os
 from typing import List, Dict, Any, Optional
 from enum import Enum
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import uuid
 import duckdb
@@ -115,7 +115,7 @@ class LanceDBMemoryHandler:
             'memory_type': memory_data['memory_type'],
             'metadata': memory_data.get('metadata', '{}'),
             'tags': memory_data.get('tags', []),
-            'created_at': datetime.now(),
+            'created_at': datetime.now().astimezone(timezone.utc),
             'valid_from': memory_data.get('valid_from'),
             'valid_until': memory_data.get('valid_until'),
             'event_time': memory_data.get('event_time'),
