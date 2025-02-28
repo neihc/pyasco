@@ -12,6 +12,15 @@ from ..services.llm import LLMService
 from ..services.code_snippet_extractor import CodeSnippetExtractor
 
 class MemoryDecayHandler:
+    def _safe_parse_datetime(self, dt_str):
+        """Safely parse a datetime string, handling None, 'NaT', and invalid formats"""
+        if not dt_str or dt_str == 'NaT' or not isinstance(dt_str, str):
+            return None
+        try:
+            return datetime.fromisoformat(dt_str)
+        except (ValueError, TypeError):
+            return None
+            
     def _prepare_memory_for_llm(self, memory: Dict) -> Dict:
         """Prepare memory dict for LLM by removing vector and making JSON-safe"""
         memory_copy = copy.deepcopy(memory)
@@ -63,8 +72,19 @@ class MemoryDecayHandler:
         # Use existing embeddings from memories
         embeddings = np.array([memory['vector'] for memory in memories])
         
-        # Normalize timestamps
-        timestamps = np.array([m['created_at'].timestamp() for m in memories])
+        # Normalize timestamps, handling None values
+        timestamps = []
+        for m in memories:
+            if m.get('created_at') and not isinstance(m['created_at'], str):
+                try:
+                    timestamps.append(m['created_at'].timestamp())
+                except (AttributeError, TypeError):
+                    # Use current time as fallback
+                    timestamps.append(datetime.now().timestamp())
+            else:
+                timestamps.append(datetime.now().timestamp())
+        
+        timestamps = np.array(timestamps)
         timestamps_normalized = (timestamps - timestamps.min()) / (timestamps.max() - timestamps.min())
         
         # Combine embeddings with normalized timestamps
@@ -150,6 +170,15 @@ class MemoryDecayHandler:
             if snippet.language == 'json':
                 try:
                     data = json.loads(snippet.content)
+                    # Parse datetime fields safely
+                    def safe_parse_datetime(dt_str):
+                        if not dt_str or dt_str == 'NaT' or not isinstance(dt_str, str):
+                            return None
+                        try:
+                            return datetime.fromisoformat(dt_str)
+                        except (ValueError, TypeError):
+                            return None
+                    
                     memory_data = {
                         'id': str(uuid.uuid4()),
                         'content': data['content'],
@@ -162,9 +191,9 @@ class MemoryDecayHandler:
                         }),
                         'tags': data['tags'],
                         'created_at': datetime.now(),
-                        'valid_from': datetime.fromisoformat(data['valid_from']),
-                        'valid_until': datetime.fromisoformat(data['valid_until']),
-                        'event_time': datetime.fromisoformat(data['event_time']),
+                        'valid_from': safe_parse_datetime(data['valid_from']),
+                        'valid_until': safe_parse_datetime(data['valid_until']),
+                        'event_time': safe_parse_datetime(data['event_time']),
                         'access_count': 0,
                         'importance_score': data['importance_score'],
                         'summary': data['summary']
@@ -246,9 +275,9 @@ class MemoryDecayHandler:
                 },
                 'tags': integrated['tags'],
                 'created_at': existing_memory['created_at'],
-                'valid_from': datetime.fromisoformat(integrated['valid_from']),
-                'valid_until': datetime.fromisoformat(integrated['valid_until']),
-                'event_time': datetime.fromisoformat(integrated['event_time']),
+                'valid_from': self._safe_parse_datetime(integrated['valid_from']),
+                'valid_until': self._safe_parse_datetime(integrated['valid_until']),
+                'event_time': self._safe_parse_datetime(integrated['event_time']),
                 'access_count': existing_memory['access_count'],
                 'importance_score': integrated['importance_score'],
                 'summary': integrated['summary']
