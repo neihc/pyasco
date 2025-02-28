@@ -1,6 +1,6 @@
 from typing import Dict, Any, Optional, List
 import math
-from datetime import datetime
+from datetime import datetime, timezone
 from collections import defaultdict
 import asyncio
 import logging
@@ -49,7 +49,7 @@ class MemoryManager:
             float: Combined score between 0 and 1
         """
         # Time decay score (7 days half-life)
-        now = datetime.now()
+        now = datetime.now().astimezone(timezone.utc)
         age = (now - memory['created_at']).total_seconds()
         decay_score = math.exp(-age / (3600))
         
@@ -75,7 +75,6 @@ class MemoryManager:
             weights['frequency'] * frequency_score +
             weights['importance'] * importance_score
         )
-        import pdb; pdb.set_trace()
         
         return final_score
 
