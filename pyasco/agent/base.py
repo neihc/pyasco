@@ -168,13 +168,22 @@ class Agent:
         r.maxother = 1000   # Adjust max length for other objects
         
         compact_results = []
+        was_compressed = False
+        
         for result in results:
             if len(result) > 1000:
                 compact_results.append(r.repr(result))
+                was_compressed = True
             else:
                 compact_results.append(result)
+        
+        output = chr(10).join(compact_results)
+        
+        # Add compression notice if any output was compressed
+        if was_compressed:
+            output += "\n\n(This output was compressed due to its large size. Only essential parts are shown.)"
                 
-        return FOLLOW_UP_PROMPT.format(output=chr(10).join(compact_results))
+        return FOLLOW_UP_PROMPT.format(output=output)
 
     async def should_ask_user(self) -> bool:
         last_message = self.conversation.last_message
