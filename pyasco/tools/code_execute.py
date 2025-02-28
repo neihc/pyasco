@@ -71,30 +71,33 @@ class CodeExecutor:
             self.kc.start_channels()
             self.kc.wait_for_ready()
 
-    def execute(self, code: str, language: str = 'python') -> Tuple[Optional[str], Optional[str]]:
+    def execute(self, code: str, language: str = 'python') -> Tuple[Optional[str], Optional[str], Optional[str]]:
         """
-        Execute the given code and return stdout and stderr
+        Execute the given code and return stdout, stderr, and the latest value
         
         Args:
             code: The code to execute
             language: The language to execute ('python' or 'bash')
             
         Returns:
-            Tuple of (stdout, stderr)
+            Tuple of (stdout, stderr, latest_value)
         """
         if language.lower() == 'bash':
             if self.use_docker:
-                return self._execute_bash_in_docker(code)
+                result = self._execute_bash_in_docker(code)
+                return result[0], result[1], None  # No latest value for bash
             else:
-                return self._execute_bash_local(code)
+                result = self._execute_bash_local(code)
+                return result[0], result[1], None  # No latest value for bash
         else:
             if self.use_docker:
-                return self._execute_in_docker(code)
+                result = self._execute_in_docker(code)
+                return result[0], result[1], None  # Docker doesn't capture latest value yet
             else:
                 return self._execute_local(code)
             
-    def _execute_local(self, code: str) -> Tuple[Optional[str], Optional[str]]:
-        """Execute code using Jupyter kernel"""
+    def _execute_local(self, code: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        """Execute code using Jupyter kernel and capture latest value"""
         try:
             # Execute code
             msg_id = self.kc.execute(code)
@@ -102,6 +105,7 @@ class CodeExecutor:
             # Collect outputs
             stdout_parts = []
             stderr_parts = []
+            latest_value = None
             
             while True:
                 try:
@@ -119,6 +123,10 @@ class CodeExecutor:
                             '\n'.join(content['traceback']),
                             f"{content['ename']}: {content['evalue']}"
                         ])
+                    elif msg_type == 'execute_result':
+                        # This captures the value of the last expression
+                        if 'data' in content and 'text/plain' in content['data']:
+                            latest_value = content['data']['text/plain']
                     elif msg_type == 'status' and content['execution_state'] == 'idle':
                         break
                         
@@ -128,7 +136,7 @@ class CodeExecutor:
             stdout = ''.join(stdout_parts) if stdout_parts else None
             stderr = ''.join(stderr_parts) if stderr_parts else None
             
-            return stdout, stderr
+            return stdout, stderr, latest_value
             
         except Exception as e:
             return None, str(e)
