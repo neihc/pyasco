@@ -25,11 +25,13 @@ class ToolHandler:
                 stdout = stderr = None
                 
                 if 'python' in language or 'bash' in language:
-                    stdout, stderr = self.executor.execute(snippet.content, language)
+                    stdout, stderr, latest_value = self.executor.execute(snippet.content, language)
                     
-                if stdout or stderr:
+                if stdout or stderr or latest_value:
                     results.append(f"Output:\n{stdout or ''}")
                     if stderr:
                         results.append(f"Errors:\n{stderr}")
+                    if latest_value:
+                        results.append(f"Value: {latest_value}")
                         
         return results
