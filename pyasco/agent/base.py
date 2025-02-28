@@ -2,6 +2,7 @@ from typing import List, Dict, Optional, Generator, Union, Any
 from datetime import datetime
 import re
 import asyncio
+import reprlib
 
 from ..logger_config import setup_logger
 from .conversation import Conversation
@@ -161,7 +162,19 @@ class Agent:
         )
 
     def get_follow_up(self, results: List[str]) -> str:
-        return FOLLOW_UP_PROMPT.format(output=chr(10).join(results))
+        # Use reprlib to compact large outputs
+        r = reprlib.Repr()
+        r.maxstring = 1000  # Adjust max string length
+        r.maxother = 1000   # Adjust max length for other objects
+        
+        compact_results = []
+        for result in results:
+            if len(result) > 1000:
+                compact_results.append(r.repr(result))
+            else:
+                compact_results.append(result)
+                
+        return FOLLOW_UP_PROMPT.format(output=chr(10).join(compact_results))
 
     async def should_ask_user(self) -> bool:
         last_message = self.conversation.last_message
