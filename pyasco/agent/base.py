@@ -228,20 +228,31 @@ class Agent:
             
         last_message = self.conversation.last_message
         if not last_message:
+            self.logger.debug("No last message found, stopping follow-up loop")
             return True
             
         if not last_message.tools:
+            self.logger.debug("No tools found in last message, stopping follow-up loop")
             return True
             
+        tool_count = len(last_message.tools)
+        self.logger.debug(f"Found {tool_count} tool(s) in last message, continuing follow-up loop")
         return False
 
     def confirm(self) -> List[str] | None:
         """Execute any pending tools and return their results"""
         last_message = self.conversation.last_message
         if not last_message:
+            self.logger.debug("No last message found, skipping tool execution")
             return None
             
         if not last_message.tools:
+            self.logger.debug("No tools found in last message, skipping tool execution")
             return None
+        
+        tool_count = len(last_message.tools)
+        self.logger.info(f"Executing {tool_count} tool(s) from last message")
+        for i, tool in enumerate(last_message.tools):
+            self.logger.info(f"Tool {i+1}/{tool_count}: {tool.get('type', 'unknown')} - {tool.get('name', 'unnamed')}")
             
         return self.tool_handler.execute_tools(last_message.tools)
