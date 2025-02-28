@@ -4,6 +4,8 @@ from datetime import datetime
 from collections import defaultdict
 import asyncio
 import logging
+import os
+from pathlib import Path
 from dataclasses import dataclass
 from ..services.llm import LLMService
 from ..services.lance_memory import LanceDBMemoryHandler, MemoryType
@@ -20,11 +22,20 @@ class MemoryManager:
         self.memory_handler = memory_handler
         self.llm_service = llm_service
         self.token_window = token_window
-        self.logger = setup_logger('memory_manager', log_file='memory.log')
+        
+        # Ensure logs directory exists
+        log_dir = Path.home() / '.pyasco' / 'logs'
+        log_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Setup logger with path to ~/.pyasco/logs/
+        self.logger = setup_logger('memory_manager', log_file='memory_manager.log')
+        self.logger.info(f"Initializing MemoryManager with token window: {token_window}")
+        
         self.decay_handler = MemoryDecayHandler(
             memory_handler=memory_handler,
             llm_service=llm_service,
         )
+        self.logger.debug("Memory decay handler initialized")
 
     def _calculate_memory_score(self, memory: Dict[str, Any], relevance_score: float = 0.5) -> float:
         """
@@ -127,6 +138,9 @@ class MemoryManager:
         Returns:
             str: ID of the created memory
         """
+        self.logger.debug(f"Storing new memory with content length: {len(content)}")
+        self.logger.debug(f"Memory meta {meta}")
+        
         memory_data = {
             'content': content,
             'memory_type': MemoryType.SHORT_TERM.value,
@@ -134,9 +148,13 @@ class MemoryManager:
             'tags': []  # Could be enhanced to extract relevant tags
         }
         
-        memory_id = await self.memory_handler.add_memory(memory_data)
-        self.logger.info(f"Created new memory with ID: {memory_id}")
-        return memory_id
+        try:
+            memory_id = await self.memory_handler.add_memory(memory_data)
+            self.logger.info(f"Successfully created new memory with ID: {memory_id}")
+            return memory_id
+        except Exception as e:
+            self.logger.error(f"Failed to create memory: {str(e)}", exc_info=True)
+            raise
 
     async def get_context(self, query: str) -> str:
         """
@@ -148,80 +166,96 @@ class MemoryManager:
         Returns:
             str: Formatted context from relevant memories
         """
-        import logging
-        logger = logging.getLogger(__name__)
+        self.logger.info(f"Getting context for query: '{query[:50]}...' (truncated)")
 
         # Fetch different types of memories in parallel
         async def get_short_term():
             try:
+                self.logger.debug("Fetching short-term memories")
                 # First get latest short term memories using SQL
-                query = """
+                sql_query = """
                 SELECT *
                 FROM memories 
                 WHERE memory_type = 'short_term'
                 ORDER BY created_at DESC
                 LIMIT 20
                 """
-                memories = await self.memory_handler.sql_query(query)
+                self.logger.debug(f"Executing SQL query: {sql_query}")
+                memories = await self.memory_handler.sql_query(sql_query)
                 
                 if not memories:
+                    self.logger.info("No short-term memories found")
                     return []
+                
+                self.logger.debug(f"Found {len(memories)} short-term memories")
                     
                 # Then query again with these IDs to get relevance scores
                 memory_ids = [f"'{m['id']}'" for m in memories]
                 id_filter = f"id IN ({', '.join(memory_ids)})"
                 
+                self.logger.debug(f"Searching for similar memories with filter: {id_filter}")
                 scored_memories = await self.memory_handler.search_similar(
                     query=query,  # Now use the actual query
                     limit=len(memory_ids),
                     filter_dict=id_filter,
                 )
                 
+                self.logger.debug(f"Retrieved {len(scored_memories)} scored short-term memories")
                 return scored_memories
                 
             except Exception as e:
-                logger.error(f"Error fetching short-term memories: {e}")
+                self.logger.error(f"Error fetching short-term memories: {e}", exc_info=True)
                 return []
 
         async def get_long_term():
             try:
-                return await self.memory_handler.search_similar(
+                self.logger.debug("Fetching long-term memories")
+                long_term_memories = await self.memory_handler.search_similar(
                     query=query,
                     limit=10,
                     filter_dict=f"memory_type = '{MemoryType.LONG_TERM.value}'"
                 )
+                self.logger.debug(f"Retrieved {len(long_term_memories)} long-term memories")
+                return long_term_memories
             except Exception as e:
-                logger.error(f"Error fetching long-term memories: {e}")
+                self.logger.error(f"Error fetching long-term memories: {e}", exc_info=True)
                 return []
 
         async def get_reflection():
             try:
-                return await self.memory_handler.search_similar(
+                self.logger.debug("Fetching reflection memories")
+                reflection_memories = await self.memory_handler.search_similar(
                     query=query,
                     limit=5,
                     filter_dict=f"memory_type = '{MemoryType.REFLECTION.value}'"
                 )
+                self.logger.debug(f"Retrieved {len(reflection_memories)} reflection memories")
+                return reflection_memories
             except Exception as e:
-                logger.error(f"Error fetching reflection memories: {e}")
+                self.logger.error(f"Error fetching reflection memories: {e}", exc_info=True)
                 return []
 
         try:
+            self.logger.info("Gathering memories from all sources")
             # Gather all memory fetching tasks
             short_term, long_term = await asyncio.gather(
                 get_short_term(),
                 get_long_term(),
             )
+            self.logger.info(f"Successfully gathered memories: {len(short_term)} short-term, {len(long_term)} long-term")
         except Exception as e:
-            logger.error(f"Error gathering memories: {e}")
+            self.logger.error(f"Error gathering memories: {e}", exc_info=True)
             short_term, long_term = [], []
 
         # Score all memories using combined factors
+        self.logger.debug("Calculating memory scores")
         all_memories = []
         for memory in short_term + long_term:
             relevance_score = memory.get('_relevance_score', 0.5)  # Default to 0.5 for short-term
             final_score = self._calculate_memory_score(memory, relevance_score)
             memory['final_score'] = final_score
             all_memories.append(memory)
+            self.logger.debug(f"Memory {memory['id'][:8]}... scored {final_score:.4f}")
 
         # First get X most recent memories
         recent_count = 10  # X recent memories
@@ -253,12 +287,13 @@ class MemoryManager:
                 
         final_memories = token_limited_memories
 
-        logger.info("Selected memories with scores:")
+        self.logger.info("Selected memories with scores:")
         for memory in final_memories:
-            logger.info(f"Score: {memory['final_score']:.3f} | Content: {memory['content'][:100]}...")
+            self.logger.info(f"Score: {memory['final_score']:.3f} | Type: {memory['memory_type']} | ID: {memory['id'][:8]}... | Content: {memory['content'][:100]}...")
 
         self.logger.info(f"Retrieved {len(final_memories)} relevant memories")
         self.logger.debug(f"Memory scores: {[m['final_score'] for m in final_memories]}")
+        self.logger.debug(f"Memory types: {[m['memory_type'] for m in final_memories]}")
         
         # Format and return the context
         formatted_context = await self._format_memories_by_type(final_memories)
@@ -276,7 +311,28 @@ class MemoryManager:
         """
         self.logger.info("Starting memory decay process")
         try:
+            # Get count of short-term memories before decay
+            count_query = "SELECT COUNT(*) as count FROM memories WHERE memory_type = 'short_term'"
+            result = await self.memory_handler.sql_query(count_query)
+            before_count = result[0]['count'] if result else 0
+            self.logger.info(f"Short-term memory count before decay: {before_count}")
+            
+            # Trigger the decay process
+            start_time = datetime.now()
+            self.logger.info(f"Decay process started at: {start_time.isoformat()}")
+            
             await self.decay_handler.decay_short_term_memories()
-            self.logger.info("Memory decay process completed successfully")
+            
+            # Get count after decay
+            result = await self.memory_handler.sql_query(count_query)
+            after_count = result[0]['count'] if result else 0
+            
+            end_time = datetime.now()
+            duration = (end_time - start_time).total_seconds()
+            
+            self.logger.info(f"Memory decay process completed in {duration:.2f} seconds")
+            self.logger.info(f"Short-term memory count after decay: {after_count}")
+            self.logger.info(f"Memories processed: {before_count - after_count}")
         except Exception as e:
             self.logger.error(f"Error during memory decay process: {e}", exc_info=True)
+            self.logger.error(f"Stack trace: ", exc_info=True)
