@@ -75,6 +75,7 @@ class MemoryManager:
             weights['frequency'] * frequency_score +
             weights['importance'] * importance_score
         )
+        import pdb; pdb.set_trace()
         
         return final_score
 
