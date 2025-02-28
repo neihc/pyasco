@@ -44,9 +44,9 @@ class MemoryDecayHandler:
     def __init__(self,
                  memory_handler: LanceDBMemoryHandler,
                  llm_service: LLMService,
-                 decay_threshold_days: int = 7,
+                 decay_threshold_days: int = 1,
                  relevance_threshold: float = 0.3,
-                 access_threshold: int = 3):
+                 access_threshold: int = 5):
         self.memory_handler = memory_handler
         self.llm_service = llm_service
         self.decay_threshold_days = decay_threshold_days
