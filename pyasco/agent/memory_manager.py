@@ -50,7 +50,13 @@ class MemoryManager:
         """
         # Time decay score (7 days half-life)
         now = datetime.now().astimezone(timezone.utc)
-        age = (now - memory['created_at']).total_seconds()
+        
+        # Ensure created_at is timezone-aware
+        created_at = memory['created_at']
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+            
+        age = (now - created_at).total_seconds()
         decay_score = math.exp(-age / (3600))
         
         # Frequency score based on access count
