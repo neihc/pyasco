@@ -52,18 +52,15 @@ class Agent:
         self.embedding_service = None
         self.memory_handler = None
         self.memory_manager = None
+            
+        self.memory_handler = LanceDBMemoryHandler(
+            db_path=config.memory.db_path if hasattr(config.memory, 'db_path') else "~/.pyasco/memories"
+       )
         
-        if hasattr(config, 'memory') and config.memory.enabled:
-            self.embedding_service = EmbeddingService()
-            
-            self.memory_handler = LanceDBMemoryHandler(
-                db_path=config.memory.db_path if hasattr(config.memory, 'db_path') else "~/.pyasco/memories"
-           )
-            
-            self.memory_manager = MemoryManager(
-                memory_handler=self.memory_handler,
-                llm_service=self.llm_service
-            )
+        self.memory_manager = MemoryManager(
+            memory_handler=self.memory_handler,
+            llm_service=self.llm_service
+        )
         
         # Initialize handlers
         self.response_handler = ResponseHandler(self.code_extractor, self.llm_service)
@@ -104,7 +101,7 @@ class Agent:
         system_content = f"{base_prompt}\n\n{self.custom_instructions}" if self.custom_instructions else base_prompt
         
         if context:
-            system_content = f"{system_content}\n\nContext from previous conversations:\n{context}"
+            system_content = f"{system_content}\n\nContext from your memory:\n{context}"
             
         self.logger.info(system_content)
         
@@ -132,15 +129,6 @@ class Agent:
     async def ask(self, user_input: str, stream: bool = False, new_session: bool = False) -> Dict:
         """Process user input and get response"""
         self.logger.info(f"Getting response for user input (stream={stream}, new_session={new_session})")
-        if self.memory_manager:
-            await self.memory_manager.remember(f"user: {user_input}")
-            
-            # Get the last assistant message if it exists
-            last_message = self.conversation.last_message
-            if last_message and last_message.role == "assistant":
-                await self.memory_manager.remember(f"assistant: {last_message.content}")
-        
-        
         if new_session:
             # Get relevant context from memory
             context = ""
@@ -154,6 +142,9 @@ class Agent:
             content = user_input
         else:
             content = user_input
+            
+        if self.memory_manager:
+            await self.memory_manager.remember(f"user: {user_input}")
             
         # Add message to conversation
         self.conversation.add_message(
@@ -172,8 +163,14 @@ class Agent:
     def get_follow_up(self, results: List[str]) -> str:
         return FOLLOW_UP_PROMPT.format(output=chr(10).join(results))
 
-    def should_ask_user(self) -> bool:
+    async def should_ask_user(self) -> bool:
         last_message = self.conversation.last_message
+        if self.memory_manager:
+            # Get the last assistant message if it exists
+            if last_message and last_message.role == "assistant":
+                await self.memory_manager.remember(f"assistant: {last_message.content}")
+        
+        
         return bool(last_message and last_message.tools)
 
     async def remember_conversation(self):
