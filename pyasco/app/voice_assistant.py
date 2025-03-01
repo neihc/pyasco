@@ -174,7 +174,6 @@ class VoiceAssistant:
             for chunk in response:
                 if chunk.content:
                     self.response_text += chunk.content
-                    logger.debug(f"Received chunk: {len(chunk.content)} chars")
                     # Update the display with each chunk
                     self._update_display()
             
