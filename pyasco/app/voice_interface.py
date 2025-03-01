@@ -18,13 +18,9 @@ import json
 import logging
 from dotenv import load_dotenv
 import os
-import queue
-import threading
-import time
 from typing import Optional
-import pyaudio
-import wave
-from deepgram import Deepgram
+from deepgram import DeepgramClient, LiveOptions, LiveTranscriptionEvents
+from deepgram.clients.live.microphone import Microphone
 from rich.console import Console
 from rich.live import Live
 from rich.panel import Panel
@@ -33,13 +29,9 @@ from ..config import ConfigManager
 from ..agent import Agent
 from ..logger_config import setup_logger
 
-# Audio recording parameters
-CHUNK = 1024
-FORMAT = pyaudio.paFloat32
+# Audio parameters
 CHANNELS = 1
 RATE = 16000
-SILENCE_THRESHOLD = 0.01
-SILENCE_DURATION = 2.0  # seconds of silence to trigger processing
 
 logger = setup_logger('voice', 'voice.log')
 console = Console()
@@ -47,55 +39,15 @@ console = Console()
 class VoiceInterface:
     def __init__(self, agent: Agent, deepgram_key: str):
         self.agent = agent
-        self.deepgram = Deepgram(deepgram_key)
-        self.audio = pyaudio.PyAudio()
-        self.is_recording = False
-        self.audio_queue = queue.Queue()
-        self.last_audio_time = time.time()
+        self.deepgram = DeepgramClient(deepgram_key)
+        self.dg_connection = None
+        self.microphone = None
         self.console = Console()
-        
-    async def process_audio(self):
-        """Process audio chunks and detect silence"""
-        audio_data = []
-        silence_start = None
-        
-        while self.is_recording:
-            if not self.audio_queue.empty():
-                chunk = self.audio_queue.get()
-                audio_data.append(chunk)
-                self.last_audio_time = time.time()
-                
-                # Check audio level for silence
-                audio_level = max(abs(float(x)) for x in chunk)
-                if audio_level < SILENCE_THRESHOLD:
-                    if silence_start is None:
-                        silence_start = time.time()
-                    elif time.time() - silence_start > SILENCE_DURATION:
-                        # Process accumulated audio
-                        await self.process_speech(b''.join(audio_data))
-                        audio_data = []
-                        silence_start = None
-                else:
-                    silence_start = None
-                    
-            await asyncio.sleep(0.1)
-    
-    async def process_speech(self, audio_bytes: bytes):
-        """Send audio to Deepgram and process transcription"""
+
+    async def on_message(self, result, **kwargs):
+        """Handle transcription results"""
         try:
-            source = {'buffer': audio_bytes, 'mimetype': 'audio/raw'}
-            response = await self.deepgram.transcription.prerecorded(
-                source,
-                {
-                    'punctuate': True,
-                    'model': 'general',
-                    'language': 'en-US',
-                    'encoding': 'linear16',
-                    'sample_rate': RATE
-                }
-            )
-            
-            transcript = response['results']['channels'][0]['alternatives'][0]['transcript']
+            transcript = result.channel.alternatives[0].transcript
             if transcript.strip():
                 with console.status("[bold green]Processing your request..."):
                     response = await self.agent.ask(transcript, stream=True)
@@ -109,46 +61,59 @@ class VoiceInterface:
                                 border_style="green"
                             )
                             live.update(panel, refresh=True)
-                
         except Exception as e:
-            logger.error(f"Error processing speech: {str(e)}")
-            console.print(f"[red]Error processing speech: {str(e)}[/red]")
-    
-    def audio_callback(self, in_data, frame_count, time_info, status):
-        """Callback for audio stream"""
-        self.audio_queue.put(in_data)
-        return (in_data, pyaudio.paContinue)
-    
+            logger.error(f"Error processing transcript: {str(e)}")
+            console.print(f"[red]Error processing transcript: {str(e)}[/red]")
+
+    def on_metadata(self, metadata, **kwargs):
+        """Handle metadata events"""
+        logger.debug(f"Metadata received: {metadata}")
+
+    def on_error(self, error, **kwargs):
+        """Handle error events"""
+        logger.error(f"Deepgram error: {error}")
+        console.print(f"[red]Deepgram error: {error}[/red]")
+
     async def start(self):
         """Start voice interface"""
         try:
-            # Open audio stream
-            stream = self.audio.open(
-                format=FORMAT,
+            # Setup Deepgram connection
+            self.dg_connection = self.deepgram.listen.live.v("1")
+            
+            # Configure event handlers
+            self.dg_connection.on(LiveTranscriptionEvents.Transcript, self.on_message)
+            self.dg_connection.on(LiveTranscriptionEvents.Metadata, self.on_metadata)
+            self.dg_connection.on(LiveTranscriptionEvents.Error, self.on_error)
+            
+            # Configure transcription options
+            options = LiveOptions(
+                punctuate=True,
+                language="en-US",
+                encoding="linear16",
                 channels=CHANNELS,
-                rate=RATE,
-                input=True,
-                frames_per_buffer=CHUNK,
-                stream_callback=self.audio_callback
+                sample_rate=RATE,
             )
             
+            # Start the connection
+            self.dg_connection.start(options)
+            
+            # Setup and start microphone
+            self.microphone = Microphone(self.dg_connection.send)
+            self.microphone.start()
+            
             console.print("[bold green]Voice interface started! Speak to interact...[/bold green]")
-            console.print("[italic](Silence for 2 seconds will trigger processing)[/italic]")
+            console.print("[italic](Press Enter to stop)[/italic]")
             
-            self.is_recording = True
-            stream.start_stream()
-            
-            # Start processing audio
-            await self.process_audio()
+            # Wait for user to stop
+            input()
             
         except KeyboardInterrupt:
             console.print("\n[yellow]Stopping voice interface...[/yellow]")
         finally:
-            self.is_recording = False
-            if 'stream' in locals():
-                stream.stop_stream()
-                stream.close()
-            self.audio.terminate()
+            if self.microphone:
+                self.microphone.finish()
+            if self.dg_connection:
+                await self.dg_connection.finish()
             self.agent.cleanup()
 
 def parse_args():
