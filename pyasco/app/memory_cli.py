@@ -13,12 +13,6 @@ from enum import Enum
 import argparse
 from pathlib import Path
 
-from prompt_toolkit import PromptSession
-from prompt_toolkit.completion import WordCompleter
-from prompt_toolkit.history import FileHistory
-from prompt_toolkit.styles import Style
-from prompt_toolkit.formatted_text import HTML
-from prompt_toolkit.key_binding import KeyBindings
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -43,33 +37,16 @@ class MemoryCLI:
     def __init__(self, db_path: str = "~/.pyasco/memories"):
         self.console = Console()
         self.memory_handler = LanceDBMemoryHandler(db_path=db_path)
-        self.history_path = os.path.expanduser("~/.pyasco/memory_cli_history")
-        os.makedirs(os.path.dirname(self.history_path), exist_ok=True)
-        
-        # Setup prompt session with history
-        self.session = PromptSession(
-            history=FileHistory(self.history_path),
-            style=Style.from_dict({
-                'prompt': 'ansicyan bold',
-            }),
-        )
-        
-        # Setup key bindings
-        self.kb = KeyBindings()
-        
-        # Command completions
+        # Available commands
         self.commands = [
             'search', 'add', 'delete', 'update', 'tags', 'stats', 'help', 'exit'
         ]
-        self.command_completer = WordCompleter(self.commands)
         
-        # Memory type completions
+        # Memory types
         self.memory_types = [t.value for t in MemoryType]
-        self.memory_type_completer = WordCompleter(self.memory_types)
         
-        # Query type completions
+        # Query types 
         self.query_types = [t.value for t in QueryType]
-        self.query_type_completer = WordCompleter(self.query_types)
         
     async def start(self):
         """Start the CLI interface"""
@@ -83,10 +60,7 @@ class MemoryCLI:
         
         while True:
             try:
-                command = self.session.prompt(
-                    HTML("<ansicyan><b>memory></b></ansicyan> "),
-                    completer=self.command_completer
-                ).strip()
+                command = input("memory> ").strip()
                 
                 if not command:
                     continue
@@ -271,9 +245,7 @@ class MemoryCLI:
         
         # Ask if user wants to see details of any result
         while True:
-            detail_id = self.session.prompt(
-                "Enter ID to see details (or press Enter to continue): "
-            ).strip()
+            detail_id = input("Enter ID to see details (or press Enter to continue): ").strip()
             
             if not detail_id:
                 break
@@ -328,31 +300,33 @@ class MemoryCLI:
         self.console.print("[bold cyan]Add New Memory[/bold cyan]")
         
         # Get memory content
-        content = self.session.prompt(
-            "Content: ",
-            multiline=True
-        ).strip()
+        print("Enter content (press Ctrl+D or Ctrl+Z on Windows when done):")
+        content_lines = []
+        try:
+            while True:
+                line = input()
+                content_lines.append(line)
+        except EOFError:
+            content = "\n".join(content_lines).strip()
         
         if not content:
             self.console.print("[bold red]Error:[/bold red] Content cannot be empty")
             return
             
         # Get memory type
-        memory_type = self.session.prompt(
-            "Memory Type: ",
-            completer=self.memory_type_completer
-        ).strip()
+        print(f"Available memory types: {', '.join(self.memory_types)}")
+        memory_type = input("Memory Type: ").strip()
         
         if not memory_type or memory_type not in self.memory_types:
             self.console.print(f"[bold red]Error:[/bold red] Invalid memory type. Choose from: {', '.join(self.memory_types)}")
             return
             
         # Get tags
-        tags_str = self.session.prompt("Tags (comma-separated): ").strip()
+        tags_str = input("Tags (comma-separated): ").strip()
         tags = [tag.strip() for tag in tags_str.split(",")] if tags_str else []
         
         # Get importance score
-        importance_str = self.session.prompt("Importance Score (0-1): ").strip()
+        importance_str = input("Importance Score (0-1): ").strip()
         importance_score = 0.0
         if importance_str:
             try:
@@ -392,9 +366,7 @@ class MemoryCLI:
             return
             
         # Confirm deletion
-        confirm = self.session.prompt(
-            f"Are you sure you want to delete memory {memory_id}? (y/N): "
-        ).strip().lower()
+        confirm = input(f"Are you sure you want to delete memory {memory_id}? (y/N): ").strip().lower()
         
         if confirm != "y":
             self.console.print("Deletion cancelled")
@@ -435,24 +407,26 @@ class MemoryCLI:
         self.console.print("[bold cyan]Update Memory[/bold cyan] (leave empty to keep current value)")
         
         # Get content
-        content = self.session.prompt(
-            "Content: ",
-            multiline=True
-        ).strip()
+        print("Enter new content (press Ctrl+D or Ctrl+Z on Windows when done, or Enter to keep current):")
+        content_lines = []
+        try:
+            while True:
+                line = input()
+                content_lines.append(line)
+        except EOFError:
+            content = "\n".join(content_lines).strip()
         
         # Get memory type
-        memory_type = self.session.prompt(
-            "Memory Type: ",
-            completer=self.memory_type_completer
-        ).strip()
+        print(f"Available memory types: {', '.join(self.memory_types)}")
+        memory_type = input("Memory Type: ").strip()
         
         # Get tags
         current_tags = ", ".join(memory.get("tags", []))
-        tags_str = self.session.prompt(f"Tags (current: {current_tags}): ").strip()
+        tags_str = input(f"Tags (current: {current_tags}): ").strip()
         
         # Get importance score
         current_score = memory.get("importance_score", 0)
-        importance_str = self.session.prompt(f"Importance Score (current: {current_score}): ").strip()
+        importance_str = input(f"Importance Score (current: {current_score}): ").strip()
         
         # Build updates dict
         updates = {}
