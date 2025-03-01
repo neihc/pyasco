@@ -46,7 +46,8 @@ class VoiceInterface:
     def __init__(self, agent: Agent, deepgram_key: str):
         self.agent = agent
         # Initialize Deepgram client with API key
-        self.deepgram = DeepgramClient()
+        logger.debug(f"Initializing Deepgram client with API key: {deepgram_key[:4]}...")
+        self.deepgram = DeepgramClient(deepgram_key)
         self.dg_connection = None
         self.microphone = None
         self.console = Console()
@@ -109,15 +110,18 @@ class VoiceInterface:
         try:
             logger.info("Starting voice interface")
             # Setup Deepgram connection
+            logger.debug("Creating Deepgram live connection")
             self.dg_connection = self.deepgram.listen.live.v("1")
             
             # Configure event handlers
+            logger.debug("Setting up event handlers")
             self.dg_connection.on(LiveTranscriptionEvents.Transcript, self.on_message)
             self.dg_connection.on(LiveTranscriptionEvents.Metadata, self.on_metadata)
             self.dg_connection.on(LiveTranscriptionEvents.Error, self.on_error)
             self.dg_connection.on(LiveTranscriptionEvents.Close, self.on_close)
             
             # Configure transcription options
+            logger.debug("Configuring transcription options")
             options = LiveOptions(
                 model="nova-2",
                 punctuate=True,
@@ -136,8 +140,15 @@ class VoiceInterface:
             
             # Setup and start microphone
             logger.info("Starting microphone")
-            self.microphone = Microphone(self.dg_connection.send)
-            self.microphone.start()
+            try:
+                self.microphone = Microphone(self.dg_connection.send)
+                self.microphone.start()
+                logger.info("Microphone started successfully")
+            except Exception as e:
+                logger.error(f"Failed to start microphone: {str(e)}", exc_info=True)
+                console.print(f"[bold red]Microphone error: {str(e)}[/bold red]")
+                console.print("[yellow]Check if your microphone is properly connected and permissions are granted.[/yellow]")
+                raise
             
             console.print("[bold green]Voice interface started! Speak to interact...[/bold green]")
             console.print("[italic](Press Enter to stop)[/italic]")
@@ -197,6 +208,7 @@ async def main():
         return
     
     logger.info(f"Starting voice interface with log level: {args.log_level}")
+    logger.debug(f"Deepgram API key present: {bool(deepgram_key)}")
         
     # Load configuration
     if args.config and os.path.exists(args.config):
@@ -211,7 +223,12 @@ async def main():
     agent = Agent(config)
     
     logger.info("Initializing voice interface")
-    interface = VoiceInterface(agent, deepgram_key)
+    try:
+        interface = VoiceInterface(agent, deepgram_key)
+    except Exception as e:
+        logger.error(f"Failed to initialize voice interface: {str(e)}", exc_info=True)
+        console.print(f"[bold red]Failed to initialize voice interface: {str(e)}[/bold red]")
+        return
     
     try:
         logger.info("Starting voice interface")
@@ -225,6 +242,21 @@ async def main():
 
 if __name__ == "__main__":
     try:
+        # Check if pyaudio is installed
+        try:
+            import pyaudio
+            logger.debug("PyAudio is installed")
+        except ImportError:
+            console.print("[bold red]PyAudio is not installed![/bold red]")
+            console.print("Please install it with: pip install pyaudio")
+            console.print("On macOS, you might need: brew install portaudio && pip install pyaudio")
+            console.print("On Linux, you might need: sudo apt-get install python3-pyaudio")
+            sys.exit(1)
+            
         asyncio.run(main())
     except KeyboardInterrupt:
         console.print("\n[red]Voice interface stopped by user[/red]")
+    except Exception as e:
+        logger.error(f"Unhandled exception: {str(e)}", exc_info=True)
+        console.print(f"\n[bold red]Error: {str(e)}[/bold red]")
+        console.print("[yellow]Check voice.log for more details[/yellow]")
