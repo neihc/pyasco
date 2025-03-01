@@ -1,7 +1,5 @@
 version: '3.8'
 
-volumes:
-  pyasco_venv:
 
 services:
   telegram-bot:
@@ -11,7 +9,6 @@ services:
     volumes:
       - .:/app
       - ~/.pyasco:/root/.pyasco
-      - pyasco_venv:/opt/venv
     env_file: .env
     environment:
       - PYTHONPATH=/app

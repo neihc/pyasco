@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
 RUN pip install --no-cache-dir uv
 
 # Create virtual environment
-ENV VIRTUAL_ENV=/opt/venv
+ENV VIRTUAL_ENV=/root/.pyasco/venv
 RUN uv venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
