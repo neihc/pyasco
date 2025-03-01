@@ -8,6 +8,7 @@ class ResponseHandler:
     def __init__(self, code_extractor: CodeSnippetExtractor, llm_service: LLMService):
         self.code_extractor = code_extractor
         self.llm_service = llm_service
+        self._stop_stream = False
 
     def handle_response(
         self, 
@@ -40,6 +41,10 @@ class ResponseHandler:
             })
         return tools
 
+    def stop_stream(self):
+        """Set flag to stop current stream"""
+        self._stop_stream = True
+
     def _handle_streaming_response(
         self, 
         llm_response: Generator[Any, None, None],
@@ -47,8 +52,11 @@ class ResponseHandler:
     ) -> Generator[Message, None, None]:
         """Handle streaming response from LLM"""
         full_content = ""
+        self._stop_stream = False
         
         for chunk in llm_response:
+            if self._stop_stream:
+                break
             if chunk.choices[0].delta.content:
                 content = chunk.choices[0].delta.content
                 full_content += content

@@ -209,6 +209,11 @@ class Agent:
         self.python_executor.reset()
         self._initialize_chat()
     
+    def stop_stream(self):
+        """Stop the current streaming response"""
+        self.logger.info("Stopping current stream")
+        self.response_handler.stop_stream()
+
     def cleanup(self):
         self.logger.info("Cleaning up agent resources")
         self.python_executor.cleanup()
