@@ -7,12 +7,17 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY pyproject.toml .
-
-# Install Python dependencies
+# Install uv
 RUN pip install --no-cache-dir uv
-RUN uv sync
+
+# Create virtual environment
+ENV VIRTUAL_ENV=/opt/venv
+RUN uv venv $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+# Copy requirements and install dependencies
+COPY pyproject.toml .
+RUN uv pip install -r pyproject.toml
 
 # Copy application code
 COPY . .
@@ -20,4 +25,4 @@ COPY . .
 # Create necessary directories
 RUN mkdir -p /root/.pyasco/workspace /root/.pyasco/memories
 
-CMD ["uv", "run", "-m", "pyasco.app.console"]
+CMD ["python", "-m", "pyasco.app.console"]
