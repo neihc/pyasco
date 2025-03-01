@@ -154,9 +154,14 @@ class VoiceAssistant:
         
     async def process_voice_input(self, text):
         """Process voice input with the agent"""
-        if not text.strip() or self.is_processing:
-            logger.debug(f"Skipping processing: empty={not text.strip()}, already_processing={self.is_processing}")
+        if not text.strip():
+            logger.debug(f"Skipping processing: empty input")
             return
+            
+        # If already processing, stop the current stream before starting a new one
+        if self.is_processing:
+            logger.debug("Already processing, stopping current stream")
+            await self.agent.stop_stream()
             
         self.is_processing = True
         logger.debug(f"Processing voice input: '{text}'")
