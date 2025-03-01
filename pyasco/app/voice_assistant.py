@@ -172,7 +172,7 @@ class VoiceAssistant:
             
             # Get response from agent
             logger.debug("Sending request to agent")
-            response = await self.agent.ask(text, stream=True)
+            response = await self.agent.ask(text, new_session=True, stream=True)
             
             # Handle streaming response
             self.response_text = ""
@@ -193,7 +193,7 @@ class VoiceAssistant:
                     loop_count = 0
                     
                     while await self.agent.should_ask_user() and not self.agent.should_stop_follow_up(loop_count, max_loops):
-                        self.response_text += "\n\n*Executing code...*"
+                        self.response_text = "\n\n*Executing code...*"
                         logger.debug(f"Auto-executing code (loop {loop_count+1}/{max_loops})")
                         
                         # Execute current tools
@@ -207,7 +207,7 @@ class VoiceAssistant:
                         result_text = "\n\n**Execution Results:**\n```\n"
                         result_text += "\n".join(results)
                         result_text += "\n```"
-                        self.response_text += result_text
+                        self.response_text = result_text
                         self._update_display()
                         
                         # Get follow-up if needed
@@ -217,17 +217,17 @@ class VoiceAssistant:
                             logger.debug(f"Follow-up query: '{follow_up}'")
                             follow_up_response = await self.agent.get_response(follow_up, stream=False)
                             logger.debug(f"Follow-up response received: {len(follow_up_response.content)} chars")
-                            self.response_text += "\n\n" + follow_up_response.content
+                            self.response_text = "\n\n" + follow_up_response.content
                             self._update_display()
                         
                         loop_count += 1
                     
                     if loop_count >= max_loops:
                         logger.warning("Reached maximum follow-up iterations")
-                        self.response_text += "\n\n*Reached maximum number of execution steps*"
+                        self.response_text = "\n\n*Reached maximum number of execution steps*"
                 else:
                     # Manual execution (not auto)
-                    self.response_text += "\n\n*Executing code...*"
+                    self.response_text = "\n\n*Executing code...*"
                     logger.debug("Confirming code execution")
                     results = self.agent.confirm()
                     if results:
@@ -235,7 +235,7 @@ class VoiceAssistant:
                         result_text = "\n\n**Execution Results:**\n```\n"
                         result_text += "\n".join(results)
                         result_text += "\n```"
-                        self.response_text += result_text
+                        self.response_text = result_text
                         
                         # Get follow-up if needed
                         logger.debug("Getting follow-up")
@@ -244,7 +244,7 @@ class VoiceAssistant:
                             logger.debug(f"Follow-up query: '{follow_up}'")
                             follow_up_response = await self.agent.get_response(follow_up, stream=False)
                             logger.debug(f"Follow-up response received: {len(follow_up_response.content)} chars")
-                            self.response_text += "\n\n" + follow_up_response.content
+                            self.response_text = "\n\n" + follow_up_response.content
         
         except Exception as e:
             logger.error(f"Error processing input: {str(e)}", exc_info=True)
