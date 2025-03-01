@@ -4,24 +4,24 @@ from datetime import datetime
 import re
 import asyncio
 
-from ..logger_config import setup_logger
+from .types import Message
 from .conversation import Conversation
-from ..services.lance_memory import LanceDBMemoryHandler
-from ..services.embedding import EmbeddingService
 from .memory_manager import MemoryManager
+from .response_handler import ResponseHandler
+from .tool_handler import ToolHandler
 from .prompt import (
     DEFAULT_SYSTEM_PROMPT,
     FOLLOW_UP_PROMPT
 )
-from .types import Message
+from .utils import get_system_info
+
+from ..logger_config import setup_logger
 from ..config import Config
 from ..services.llm import LLMService
 from ..services.code_snippet_extractor import CodeSnippetExtractor
-from ..services.skill_manager import SkillManager
+from ..services.lance_memory import LanceDBMemoryHandler
+from ..services.embedding import EmbeddingService
 from ..tools.code_execute import CodeExecutor
-from .response_handler import ResponseHandler
-from .tool_handler import ToolHandler
-from .utils import get_system_info
 
 
 class Agent:
@@ -198,9 +198,6 @@ class Agent:
     def cleanup(self):
         self.logger.info("Cleaning up agent resources")
         self.python_executor.cleanup()
-        if self.memory_handler:
-            del self.memory_handler
-
 
     def should_stop_follow_up(self, loop_count: int, max_loops: int = 5) -> bool:
         """Determine if we should stop the follow-up loop"""
