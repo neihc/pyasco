@@ -101,18 +101,18 @@ class VoiceInterface:
             dg_connection.on(LiveTranscriptionEvents.Error, on_error)
 
             # Start connection
-            await dg_connection.start(options)
+            dg_connection.start(options)
 
             # Stream audio data
             while self.is_recording:
                 if not self.audio_queue.empty():
                     data = self.audio_queue.get()
-                    await dg_connection.send(data)
+                    dg_connection.send(data)
                 else:
                     await asyncio.sleep(0.1)
 
             # Close connection
-            await dg_connection.finish()
+            dg_connection.finish()
 
         except Exception as e:
             logger.error(f"Error in audio processing: {str(e)}")
