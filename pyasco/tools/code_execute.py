@@ -3,8 +3,11 @@ import queue
 import jupyter_client
 import os
 import subprocess
-from typing import Optional, Tuple
+import importlib
+import inspect
+from typing import Optional, Tuple, Dict
 from ..logger_config import setup_logger
+from .internal import predefined
 
 class CodeExecutor:
     """A class to execute Python and Bash code using Jupyter kernel"""
@@ -28,7 +31,26 @@ class CodeExecutor:
         self.kc.start_channels()
         # Wait for kernel to be ready
         self.kc.wait_for_ready()
+        
+        # Load predefined functions
+        self._load_predefined_functions()
 
+    def _load_predefined_functions(self):
+        """Load predefined functions into the kernel environment"""
+        # Get all functions from predefined module
+        predefined_funcs = inspect.getmembers(predefined, inspect.isfunction)
+        
+        # Create initialization code
+        init_code = []
+        for name, func in predefined_funcs:
+            # Get the source code of the function
+            func_source = inspect.getsource(func)
+            init_code.append(func_source)
+        
+        # Execute all predefined functions in the kernel
+        if init_code:
+            self._execute_local('\n'.join(init_code))
+            
     def reset(self):
         """Reset the current kernel"""
         self.cleanup()
