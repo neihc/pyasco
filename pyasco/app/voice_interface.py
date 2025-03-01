@@ -101,30 +101,38 @@ class VoiceInterface:
             async def on_error(error, **kwargs):
                 logger.error(f"Deepgram error: {error}")
 
-            async def on_connected():
-                logger.info("Connected to Deepgram")
+            async def on_connected(**kwargs):
+                logger.info("Connected to Deepgram websocket")
+
+            async def on_close():
+                logger.info("Deepgram connection closed")
 
             # Register handlers
             dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
             dg_connection.on(LiveTranscriptionEvents.Error, on_error)
             dg_connection.on(LiveTranscriptionEvents.Connected, on_connected)
+            dg_connection.on(LiveTranscriptionEvents.CloseConnection, on_close)
 
-            # Start connection
+            logger.info("Starting Deepgram connection...")
             await dg_connection.start(options)
-            logger.info("Started Deepgram connection")
+            logger.info("Successfully connected to Deepgram")
 
             # Stream audio data
             while self.is_recording:
                 try:
                     if not self.audio_queue.empty():
                         data = self.audio_queue.get()
-                        await dg_connection.send(data)
-                        logger.debug("Sent audio chunk to Deepgram")
-                    else:
-                        await asyncio.sleep(0.1)
+                        if   # Ensure we have valid data
+                            await dg_connection.send(data)
+                            logger.debug("Sent audio chunk to Deepgram")
+                    await asyncio.sleep(0.01)  # Shorter sleep to be more responsive
                 except Exception as e:
                     logger.error(f"Error streaming audio: {str(e)}")
-                    break
+                    if "not connected" in str(e).lower():
+                        logger.info("Reconnecting to Deepgram...")
+                        await dg_connection.start(options)
+                    else:
+                        break
 
             # Close connection
             logger.info("Closing Deepgram connection...")
