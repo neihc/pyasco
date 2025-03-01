@@ -1,187 +1,184 @@
 """
-PyAsco Voice Interface - An AI-powered Python assistant with voice input
+PyAsco Voice Interface - An AI-powered Python assistant with voice interaction
 
 This module provides a voice interface for the PyAsco AI assistant,
-using Deepgram for real-time speech-to-text and Rich for terminal output.
+using Deepgram for speech-to-text and system TTS for text-to-speech.
 
 Usage:
     python -m pyasco.app.voice_interface [options]
 
 Options:
-    --config PATH    Path to YAML configuration file
+    --config PATH          Path to YAML configuration file
+    --deepgram-key TEXT   Deepgram API key for speech recognition
     All other options from console.py are supported
 """
 
 import argparse
-import asyncio
-import json
-import logging
-from dotenv import load_dotenv
 import os
-import sys
-from typing import Optional, Dict, Any
+import logging
+import queue
+import threading
+import time
+import json
+import pyaudio
+import wave
+from typing import Optional, Dict
+from pathlib import Path
+import platform
+
 from deepgram import (
     DeepgramClient,
-    DeepgramClientOptions,
     LiveTranscriptionEvents,
     LiveOptions,
-    Microphone,
 )
-from rich.console import Console
-from rich.live import Live
-from rich.panel import Panel
-from rich.text import Text
+
 from ..config import ConfigManager
 from ..agent import Agent
 from ..logger_config import setup_logger
 
-# Audio parameters
+# Audio recording parameters
+CHUNK = 1024
+FORMAT = pyaudio.paFloat32
 CHANNELS = 1
 RATE = 16000
 
 logger = setup_logger('voice', 'voice.log')
-console = Console()
 
 class VoiceInterface:
     def __init__(self, agent: Agent, deepgram_key: str):
         self.agent = agent
-        # Initialize Deepgram client with API key
-        logger.debug(f"Initializing Deepgram client with API key: {deepgram_key[:4]}...")
         self.deepgram = DeepgramClient(deepgram_key)
-        self.dg_connection = None
-        self.microphone = None
-        self.console = Console()
-        self.is_listening = True
-        logger.info("Voice interface initialized with Deepgram client")
-
-    async def on_message(self, *args, **kwargs):
-        """Handle transcription results"""
-        try:
-            # Extract result from args (first argument)
-            result = args[0]
-            transcript = result.channel.alternatives[0].transcript
-            
-            # Only process if we have a non-empty transcript and it's a final result
-            if transcript.strip() and not result.is_final:
-                logger.debug(f"Interim transcript: {transcript}")
-                console.print(f"[dim italic]Hearing: {transcript}[/dim italic]", end="\r")
-            
-            elif transcript.strip() and result.is_final:
-                logger.info(f"Final transcript: {transcript}")
-                console.print(f"\n[bold yellow]You said: {transcript}[/bold yellow]")
-                
-                with console.status("[bold green]Processing your request..."):
-                    response = await self.agent.ask(transcript, stream=True)
-                    
-                    # Display streaming response
-                    with Live(auto_refresh=False) as live:
-                        async for chunk in response:
-                            panel = Panel(
-                                Text(chunk.content, style="bold blue"),
-                                title="AI Response",
-                                border_style="green"
-                            )
-                            live.update(panel, refresh=True)
-                
-                console.print("\n[italic]Listening for your next question...[/italic]")
-        except Exception as e:
-            logger.error(f"Error processing transcript: {str(e)}", exc_info=True)
-            console.print(f"[red]Error processing transcript: {str(e)}[/red]")
-
-    def on_metadata(self, *args, **kwargs):
-        """Handle metadata events"""
-        logger.debug(f"Metadata received: {args}")
-        # Show a visual indicator that the system is receiving audio
-        console.print("[dim].", end="")
-
-    def on_error(self, *args, **kwargs):
-        """Handle error events"""
-        error_msg = args[0] if args else "Unknown error"
-        logger.error(f"Deepgram error: {error_msg}")
-        console.print(f"\n[red]Deepgram error: {error_msg}[/red]")
+        self.audio = pyaudio.PyAudio()
+        self.stream = None
+        self.is_recording = False
+        self.audio_queue = queue.Queue()
         
-    def on_close(self, *args, **kwargs):
-        """Handle connection close events"""
-        logger.info("Deepgram connection closed")
-        console.print("\n[yellow]Deepgram connection closed[/yellow]")
+        # Initialize text-to-speech based on platform
+        if platform.system() == 'Darwin':  # macOS
+            import subprocess
+            self.tts = lambda text: subprocess.run(['say', text])
+        else:  # Linux and others - use espeak
+            import pyttsx3
+            self.tts_engine = pyttsx3.init()
+            self.tts = lambda text: self.tts_engine.say(text)
 
-    async def start(self):
-        """Start voice interface"""
+    def _setup_audio_stream(self):
+        """Setup audio input stream"""
+        self.stream = self.audio.open(
+            format=FORMAT,
+            channels=CHANNELS,
+            rate=RATE,
+            input=True,
+            frames_per_buffer=CHUNK
+        )
+
+    async def process_audio(self):
+        """Process audio stream with Deepgram"""
         try:
-            logger.info("Starting voice interface")
-            # Setup Deepgram connection
-            logger.debug("Creating Deepgram live connection")
-            self.dg_connection = self.deepgram.listen.live.v("1")
+            # Create websocket connection
+            dg_connection = self.deepgram.listen.live.v("1")
             
-            # Configure event handlers
-            logger.debug("Setting up event handlers")
-            self.dg_connection.on(LiveTranscriptionEvents.Transcript, self.on_message)
-            self.dg_connection.on(LiveTranscriptionEvents.Metadata, self.on_metadata)
-            self.dg_connection.on(LiveTranscriptionEvents.Error, self.on_error)
-            self.dg_connection.on(LiveTranscriptionEvents.Close, self.on_close)
-            
-            # Configure transcription options
-            logger.debug("Configuring transcription options")
+            # Configure options
             options = LiveOptions(
                 model="nova-2",
-                punctuate=True,
                 language="en-US",
-                encoding="linear16",
-                channels=CHANNELS,
-                sample_rate=RATE,
-                interim_results=True,
-                utterance_end_ms="1000",
                 smart_format=True,
             )
-            
-            # Start the connection
-            logger.info("Starting Deepgram connection")
-            self.dg_connection.start(options)
-            
-            # Setup and start microphone
-            logger.info("Starting microphone")
-            try:
-                self.microphone = Microphone(self.dg_connection.send)
-                self.microphone.start()
-                logger.info("Microphone started successfully")
-            except Exception as e:
-                logger.error(f"Failed to start microphone: {str(e)}", exc_info=True)
-                console.print(f"[bold red]Microphone error: {str(e)}[/bold red]")
-                console.print("[yellow]Check if your microphone is properly connected and permissions are granted.[/yellow]")
-                raise
-            
-            console.print("[bold green]Voice interface started! Speak to interact...[/bold green]")
-            console.print("[italic](Press Enter to stop)[/italic]")
-            
-            # Create a way to exit the program with Enter key
-            loop = asyncio.get_event_loop()
-            future = loop.create_future()
-            
-            # Add a reader to detect when Enter is pressed
-            loop.add_reader(sys.stdin, lambda: future.set_result(None) if not future.done() else None)
-            
-            # Wait for user to press Enter
-            await future
-            console.print("\n[yellow]Stopping voice interface...[/yellow]")
-            
-        except Exception as e:
-            logger.error(f"Error in voice interface: {str(e)}", exc_info=True)
-            console.print(f"\n[red]Error: {str(e)}[/red]")
-        finally:
-            logger.info("Cleaning up resources")
-            if self.microphone:
-                self.microphone.finish()
-            if self.dg_connection:
-                self.dg_connection.finish()
-            self.agent.cleanup()
 
+            # Define event handlers
+            async def on_message(self, result, **kwargs):
+                if result.is_final:
+                    transcript = result.channel.alternatives[0].transcript
+                    if transcript.strip():
+                        logger.info(f"Recognized: {transcript}")
+                        await self.process_text(transcript)
+
+            async def on_error(self, error, **kwargs):
+                logger.error(f"Deepgram error: {error}")
+
+            # Register handlers
+            dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
+            dg_connection.on(LiveTranscriptionEvents.Error, on_error)
+
+            # Start connection
+            await dg_connection.start(options)
+
+            # Stream audio data
+            while self.is_recording:
+                if not self.audio_queue.empty():
+                    data = self.audio_queue.get()
+                    await dg_connection.send(data)
+                else:
+                    await asyncio.sleep(0.1)
+
+            # Close connection
+            await dg_connection.finish()
+
+        except Exception as e:
+            logger.error(f"Error in audio processing: {str(e)}")
+            self.stop_recording()
+
+    def start_recording(self):
+        """Start recording audio"""
+        self.is_recording = True
+        self._setup_audio_stream()
+        
+        def audio_callback():
+            while self.is_recording:
+                try:
+                    data = self.stream.read(CHUNK, exception_on_overflow=False)
+                    self.audio_queue.put(data)
+                except Exception as e:
+                    logger.error(f"Error reading audio: {str(e)}")
+                    break
+
+        self.audio_thread = threading.Thread(target=audio_callback)
+        self.audio_thread.start()
+
+    def stop_recording(self):
+        """Stop recording audio"""
+        self.is_recording = False
+        if self.stream:
+            self.stream.stop_stream()
+            self.stream.close()
+        if self.audio_thread:
+            self.audio_thread.join()
+
+    async def process_text(self, text: str):
+        """Process transcribed text with the agent"""
+        try:
+            # Speak processing message
+            self.tts("Processing...")
+            
+            # Get response from agent
+            response = await self.agent.ask(text, stream=False)
+            
+            # Speak the response
+            self.tts(response.content)
+            
+            # Handle any code execution
+            if await self.agent.should_ask_user():
+                self.tts("Would you like me to execute the code? Say yes or no.")
+                # Note: In a full implementation, you'd want to listen for the response
+                # and handle the confirmation flow
+        
+        except Exception as e:
+            logger.error(f"Error processing text: {str(e)}")
+            self.tts("Sorry, I encountered an error processing your request.")
+
+    def cleanup(self):
+        """Cleanup resources"""
+        self.stop_recording()
+        self.audio.terminate()
+        if hasattr(self, 'tts_engine'):
+            self.tts_engine.stop()
 
 def parse_args():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(description="PyAsco Voice Interface")
     parser.add_argument("--config", help="Path to YAML configuration file")
-    parser.add_argument("--deepgram-key",
-                       help="Deepgram API key (can also be set via DEEPGRAM_API_KEY env var)")
+    parser.add_argument("--deepgram-key", required=True,
+                       help="Deepgram API key")
     parser.add_argument("--model", default="meta-llama/llama-3.3-70b-instruct",
                        help="LLM model to use for responses")
     parser.add_argument("--log-level", default="INFO",
@@ -195,21 +192,12 @@ async def main():
     
     # Setup logging
     log_level = getattr(logging, args.log_level.upper())
-    logger = setup_logger('voice_interface', log_file='voice.log', level=log_level)
+    logger = setup_logger(__name__, log_file='voice.log', level=log_level)
     
-    # Load environment variables
-    load_dotenv()
-    
-    # Get Deepgram key from args or environment
-    deepgram_key = args.deepgram_key or os.getenv('DEEPGRAM_API_KEY')
-    if not deepgram_key:
-        console.print("[bold red]Deepgram API key is missing![/bold red]")
-        console.print("Provide via --deepgram-key or DEEPGRAM_API_KEY env var")
+    if not args.deepgram_key:
+        logger.error("Deepgram API key is missing!")
         return
     
-    logger.info(f"Starting voice interface with log level: {args.log_level}")
-    logger.debug(f"Deepgram API key present: {bool(deepgram_key)}")
-        
     # Load configuration
     if args.config and os.path.exists(args.config):
         logger.info(f"Loading configuration from {args.config}")
@@ -219,44 +207,29 @@ async def main():
         config = ConfigManager.from_args(args)
     
     # Initialize agent and interface
-    logger.info("Initializing agent")
-    agent = Agent(config)
-    
-    logger.info("Initializing voice interface")
     try:
-        interface = VoiceInterface(agent, deepgram_key)
+        logger.info("Initializing agent and voice interface...")
+        agent = Agent(config)
+        interface = VoiceInterface(agent, args.deepgram_key)
+        
+        # Start recording
+        logger.info("Starting voice interface...")
+        print("Voice interface started! Speak to interact.")
+        interface.start_recording()
+        
+        # Process audio
+        await interface.process_audio()
+        
     except Exception as e:
-        logger.error(f"Failed to initialize voice interface: {str(e)}", exc_info=True)
-        console.print(f"[bold red]Failed to initialize voice interface: {str(e)}[/bold red]")
-        return
-    
-    try:
-        logger.info("Starting voice interface")
-        await interface.start()
-    except Exception as e:
-        logger.error(f"Error in voice interface: {str(e)}", exc_info=True)
-        console.print(f"[bold red]Error: {str(e)}[/bold red]")
+        logger.error(f"Error in main: {str(e)}")
     finally:
-        logger.info("Cleaning up")
+        logger.info("Cleaning up...")
+        interface.cleanup()
         agent.cleanup()
 
 if __name__ == "__main__":
+    import asyncio
     try:
-        # Check if pyaudio is installed
-        try:
-            import pyaudio
-            logger.debug("PyAudio is installed")
-        except ImportError:
-            console.print("[bold red]PyAudio is not installed![/bold red]")
-            console.print("Please install it with: pip install pyaudio")
-            console.print("On macOS, you might need: brew install portaudio && pip install pyaudio")
-            console.print("On Linux, you might need: sudo apt-get install python3-pyaudio")
-            sys.exit(1)
-            
         asyncio.run(main())
     except KeyboardInterrupt:
-        console.print("\n[red]Voice interface stopped by user[/red]")
-    except Exception as e:
-        logger.error(f"Unhandled exception: {str(e)}", exc_info=True)
-        console.print(f"\n[bold red]Error: {str(e)}[/bold red]")
-        console.print("[yellow]Check voice.log for more details[/yellow]")
+        print("\nVoice interface stopped by user")
