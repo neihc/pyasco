@@ -96,6 +96,7 @@ class VoiceAssistant:
         self.response_text = ""
         self.microphone = None
         self.dg_connection = None
+        self.live = None  # Store the live display object
         
         # UI components
         self.console = Console()
@@ -114,8 +115,11 @@ class VoiceAssistant:
             Layout(name="response", ratio=1),
         )
         
-    def _update_display(self, live):
+    def _update_display(self):
         """Update the display with current state"""
+        if not self.live:
+            return
+            
         # Header
         self.layout["header"].update(
             Panel(
@@ -146,7 +150,7 @@ class VoiceAssistant:
         )
         
         # Render the layout
-        live.update(self.layout)
+        self.live.update(self.layout)
         
     async def process_voice_input(self, text):
         """Process voice input with the agent"""
@@ -172,7 +176,7 @@ class VoiceAssistant:
                     self.response_text += chunk.content
                     logger.debug(f"Received chunk: {len(chunk.content)} chars")
                     # Update the display with each chunk
-                    self._update_display(live)
+                    self._update_display()
             
             # Execute any code if needed
             should_execute = await self.agent.should_ask_user()
@@ -284,12 +288,13 @@ class VoiceAssistant:
             # Display UI
             logger.debug("Setting up live display")
             with Live(self.layout, refresh_per_second=4) as live:
+                self.live = live  # Store the live object
                 self.console.print("[bold green]Voice Assistant started. Speak to interact![/]")
                 
                 # Main loop
                 logger.debug("Entering main loop")
                 while True:
-                    self._update_display(live)
+                    self._update_display()
                     await asyncio.sleep(0.25)
                     
                     if not self.microphone.is_active():
