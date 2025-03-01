@@ -167,7 +167,7 @@ class VoiceAssistant:
             # Handle streaming response
             self.response_text = ""
             logger.debug("Processing streaming response")
-            async for chunk in response:
+            for chunk in response:
                 if chunk.content:
                     self.response_text += chunk.content
                     logger.debug(f"Received chunk: {len(chunk.content)} chars")
@@ -216,7 +216,7 @@ class VoiceAssistant:
         self.dg_connection = deepgram.listen.asynclive.v("1")
         
         # Define event handlers
-        async def on_message(self, result, **kwargs):
+        async def on_message(this, result, **kwargs):
             sentence = result.channel.alternatives[0].transcript
             
             if not sentence.strip():
@@ -244,7 +244,7 @@ class VoiceAssistant:
                 # Reset for next sentence
                 self.transcript_collector.reset()
         
-        async def on_error(self, error, **kwargs):
+        async def on_error(this, error, **kwargs):
             logger.error(f"Deepgram error: {error}")
             
         # Register event handlers
