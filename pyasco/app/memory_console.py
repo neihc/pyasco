@@ -55,6 +55,9 @@ class MemoryConsole:
                 console.print("[yellow]No relevant context found[/yellow]")
                 return
 
+            # Sort memories by final_score in descending order
+            sorted_context = sorted(context, key=lambda x: x.get('final_score', 0), reverse=True)
+
             table = Table(title="Memory Context", show_header=True)
             table.add_column("Type", style="cyan")
             table.add_column("Score", style="magenta")
