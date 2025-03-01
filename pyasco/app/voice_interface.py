@@ -16,6 +16,7 @@ import argparse
 import asyncio
 import json
 import logging
+from dotenv import load_dotenv
 import os
 import queue
 import threading
@@ -154,8 +155,8 @@ def parse_args():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(description="PyAsco Voice Interface")
     parser.add_argument("--config", help="Path to YAML configuration file")
-    parser.add_argument("--deepgram-key", required=True,
-                       help="Deepgram API key")
+    parser.add_argument("--deepgram-key",
+                       help="Deepgram API key (can also be set via DEEPGRAM_API_KEY env var)")
     parser.add_argument("--model", default="meta-llama/llama-3.3-70b-instruct",
                        help="LLM model to use for responses")
     parser.add_argument("--log-level", default="INFO",
@@ -171,8 +172,13 @@ async def main():
     log_level = getattr(logging, args.log_level.upper())
     logger = setup_logger(__name__, log_file='voice.log', level=log_level)
     
-    if not args.deepgram_key:
-        logger.error("Deepgram API key is missing!")
+    # Load environment variables
+    load_dotenv()
+    
+    # Get Deepgram key from args or environment
+    deepgram_key = args.deepgram_key or os.getenv('DEEPGRAM_API_KEY')
+    if not deepgram_key:
+        logger.error("Deepgram API key is missing! Provide via --deepgram-key or DEEPGRAM_API_KEY env var")
         return
         
     # Load configuration
@@ -185,7 +191,7 @@ async def main():
     
     # Initialize agent and interface
     agent = Agent(config)
-    interface = VoiceInterface(agent, args.deepgram_key)
+    interface = VoiceInterface(agent, deepgram_key)
     
     try:
         await interface.start()
