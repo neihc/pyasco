@@ -46,7 +46,7 @@ class MemoryManager:
 
     def _calculate_memory_score(self, memory: Dict[str, Any], relevance_score: float = 0.5) -> float:
         """
-        Calculate combined memory score based on multiple factors
+        Calculate combined memory score based on multiple sophisticated factors
         
         Args:
             memory: Memory dictionary containing metadata
@@ -55,39 +55,77 @@ class MemoryManager:
         Returns:
             float: Combined score between 0 and 1
         """
-        # Time decay score (7 days half-life)
         now = datetime.now().astimezone(timezone.utc)
-        
-        # Ensure created_at is timezone-aware
         created_at = memory['created_at']
         if created_at.tzinfo is None:
             created_at = created_at.replace(tzinfo=timezone.utc)
-            
-        age = (now - created_at).total_seconds()
-        decay_score = math.exp(-age / (3600))
         
-        # Frequency score based on access count
+        # Enhanced time decay with multiple components
+        age_seconds = (now - created_at).total_seconds()
+        age_hours = age_seconds / 3600
+        age_days = age_hours / 24
+        
+        # Short-term decay (hours)
+        short_term_decay = math.exp(-age_hours / 12)  # 12-hour half-life
+        
+        # Medium-term decay (days) 
+        medium_term_decay = math.exp(-age_days / 7)   # 7-day half-life
+        
+        # Long-term decay (weeks)
+        long_term_decay = math.exp(-age_days / 30)    # 30-day half-life
+        
+        # Combined decay score weighted by time period
+        if age_days < 1:
+            decay_score = short_term_decay
+        elif age_days < 7:
+            decay_score = 0.7 * short_term_decay + 0.3 * medium_term_decay
+        else:
+            decay_score = 0.2 * medium_term_decay + 0.8 * long_term_decay
+
+        # Enhanced frequency scoring
         access_count = memory.get('access_count', 0)
-        frequency_score = 1 - math.exp(-access_count / 5)  # Saturates around 15 accesses
+        recency_bonus = 1.0 if age_hours < 24 else 0.8  # Bonus for recent accesses
+        frequency_score = (1 - math.exp(-access_count / 8)) * recency_bonus
         
-        # Get importance score from memory or default to 0.5
-        importance_score = memory.get('importance_score', 0.5)
+        # Importance scoring with multiple factors
+        base_importance = memory.get('importance_score', 0.5)
+        emotional_salience = memory.get('emotional_score', 0.5)
+        context_relevance = memory.get('context_score', 0.5)
         
-        # Weights for different factors
-        weights = {
-            'decay': 0.25,      # Recent memories
-            'relevance': 0.25,   # Search relevance
-            'frequency': 0.15,   # Access frequency
-            'importance': 0.35  # Explicit importance
-        }
+        # Combine importance factors
+        importance_score = (
+            0.5 * base_importance +
+            0.3 * emotional_salience +
+            0.2 * context_relevance
+        )
         
-        # Calculate weighted sum
-        final_score = (
+        # Dynamic weights based on memory type and age
+        memory_type = memory.get('memory_type', 'short_term')
+        if memory_type == 'short_term':
+            weights = {
+                'decay': 0.35,      # Higher weight for recency
+                'relevance': 0.25,   # Moderate weight for relevance
+                'frequency': 0.15,   # Lower weight for frequency
+                'importance': 0.25   # Moderate weight for importance
+            }
+        else:  # long_term or reflection
+            weights = {
+                'decay': 0.15,      # Lower weight for recency
+                'relevance': 0.30,   # Higher weight for relevance
+                'frequency': 0.20,   # Moderate weight for frequency
+                'importance': 0.35   # Higher weight for importance
+            }
+        
+        # Calculate final score with normalization
+        raw_score = (
             weights['decay'] * decay_score +
             weights['relevance'] * relevance_score +
             weights['frequency'] * frequency_score +
             weights['importance'] * importance_score
         )
+        
+        # Normalize to 0-1 range and apply sigmoid for smoother distribution
+        final_score = 1 / (1 + math.exp(-5 * (raw_score - 0.5)))
         
         return final_score
 
