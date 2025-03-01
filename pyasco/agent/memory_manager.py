@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Union
 import math
 from datetime import datetime, timezone
 from collections import defaultdict
