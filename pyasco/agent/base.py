@@ -1,3 +1,4 @@
+import textwrap
 from typing import List, Dict, Optional, Generator, Union, Any
 from datetime import datetime
 import re
@@ -162,18 +163,23 @@ class Agent:
         base_prompt = FOLLOW_UP_PROMPT.format(output=output)
         
         # Check if agent is struggling (threshold of 10 exchanges)
-        if len(self.conversation.messages) >= 10:
-            struggle_suggestion = (
-                "\n\nNote: I notice we've been going back and forth quite a bit. "
-                "To help resolve this more effectively, you could:\n"
-                "1. Try rephrasing your request more specifically\n"
-                "2. Break down the problem into smaller steps\n"
-                "3. Share any error messages or specific examples\n"
-                "4. Consider starting a new session with /reset"
-            )
+        if len(self.conversation.messages) >= 6:
+            struggle_suggestion = textwrap.dedent("""
+                Note: I notice we've been going back and forth quite a bit
+                To help resolve this more effectively, you could try remember old memories by using `search_context`
+
+                ```python
+                await search_context('<semantic query of memories you want to search>')
+                ```
+                """)
             return base_prompt + struggle_suggestion
-            
-        return base_prompt
+        else:
+            normal_suggestion = textwrap.dedent("""
+                1. if there's error or don't include the neccessary information, response the next code to be run
+                2. if done, based on output to answer user question at the first message
+
+                Keep your answer short and directly. can use emoji if you need""")
+            return base_prompt + normal_suggestion
 
     async def should_ask_user(self) -> bool:
         last_message = self.conversation.last_message

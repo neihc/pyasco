@@ -9,7 +9,7 @@ import duckdb
 import lancedb
 from lancedb.pydantic import Vector, LanceModel
 from lancedb.embeddings import get_registry
-from lancedb.rerankers import JinaReranker
+from lancedb.rerankers import JinaReranker, LinearCombinationReranker
 
 from ..services.code_snippet_extractor import CodeSnippetExtractor
 
@@ -56,10 +56,11 @@ class LanceDBMemoryHandler:
             os.environ['JINA_API_KEY'] = jina_api_key
             
         # Initialize reranker
-        self.reranker = JinaReranker(
-            api_key=os.environ['JINA_API_KEY'],
-            column="content"
-        ) if os.environ['JINA_API_KEY'] else None
+        # self.reranker = JinaReranker(
+            # api_key=os.environ['JINA_API_KEY'],
+            # column="content"
+        # ) if os.environ['JINA_API_KEY'] else None
+        self.reranker = LinearCombinationReranker(weight=0.7)
         
         # Connect to LanceDB
         self.db = lancedb.connect(str(self.db_path))

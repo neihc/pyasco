@@ -120,11 +120,12 @@ class MemoryDecayHandler:
         memory_contexts = [self._prepare_memory_for_llm(memory) for memory in cluster]
 
         prompt = f"""
-        Analyze these related memories and break them down into independent memory units.
+        Analyze these related memories and break them down into independent meaningful memory units
+        Let eliminate redudant or invalid memories.
         For each memory unit, provide:
 
         1. A concise summary
-        2. Original content
+        2. Original content (which is value to reference in the future)
         3. Relevant tags (from existing: {existing_tags})
         4. Importance score (0-1) based on these criteria:
            - 0.8-1.0: Critical information (core concepts, key decisions, major events)
@@ -218,8 +219,7 @@ class MemoryDecayHandler:
            - 0.4-0.6: Supporting information (context, background, minor details)
            - 0.2-0.4: Supplementary details (temporary notes, partial information)
            - 0.0-0.2: Trivial information (redundant or obsolete details)
-           The integrated memory should have an importance score >= max(existing_score, new_score)
-           if it contains more complete/valuable information.
+           The integrated memory should have an importance score >= max(existing_score, new_score) if it contains more complete/valuable information.
 
         New Memory:
         {json.dumps(self._prepare_memory_for_llm(new_memory), indent=2)}

@@ -18,9 +18,7 @@ import os
 import logging
 import glob
 import shutil
-from typing import Optional, Dict, List, Tuple
-from pathlib import Path
-import asyncio
+from typing import Dict, List, Tuple
 from io import BytesIO
 from telegram import Update, InputFile
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler
@@ -33,7 +31,7 @@ from ..logger_config import setup_logger
 MAX_MESSAGE_LENGTH = 4096
 
 # Setup logging will be done in main() after parsing args
-logger = logging.getLogger(__name__)
+logger = setup_logger('telegram', 'telegram.log')
 console = Console()
 
 # Add file handler for detailed logging
@@ -203,7 +201,7 @@ class TelegramInterface:
                     await query.message.reply_text(response.content)
                     
                     # If there's more code to execute, ask again
-                    if self.agent.should_ask_user():
+                    if await self.agent.should_ask_user():
                         reply_markup = {
                             'inline_keyboard': [[
                                 {'text': 'Yes ✅', 'callback_data': 'execute_yes'},
@@ -253,7 +251,7 @@ class TelegramInterface:
                 loop_count = 0
                 current_response = response
                 
-                while self.agent.should_ask_user() and loop_count < max_loops:
+                while await self.agent.should_ask_user() and loop_count < max_loops:
                     # Send "Actioning..." message
                     action_msg = await update.message.reply_text("Actioning... 🔄")
                     
@@ -302,7 +300,7 @@ class TelegramInterface:
             logger.debug("Sent response to user")
 
             # If there's code to execute, ask user only if not in auto mode
-            if self.agent.should_ask_user() and not self.auto:
+            if await self.agent.should_ask_user() and not self.auto:
                 reply_markup = {
                     'inline_keyboard': [[
                         {'text': 'Yes ✅', 'callback_data': 'execute_yes'},

@@ -26,5 +26,5 @@ async def search_context(query: str) -> str:
     )
     
     # Get context with raw=True to get full memory entries
-    context = await memory_manager.get_context(query, raw=False)
+    context = await memory_manager.get_context(query, raw=False, memory_type="long_term")
     return context

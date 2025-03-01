@@ -40,7 +40,7 @@ class CodeSnippetExtractor:
                 content = ''
                 for child in cursor.node.children:
                     if child.type == "info_string":
-                        info_string = markdown_text[child.start_byte:child.end_byte]
+                        info_string = child.text.decode().strip()
                         break
                 
                 # Get the content
