@@ -288,6 +288,9 @@ class VoiceAssistant:
                 self.transcript_collector.add_sentence(full_sentence)
                 self.transcript_collector.update_partial("")
                 
+                # Update the display immediately
+                self._update_display()
+                
                 # Process the completed sentence
                 logger.debug("Processing completed sentence")
                 await self.process_voice_input(full_sentence)
