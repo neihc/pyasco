@@ -78,10 +78,10 @@ class VoiceInterface:
                     
             await asyncio.sleep(0.1)
     
-    async def process_speech(self, audio_ bytes):
+    async def process_speech(self, audio_bytes: bytes):
         """Send audio to Deepgram and process transcription"""
         try:
-            source = {'buffer': audio_data, 'mimetype': 'audio/raw'}
+            source = {'buffer': audio_bytes, 'mimetype': 'audio/raw'}
             response = await self.deepgram.transcription.prerecorded(
                 source,
                 {
