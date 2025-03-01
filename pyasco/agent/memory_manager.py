@@ -15,6 +15,13 @@ from ..logger_config import setup_logger
 class MemoryManager:
     """Manages memory operations for the agent using LanceDB"""
     
+    # Token allocation percentages and minimums
+    TOKEN_ALLOCATIONS = {
+        MemoryType.SHORT_TERM: {'percent': 0.4, 'min_tokens': 2000},
+        MemoryType.LONG_TERM: {'percent': 0.4, 'min_tokens': 2000},
+        MemoryType.REFLECTION: {'percent': 0.2, 'min_tokens': 1000}
+    }
+
     def __init__(self, 
                  memory_handler: LanceDBMemoryHandler, 
                  llm_service: LLMService,
@@ -264,35 +271,56 @@ class MemoryManager:
             all_memories.append(memory)
             self.logger.debug(f"Memory {memory['id'][:8]}... scored {final_score:.4f}")
 
-        # First get X most recent memories
-        recent_count = 10  # X recent memories
-        scored_count = 5  # Y scored memories
+        # Group memories by type
+        memories_by_type = defaultdict(list)
+        for memory in all_memories:
+            memories_by_type[memory['memory_type']].append(memory)
+
+        final_memories = []
+        tokens_used = 0
         
-        # Sort by timestamp for recent memories
-        recent_memories = sorted(short_term, key=lambda x: x['created_at'], reverse=True)[:recent_count]
-        recent_ids = {m['id'] for m in recent_memories}
-        
-        # Sort remaining memories by score and filter low scores
-        remaining_memories = [m for m in all_memories if m['id'] not in recent_ids]
-        scored_memories = sorted(remaining_memories, key=lambda x: x['final_score'], reverse=True)
-        filtered_memories = [m for m in scored_memories if m['final_score'] > 0.3][:scored_count]
-
-        # Combine recent and scored memories
-        final_memories = recent_memories + filtered_memories
-
-
-        # Trim to fit token window if needed
-        current_tokens = 0
-        token_limited_memories = []
-        for memory in final_memories:
-            tokens = self._estimate_tokens(memory['content'])
-            if current_tokens + tokens <= self.token_window:
-                token_limited_memories.append(memory)
-                current_tokens += tokens
-            else:
-                break
+        # First pass: Ensure minimum tokens for each type
+        for memory_type, allocation in self.TOKEN_ALLOCATIONS.items():
+            type_memories = memories_by_type[memory_type]
+            if not type_memories:
+                continue
                 
-        final_memories = token_limited_memories
+            # Sort memories by score
+            type_memories.sort(key=lambda x: x['final_score'], reverse=True)
+            
+            # Ensure minimum tokens
+            min_tokens = allocation['min_tokens']
+            current_type_tokens = 0
+            min_memories = []
+            
+            for memory in type_memories:
+                tokens = self._estimate_tokens(memory['content'])
+                if current_type_tokens + tokens <= min_tokens:
+                    min_memories.append(memory)
+                    current_type_tokens += tokens
+                    tokens_used += tokens
+                    
+            final_memories.extend(min_memories)
+            
+        # Second pass: Fill remaining token space according to percentages
+        remaining_tokens = self.token_window - tokens_used
+        if remaining_tokens > 0:
+            for memory_type, allocation in self.TOKEN_ALLOCATIONS.items():
+                type_memories = [m for m in memories_by_type[memory_type] 
+                               if m not in final_memories]
+                if not type_memories:
+                    continue
+                    
+                # Calculate tokens for this type
+                type_tokens = int(remaining_tokens * allocation['percent'])
+                current_type_tokens = 0
+                
+                for memory in type_memories:
+                    tokens = self._estimate_tokens(memory['content'])
+                    if current_type_tokens + tokens <= type_tokens:
+                        final_memories.append(memory)
+                        current_type_tokens += tokens
+                        tokens_used += tokens
 
         self.logger.info("Selected memories with scores:")
         for memory in final_memories:
