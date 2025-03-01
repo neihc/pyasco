@@ -7,7 +7,6 @@ import importlib
 import inspect
 from typing import Optional, Tuple, Dict
 from ..logger_config import setup_logger
-from .internal import predefined
 
 class CodeExecutor:
     """A class to execute Python and Bash code using Jupyter kernel"""
@@ -36,18 +35,19 @@ class CodeExecutor:
         self._load_predefined_functions()
 
     def _load_predefined_functions(self):
-        """Load predefined functions into the kernel environment"""
-        # Get all functions from predefined module
-        predefined_funcs = inspect.getmembers(predefined, inspect.isfunction)
-        
-        # Create initialization code
+        """Load all Python files from internal directory into the kernel environment"""
+        internal_dir = os.path.join(os.path.dirname(__file__), 'internal')
         init_code = []
-        for name, func in predefined_funcs:
-            # Get the source code of the function
-            func_source = inspect.getsource(func)
-            init_code.append(func_source)
         
-        # Execute all predefined functions in the kernel
+        # Walk through internal directory
+        for filename in os.listdir(internal_dir):
+            if filename.endswith('.py') and filename != '__init__.py':
+                filepath = os.path.join(internal_dir, filename)
+                with open(filepath, 'r') as f:
+                    file_content = f.read()
+                    init_code.append(f"\n# From {filename}\n{file_content}")
+        
+        # Execute all code in the kernel
         if init_code:
             self._execute_local('\n'.join(init_code))
             
