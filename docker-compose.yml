@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  telegram-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app
+      - ~/.pyasco:/root/.pyasco
+    env_file: .env
+    environment:
+      - PYTHONPATH=/app
+      - PYASCO_AUTO=${PYASCO_AUTO:-false}
+    restart: unless-stopped
+    command: python -m pyasco.app.telegram_bot --telegram-token ${TELEGRAM_BOT_TOKEN} --model ${LLM_MODEL}

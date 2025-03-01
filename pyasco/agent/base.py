@@ -1,43 +1,70 @@
+import textwrap
 from typing import List, Dict, Optional, Generator, Union, Any
+from datetime import datetime
 import re
+import asyncio
 
 from ..logger_config import setup_logger
-from ..services.skill_manager import Skill
+from .conversation import Conversation
+from ..services.lance_memory import LanceDBMemoryHandler
+from ..services.embedding import EmbeddingService
+from .memory_manager import MemoryManager
 from .prompt import (
     DEFAULT_SYSTEM_PROMPT,
-    FOLLOW_UP_PROMPT,
-    LEARN_SKILL_PROMPT,
-    IMPROVE_SKILL_PROMPT,
-    IDENTIFY_SKILL_PROMPT
+    FOLLOW_UP_PROMPT
 )
-from .types import AgentResponse
+from .types import Message
 from ..config import Config
-from ..services.llm import configure_client
+from ..services.llm import LLMService
 from ..services.code_snippet_extractor import CodeSnippetExtractor
 from ..services.skill_manager import SkillManager
 from ..tools.code_execute import CodeExecutor
-from .skill_handler import SkillHandler
 from .response_handler import ResponseHandler
 from .tool_handler import ToolHandler
 from .utils import get_system_info
 
 
 class Agent:
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, user_id: str = "0", app_type: str = "console", **metadata):
         self.logger = setup_logger('agent')
         self.logger.info("Initializing Agent")
-        self.messages: List[Dict] = []
+        self.user_id = user_id
+        self.app_type = app_type
+        self.conversation_id = str(int(datetime.now().timestamp()))
+        self.metadata = {
+            "user_id": user_id,
+            "app_type": app_type,
+            "conversation_id": self.conversation_id,
+            **metadata
+        }
+        self.conversation = Conversation()
         self.code_extractor = CodeSnippetExtractor()
         self.python_executor = self._setup_executor(config)
         self.custom_instructions = config.custom_instructions or ""
         self.model = config.llm.model
         
-        configure_client(api_key=config.llm.api_key, base_url=config.llm.base_url)
-        self.skill_manager = SkillManager(config.skills_path)
+        self.llm_service = LLMService(
+            api_key=config.llm.api_key,
+            base_url=config.llm.base_url,
+            model=self.model
+        )
+        
+        # Initialize memory services if configured
+        self.embedding_service = None
+        self.memory_handler = None
+        self.memory_manager = None
+            
+        self.memory_handler = LanceDBMemoryHandler(
+            db_path=config.memory.db_path if hasattr(config.memory, 'db_path') else "~/.pyasco/memories"
+       )
+        
+        self.memory_manager = MemoryManager(
+            memory_handler=self.memory_handler,
+            llm_service=self.llm_service
+        )
         
         # Initialize handlers
-        self.skill_handler = SkillHandler(self.skill_manager, self.python_executor)
-        self.response_handler = ResponseHandler(self.code_extractor)
+        self.response_handler = ResponseHandler(self.code_extractor, self.llm_service)
         self.tool_handler = ToolHandler(self.python_executor)
         
         self._initialize_chat()
@@ -61,309 +88,133 @@ class Agent:
                 }
         
         return CodeExecutor(
-            use_docker=config.docker.use_docker,
-            docker_image=config.docker.image,
-            docker_options=docker_options,
             bash_shell=config.docker.bash_command,
-            python_command=config.docker.python_command,
-            env_file=config.docker.env_file
         )
 
-    def _initialize_chat(self) -> None:
+    def _initialize_chat(self, context: str = "") -> None:
         system_info = get_system_info(self.python_executor)
         base_prompt = f"{DEFAULT_SYSTEM_PROMPT}\n\n{system_info}"
         system_content = f"{base_prompt}\n\n{self.custom_instructions}" if self.custom_instructions else base_prompt
+        
+        if context:
+            system_content = f"{system_content}\n\nContext from your memory:\n{context}"
+            
         self.logger.info(system_content)
         
-        self.messages.append({
-            "role": "system",
-            "content": system_content
-        })
+        self.conversation.add_message(
+            role="system",
+            content=system_content
+        )
 
-    def get_response(self, user_input: str, stream: bool = False) -> Union[AgentResponse, Generator[AgentResponse, None, None]]:
+    async def get_response(self, user_input: str, stream: bool = False) -> Union[Message, Generator[Message, None, None]]:
+        """Get response without recall for follow-up messages"""
         self.logger.info(f"Getting response for user input (stream={stream})")
         
-        # Get relevant skills based on conversation
-        relevant_skills = self.skill_handler.get_relevant_skills(self.messages, self.model, user_input)
+        self.conversation.add_message(
+            role="user",
+            content=user_input
+        )
         
-        # Process skills and update input if needed
-        if relevant_skills:
-            user_input = self.skill_handler.process_skills(user_input, relevant_skills, self.messages)
-        
-        # Add message to history
-        self.messages.append({
-            "role": "user", 
-            "content": user_input,
-            "skills": [skill.to_dict() for skill in relevant_skills] if relevant_skills else []
-        })
-        
-        # Get LLM response through response handler
-        return self.response_handler.handle_response(self.messages, self.model, stream)
+        return self.response_handler.handle_response(
+            self.conversation.to_llm_format(),
+            self.model,
+            self.conversation,
+            stream
+        )
 
-    def ask(self, new_input: str, stream: bool = False, auto: bool = False, max_loops: int = 5) -> Dict:
-        response = self.get_response(new_input, stream=stream)
+
+    async def ask(self, user_input: str, stream: bool = False, new_session: bool = False) -> Dict:
+        """Process user input and get response"""
+        self.logger.info(f"Getting response for user input (stream={stream}, new_session={new_session})")
         
-        if not auto:
-            return response
+        if new_session:
+            # Get relevant context from memory
+            context = ""
+            if self.memory_manager:
+                context = await self.memory_manager.get_context(user_input)
             
-        loop_count = 0
-        current_response = response
+            # Reset conversation before starting new session
+            self.conversation.clear()
+            self._initialize_chat(context)
+            
+            content = user_input
+        else:
+            content = user_input
+            
+        if self.memory_manager:
+            await self.memory_manager.remember(f"user: {user_input}")
+            
+        # Add message to conversation
+        self.conversation.add_message(
+            role="user",
+            content=content
+        )
         
-        while True:
-            if not self.should_ask_user():
-                break
-                
-            if loop_count >= max_loops:
-                self.logger.warning(f"Reached maximum follow-up iterations ({max_loops})")
-                break
-                
-            results = self.tool_handler.execute_tools(self.messages[-1].get("tools", []))
-            if not results:
-                break
-                
-            follow_up = self.get_follow_up(results)
-            current_response = self.get_response(follow_up, stream=stream)
-            loop_count += 1
-            
-        return current_response
+        # Get response from LLM
+        return self.response_handler.handle_response(
+            self.conversation.to_llm_format(),
+            self.model,
+            self.conversation,
+            stream
+        )
 
     def get_follow_up(self, results: List[str]) -> str:
-        return FOLLOW_UP_PROMPT.format(output=chr(10).join(results))
+        output, _ = self.tool_handler.compress_results(results)
+        base_prompt = FOLLOW_UP_PROMPT.format(output=output)
+        
+        # Check if agent is struggling (threshold of 10 exchanges)
+        if len(self.conversation.messages) >= 6:
+            struggle_suggestion = textwrap.dedent("""
+                Note: I notice we've been going back and forth quite a bit
+                To help resolve this more effectively, you could try remember old memories by using `search_context`
 
-    def should_ask_user(self) -> bool:
-        if not self.messages:
-            return False
-        last_message = self.messages[-1]
-        return bool(last_message.get("tools"))
+                ```python
+                await search_context('<semantic query of memories you want to search>')
+                ```
+                """)
+            return base_prompt + struggle_suggestion
+        else:
+            normal_suggestion = textwrap.dedent("""
+                1. if there's error or don't include the neccessary information, response the next code to be run
+                2. if done, based on output to answer user question at the first message
+
+                Keep your answer short and directly. can use emoji if you need""")
+            return base_prompt + normal_suggestion
+
+    async def should_ask_user(self) -> bool:
+        last_message = self.conversation.last_message
+        if self.memory_manager:
+            # Get the last assistant message if it exists
+            if last_message and last_message.role == "assistant":
+                await self.memory_manager.remember(f"assistant: {last_message.content}")
+        
+        
+        return bool(last_message and last_message.tools)
+
+    async def remember_conversation(self):
+        """Trigger memory decay process"""
+        if not self.memory_manager:
+            self.logger.debug("Memory handling not enabled, skipping memory decay")
+            return
+            
+        try:
+            self.logger.info("Triggering memory decay process")
+            await self.memory_manager.trigger_decay()
+        except Exception as e:
+            self.logger.error(f"Failed to trigger memory decay: {str(e)}")
 
     def reset(self):
         self.logger.info("Resetting agent state")
-        self.messages = []
+        self.conversation.clear()
         self.python_executor.reset()
         self._initialize_chat()
     
     def cleanup(self):
         self.logger.info("Cleaning up agent resources")
         self.python_executor.cleanup()
+        if self.memory_handler:
+            del self.memory_handler
 
-    def parse_skill_response(self, response_content: str) -> Dict[str, Any]:
-        """Parse a skill learning response into components.
-        
-        Args:
-            response_content: The LLM response content
-            
-        Returns:
-            Dict containing name, usage, code, and requirements
-            
-        Raises:
-            ValueError: If response format is invalid
-        """
-        try:
-            # Extract skill name
-            name_match = re.search(r"SKILL NAME:\s*(.+?)(?=\n|$)", response_content)
-            name = name_match.group(1).strip() if name_match else None
-
-            # Extract usage
-            usage_match = re.search(r"USAGE:\s*(.+?)(?=\n|$)", response_content)
-            usage = usage_match.group(1).strip() if usage_match else None
-
-            # Extract requirements
-            req_match = re.search(r"REQUIREMENTS:\s*(.+?)(?=\n|$)", response_content)
-            requirements_str = req_match.group(1).strip() if req_match else "none"
-            requirements = [r.strip() for r in requirements_str.split(",")] if requirements_str.lower() != "none" else []
-
-            # Extract code
-            code_snippets = self.code_extractor.extract_snippets(response_content)
-            code = code_snippets[0].content if code_snippets else None
-
-            if not all([name, usage, code]):
-                raise ValueError("Missing required skill components")
-
-            return {
-                "name": name,
-                "usage": usage,
-                "file_path": f"{name.lower().replace(' ', '_')}.py",
-                "requirements": requirements,
-                "code": code
-            }
-        except (AttributeError, IndexError) as e:
-            raise ValueError(f"Invalid skill response format: {str(e)}")
-
-    def learn_that_skill(self) -> 'Skill':
-        """Convert the current conversation into a reusable skill.
-        Takes the conversation history and asks the LLM to consolidate it
-        into a skill in the correct format.
-        
-        Returns:
-            Skill: The newly learned skill
-            
-        Raises:
-            ValueError: If skill response is invalid or no messages to learn from
-        """
-        if len(self.messages) < 2:  # Need at least system + 1 interaction
-            raise ValueError("Not enough conversation history to learn from")
-            
-        max_retries = 3
-        retry_count = 0
-        last_error = None
-        
-        while retry_count < max_retries:
-            try:
-                # Create prompt to consolidate conversation into skill
-                conversation = "\n".join(f"{msg['role']}: {msg['content']}" 
-                                    for msg in self.messages[1:])  # Skip system message
-                
-                error_feedback = ""
-                if last_error:
-                    error_feedback = (
-                        f"\n\nPrevious attempt failed with error: {last_error}"
-                        "\nPlease ensure your response includes ALL required sections:"
-                        "\n- SKILL NAME (required)"
-                        "\n- USAGE (required)"
-                        "\n- REQUIREMENTS (required, use 'none' if no requirements)"
-                        "\n- CODE section with ```python code block (required)"
-                    )
-                
-                prompt = LEARN_SKILL_PROMPT.format(error_feedback=error_feedback)
-        
-                response = self.get_response(prompt)
-                if isinstance(response, Generator):
-                    # Handle streaming response
-                    content = ""
-                    for chunk in response:
-                        content += chunk.content
-                    response_content = content
-                else:
-                    response_content = response.content
-                    
-                skill_data = self.parse_skill_response(response_content)
-                
-                return self.skill_handler.skill_manager.learn(
-                    name=skill_data["name"],
-                    usage=skill_data["usage"],
-                    code=skill_data["code"],
-                    requirements=skill_data["requirements"]
-                )
-                
-            except ValueError as e:
-                last_error = str(e)
-                retry_count += 1
-                self.logger.warning(f"Attempt {retry_count} failed: {last_error}")
-                
-                if retry_count >= max_retries:
-                    raise ValueError(
-                        f"Failed to learn skill after {max_retries} attempts. "
-                        f"Last error: {last_error}"
-                    )
-                
-                continue
-
-    def improve_that_skill(self, skill_name: Optional[str] = None) -> Optional['Skill']:
-        """Improve an existing skill based on the current conversation.
-        Takes the conversation history and asks the LLM to improve the specified skill.
-        If no skill_name is provided, automatically determines which skill to improve.
-        
-        Args:
-            skill_name: Optional name of the skill to improve. If None, auto-determines from conversation.
-            
-        Returns:
-            Skill: The improved skill or None if skill not found
-            
-        Raises:
-            ValueError: If skill response is invalid or no messages to learn from
-        """
-        if len(self.messages) < 2:
-            raise ValueError("Not enough conversation history to learn from")
-            
-        error_context = []
-        max_retries = 3
-        retry_count = 0
-        
-        while retry_count < max_retries:
-            try:
-                if skill_name is None:
-                    # Create prompt to identify skill from conversation
-                    conversation = "\n".join(f"{msg['role']}: {msg['content']}" 
-                                        for msg in self.messages[1:])
-                    
-                    available_skills = "\n".join(
-                        f"- {name}: {skill.usage}"
-                        for name, skill in self.skill_handler.skill_manager.skills.items()
-                    )
-                    identify_prompt = IDENTIFY_SKILL_PROMPT.format(
-                        conversation=conversation,
-                        available_skills=available_skills
-                    )
-                    
-                    # Add available skills to prompt
-                    for name, skill in self.skill_handler.skill_manager.skills.items():
-                        identify_prompt += f"- {name}: {skill.usage}\n"
-                    
-                    response = self.get_response(identify_prompt)
-                    if isinstance(response, Generator):
-                        content = ""
-                        for chunk in response:
-                            content += chunk.content
-                        skill_name = content.strip()
-                    else:
-                        skill_name = response.content.strip()
-                    
-                # Get existing skill
-                skill = self.skill_handler.skill_manager.get_skill(skill_name)
-                if not skill:
-                    raise ValueError(f"Skill '{skill_name}' not found")
-                    
-                # Get existing code
-                existing_code = self.skill_handler.skill_manager.get_skill_code(skill)
-                    
-                # Create prompt to improve skill
-                conversation = "\n".join(f"{msg['role']}: {msg['content']}" 
-                                    for msg in self.messages[1:])
-                
-                # Add error context if any previous attempts failed
-                error_info = ""
-                if error_context:
-                    error_info = "\nPrevious attempts failed with these errors:\n" + "\n".join(
-                        f"Attempt {i+1}: {err}" for i, err in enumerate(error_context)
-                    ) + "\nPlease address these issues in your improvement."
-                
-                prompt = IMPROVE_SKILL_PROMPT.format(
-                    conversation=conversation,
-                    error_info=error_info,
-                    skill_name=skill.name,
-                    skill_usage=skill.usage
-                )
-                
-                response = self.get_response(prompt)
-                if isinstance(response, Generator):
-                    content = ""
-                    for chunk in response:
-                        content += chunk.content
-                    response_content = content
-                else:
-                    response_content = response.content
-                    
-                skill_data = self.parse_skill_response(response_content)
-                
-                # Verify the skill name matches
-                if skill_data["name"] != skill_name:
-                    raise ValueError(f"Skill name mismatch: expected {skill_name}, got {skill_data['name']}")
-                
-                return self.skill_handler.skill_manager.improve_skill(
-                    name=skill_data["name"],
-                    usage=skill_data["usage"],
-                    code=skill_data["code"],
-                    requirements=skill_data["requirements"]
-                )
-                
-            except Exception as e:
-                self.logger.error(f"Attempt {retry_count + 1} failed: {str(e)}")
-                error_context.append(str(e))
-                retry_count += 1
-                
-                if retry_count >= max_retries:
-                    self.logger.error(f"Failed to improve skill after {max_retries} attempts")
-                    raise ValueError(f"Failed to improve skill after {max_retries} attempts. Errors: {error_context}")
 
     def should_stop_follow_up(self, loop_count: int, max_loops: int = 5) -> bool:
         """Determine if we should stop the follow-up loop"""
@@ -371,22 +222,41 @@ class Agent:
             self.logger.warning(f"Reached maximum follow-up iterations ({max_loops})")
             return True
             
-        if not self.messages:
+        last_message = self.conversation.last_message
+        if not last_message:
+            self.logger.debug("No last message found, stopping follow-up loop")
             return True
             
-        last_message = self.messages[-1]
-        if not last_message.get("tools"):
+        if not last_message.tools:
+            self.logger.debug("No tools found in last message, stopping follow-up loop")
             return True
             
+        tool_count = len(last_message.tools)
+        self.logger.debug(f"Found {tool_count} tool(s) in last message, continuing follow-up loop")
         return False
 
     def confirm(self) -> List[str] | None:
         """Execute any pending tools and return their results"""
-        if not self.messages:
+        last_message = self.conversation.last_message
+        if not last_message:
+            self.logger.debug("No last message found, skipping tool execution")
             return None
             
-        last_message = self.messages[-1]
-        if not last_message.get("tools"):
+        if not last_message.tools:
+            self.logger.debug("No tools found in last message, skipping tool execution")
             return None
+        
+        tool_count = len(last_message.tools)
+        self.logger.info(f"Executing {tool_count} tool(s) from last message")
+        for i, tool in enumerate(last_message.tools):
+            tool_type = tool.get('type', 'unknown')
+            tool_name = tool.get('name', 'unnamed')
+            tool_params = tool.get('parameters', {})
             
-        return self.tool_handler.execute_tools(last_message["tools"])
+            # Format parameters for logging
+            params_str = ', '.join([f"{k}={repr(v)}" for k, v in tool_params.items()])
+            
+            self.logger.info(f"Tool {i+1}/{tool_count}: {tool_type} - {tool_name}")
+            self.logger.info(f"Parameters: {params_str}")
+            
+        return self.tool_handler.execute_tools(last_message.tools)

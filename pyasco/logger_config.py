@@ -1,16 +1,16 @@
 import logging
 import os
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 def setup_logger(name, log_file='agent.log', level=logging.INFO, verbose=True):
     """Set up logger with file and console handlers"""
     
-    # Create logs directory if it doesn't exist
-    log_dir = 'logs'
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
+    # Create ~/.pyasco/logs directory if it doesn't exist
+    log_dir = Path.home() / '.pyasco' / 'logs'
+    log_dir.mkdir(parents=True, exist_ok=True)
     
-    log_path = os.path.join(log_dir, log_file)
+    log_path = log_dir / log_file
     
     # Create logger
     logger = logging.getLogger(name)

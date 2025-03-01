@@ -16,23 +16,22 @@ Options:
 import argparse
 import os
 import logging
-from typing import Optional, Dict, List
+import glob
+import shutil
+from typing import Dict, List, Tuple
 from io import BytesIO
-import asyncio
 from telegram import Update, InputFile
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler
 from rich.console import Console
 from ..config import ConfigManager
 from ..agent import Agent
 from ..logger_config import setup_logger
-from ..services.code_to_image import CodeToImage
-from ..services.code_snippet_extractor import CodeSnippetExtractor
 
 # Maximum length for telegram messages
 MAX_MESSAGE_LENGTH = 4096
 
 # Setup logging will be done in main() after parsing args
-logger = logging.getLogger(__name__)
+logger = setup_logger('telegram', 'telegram.log')
 console = Console()
 
 # Add file handler for detailed logging
@@ -47,8 +46,59 @@ class TelegramInterface:
         self.agent = agent
         self.auto = auto
         self.user_states: Dict[int, dict] = {}
-        self.code_to_image = CodeToImage()
-        self.code_extractor = CodeSnippetExtractor()
+        self.workspace_dir = os.path.expanduser("~/.pyasco/workspace")
+        self.archive_dir = os.path.join(self.workspace_dir, "archived")
+        
+        # Ensure directories exist
+        os.makedirs(self.workspace_dir, exist_ok=True)
+        os.makedirs(self.archive_dir, exist_ok=True)
+
+    def _get_workspace_files(self) -> List[str]:
+        """Get list of files in workspace directory"""
+        files = []
+        for file in glob.glob(os.path.join(self.workspace_dir, '*')):
+            if os.path.isfile(file) and not file.startswith(self.archive_dir):
+                files.append(file)
+        return files
+
+    def _is_image_file(self, filepath: str) -> bool:
+        """Check if file is an image based on extension"""
+        image_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'}
+        return os.path.splitext(filepath)[1].lower() in image_extensions
+
+    async def _send_workspace_files(self, message) -> List[Tuple[str, str]]:
+        """Send workspace files and return list of (filename, file_id)"""
+        sent_files = []
+        for filepath in self._get_workspace_files():
+            try:
+                with open(filepath, 'rb') as f:
+                    filename = os.path.basename(filepath)
+                    if self._is_image_file(filepath):
+                        sent_message = await message.reply_photo(
+                            photo=InputFile(f, filename=filename),
+                            caption=f"Workspace image: {filename}"
+                        )
+                        sent_files.append((filepath, sent_message.photo[-1].file_id))
+                    else:
+                        sent_message = await message.reply_document(
+                            document=InputFile(f, filename=filename),
+                            caption=f"Workspace file: {filename}"
+                        )
+                        sent_files.append((filepath, sent_message.document.file_id))
+            except Exception as e:
+                logger.error(f"Error sending file {filepath}: {str(e)}")
+        return sent_files
+
+    def _archive_files(self, files: List[str]):
+        """Move files to archive directory"""
+        for filepath in files:
+            try:
+                filename = os.path.basename(filepath)
+                archive_path = os.path.join(self.archive_dir, filename)
+                shutil.move(filepath, archive_path)
+                logger.info(f"Archived {filename}")
+            except Exception as e:
+                logger.error(f"Error archiving {filepath}: {str(e)}")
     
     async def ping_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Simple command to test if bot is responsive"""
@@ -63,8 +113,7 @@ class TelegramInterface:
             "I can help you with Python programming and execute code.\n\n"
             "Available commands:\n"
             "/reset - Start over\n"
-            "/learn - Convert current conversation into a reusable skill\n"
-            "/improve - Improve an existing skill\n"
+            "/remember - Store current conversation in memory\n"
             "/help - Show this help message"
         )
         await update.message.reply_text(welcome_message)
@@ -81,30 +130,13 @@ class TelegramInterface:
             self.user_states[user_id] = {}
         await update.message.reply_text("Chat history has been reset! 🔄")
 
-    async def learn_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Learn a new skill from the conversation."""
+    async def remember_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Store the current conversation in memory."""
         try:
-            skill = self.agent.learn_that_skill()
-            await update.message.reply_text(
-                f"✅ Learned new skill: {skill.name}\n"
-                f"Usage: {skill.usage}"
-            )
-        except ValueError as e:
-            await update.message.reply_text(f"❌ Error learning skill: {str(e)}")
-
-    async def improve_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Improve an existing skill."""
-        try:
-            skill = self.agent.improve_that_skill()
-            if skill:
-                await update.message.reply_text(
-                    f"✅ Improved skill: {skill.name}\n"
-                    f"New usage: {skill.usage}"
-                )
-            else:
-                await update.message.reply_text("❌ No skill to improve")
-        except ValueError as e:
-            await update.message.reply_text(f"❌ Error improving skill: {str(e)}")
+            await self.agent.remember_conversation()
+            await update.message.reply_text("✅ Conversation stored in memory!")
+        except Exception as e:
+            await update.message.reply_text(f"❌ Error storing conversation: {str(e)}")
 
     def _should_process_message(self, message, context: ContextTypes.DEFAULT_TYPE) -> bool:
         """
@@ -157,14 +189,19 @@ class TelegramInterface:
                 else:
                     await query.message.reply_text(output_message)
                 
+                # Send any workspace files that were generated
+                sent_files = await self._send_workspace_files(query.message)
+                if sent_files:
+                    self._archive_files([f[0] for f in sent_files])
+                
                 # Handle follow-up if needed
                 follow_up = self.agent.get_follow_up(results)
                 if follow_up:
-                    response = self.agent.get_response(follow_up, stream=False)
+                    response = await self.agent.get_response(follow_up, stream=False)
                     await query.message.reply_text(response.content)
                     
                     # If there's more code to execute, ask again
-                    if self.agent.should_ask_user():
+                    if await self.agent.should_ask_user():
                         reply_markup = {
                             'inline_keyboard': [[
                                 {'text': 'Yes ✅', 'callback_data': 'execute_yes'},
@@ -203,57 +240,67 @@ class TelegramInterface:
             # Send processing message
             processing_message = await update.message.reply_text("Processing your message... 🤔")
             
-            # Get response from agent
+            # Get initial response from agent
             logger.debug("Sending request to agent")
-            response = self.agent.ask(user_input, stream=False, auto=self.auto)
+            response = await self.agent.ask(user_input, stream=False, new_session=True)
             logger.debug(f"Got response from agent: {response.content}")
+            
+            # Handle auto execution mode
+            if self.auto:
+                max_loops = 5
+                loop_count = 0
+                current_response = response
+                
+                while await self.agent.should_ask_user() and loop_count < max_loops:
+                    # Send "Actioning..." message
+                    action_msg = await update.message.reply_text("Actioning... 🔄")
+                    
+                    # Execute current tools
+                    results = self.agent.confirm()
+                    if not results:
+                        await action_msg.delete()
+                        break
+                        
+                    # Send execution output
+                    output_message = "Execution Output:\n" + "\n".join(results)
+                    output_msg = None
+                    if len(output_message) > MAX_MESSAGE_LENGTH:
+                        output_file = BytesIO(output_message.encode('utf-8'))
+                        output_msg = await update.message.reply_document(
+                            document=InputFile(output_file, filename='output.txt'),
+                            caption="Execution output (sent as file due to length)"
+                        )
+                    else:
+                        output_msg = await update.message.reply_text(output_message)
+                    
+                    # Check for workspace files
+                    sent_files = await self._send_workspace_files(update.message)
+                    if sent_files:
+                        self._archive_files([f[0] for f in sent_files])
+                    
+                    # Delete "Actioning..." message
+                    await action_msg.delete()
+                    
+                    # Get follow-up response and delete previous output
+                    follow_up = self.agent.get_follow_up(results)
+                    if output_msg:
+                        await output_msg.delete()
+                    current_response = await self.agent.get_response(follow_up, stream=False)
+                    response = current_response
+                    loop_count += 1
+                
+                if loop_count >= max_loops:
+                    logger.warning("Reached maximum follow-up iterations")
             
             # Delete processing message
             await processing_message.delete()
             
-            # Prepare all messages to send
-            messages_to_send = []
-            
-            # Extract code snippets and convert to images
-            snippets = self.code_extractor.extract_snippets(response.content)
-            
-            if snippets:
-                # Get text response with code blocks removed
-                text_response = self.code_extractor.omit_snippets(response.content)
-                
-                # Add cleaned text response if not empty
-                if text_response:
-                    messages_to_send.append(("text", text_response, None))
-                
-                # Prepare code snippets as images
-                for snippet in snippets:
-                    image_bytes = self.code_to_image.convert(
-                        snippet.content,
-                        snippet.language
-                    )
-                    messages_to_send.append(
-                        ("photo", 
-                         image_bytes, 
-                         f"Code snippet ({snippet.language or 'unknown language'})")
-                    )
-            else:
-                # No code snippets, just text response
-                messages_to_send.append(("text", response.content, None))
-            
-            # Send all messages at once
-            for msg_type, content, caption in messages_to_send:
-                if msg_type == "text":
-                    await update.message.reply_text(content)
-                elif msg_type == "photo":
-                    await update.message.reply_photo(
-                        InputFile(content, filename='code.png'),
-                        caption=caption
-                    )
-            
-            logger.debug(f"Sent {len(messages_to_send)} messages to user")
+            # Send the response text
+            await update.message.reply_text(response.content)
+            logger.debug("Sent response to user")
 
-            # If there's code to execute, ask user
-            if self.agent.should_ask_user():
+            # If there's code to execute, ask user only if not in auto mode
+            if await self.agent.should_ask_user() and not self.auto:
                 reply_markup = {
                     'inline_keyboard': [[
                         {'text': 'Yes ✅', 'callback_data': 'execute_yes'},
@@ -297,7 +344,8 @@ def parse_args():
                        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
                        help="Set the logging level")
     parser.add_argument("--auto", action="store_true",
-                       help="Automatically execute code without asking user")
+                       help="Automatically execute code without asking user",
+                       default=os.getenv('PYASCO_AUTO', 'false').lower() == 'true')
     return parser.parse_args()
 
 def main():
@@ -342,8 +390,7 @@ def main():
     application.add_handler(CommandHandler("start", interface.start_command))
     application.add_handler(CommandHandler("help", interface.help_command))
     application.add_handler(CommandHandler("reset", interface.reset_command))
-    application.add_handler(CommandHandler("learn", interface.learn_command))
-    application.add_handler(CommandHandler("improve", interface.improve_command))
+    application.add_handler(CommandHandler("remember", interface.remember_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,
                                          interface.handle_message))
     application.add_handler(CallbackQueryHandler(interface.handle_button))

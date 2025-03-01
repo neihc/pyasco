@@ -19,10 +19,11 @@ Options:
     --skills-path TEXT    Path to skills directory (default: skills)
 """
 
-from typing import Optional, Union, List
+from typing import Optional, Union, List, AsyncGenerator, Generator
 import argparse
 import os
 import warnings
+import asyncio
 warnings.filterwarnings("ignore")
 from rich.console import Console
 from ..config import ConfigManager
@@ -30,10 +31,11 @@ from rich.markdown import Markdown
 from rich.prompt import Confirm, Prompt
 from rich.live import Live
 from rich import print as rprint
-from prompt_toolkit import PromptSession
+from prompt_toolkit.shortcuts.prompt import PromptSession
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.styles import Style
+from prompt_toolkit.application.current import get_app
 from ..agent import Agent
 
 console = Console()
@@ -44,8 +46,7 @@ class CommandCompleter(Completer):
         self.commands = [
             '%exit',
             '%reset',
-            '%learn_that_skill',
-            '%improve_that_skill'
+            '%remember'
         ]
     
     def get_completions(self, document, complete_event):
@@ -80,14 +81,20 @@ def display_markdown(text: str) -> None:
     md = Markdown(text)
     console.print(text)
 
-def stream_response(response_generator) -> None:
+async def stream_response(response_generator: Union[AsyncGenerator, Generator]) -> None:
     """Stream and display response chunks"""
     buffer = ""
     with Live(Markdown(""), refresh_per_second=10) as live:
-        for chunk in response_generator:
-            if chunk.content:
-                buffer += chunk.content
-                live.update(Markdown(buffer))
+        if hasattr(response_generator, '__aiter__'):  # AsyncGenerator
+            async for chunk in response_generator:
+                if chunk.content:
+                    buffer += chunk.content
+                    live.update(Markdown(buffer))
+        else:  # Regular Generator
+            for chunk in response_generator:
+                if chunk.content:
+                    buffer += chunk.content
+                    live.update(Markdown(buffer))
 
 # Maximum number of follow-up iterations
 MAX_FOLLOW_UP_LOOPS = 5
@@ -113,7 +120,7 @@ def parse_args():
                        help="Path to skills directory")
     return parser.parse_args()
 
-def main():
+async def main():
     """Main console application loop"""
     args = parse_args()
     
@@ -135,14 +142,14 @@ def main():
         console.print("Magic commands:")
         console.print("  %exit - quit the console")
         console.print("  %reset - start over")
-        console.print("  %learn_that_skill - convert current conversation into a reusable skill")
-        console.print("  %improve_that_skill - improve an existing skill based on current conversation\n")
+        console.print("  %remember - store current conversation in memory\n")
         
         loop_count = 0
         user_input = None  # Initialize user_input
+        recall = True
         while True:
             if not user_input:  # Only ask for input if we don't have follow-up
-                user_input = session.prompt("\nYou> ")
+                user_input = await session.prompt_async("\nYou> ")
                 loop_count = 0  # Reset counter on new user input
                 
                 if user_input.startswith('%'):
@@ -152,30 +159,23 @@ def main():
                     elif command == 'reset':
                         agent.reset()
                         console.print("[bold yellow]Chat history reset![/bold yellow]")
-                    elif command == 'learn_that_skill':
+                    elif command == 'remember':
                         try:
-                            skill = agent.learn_that_skill()
-                            console.print(f"[bold green]Learned new skill: {skill.name}[/bold green]")
-                            console.print(f"Usage: {skill.usage}")
-                        except ValueError as e:
-                            console.print(f"[bold red]Error learning skill: {str(e)}[/bold red]")
-                    elif command == 'improve_that_skill':
-                        try:
-                            skill = agent.improve_that_skill()
-                            console.print(f"[bold green]Improved skill: {skill.name}[/bold green]")
-                            console.print(f"New usage: {skill.usage}")
-                        except ValueError as e:
-                            console.print(f"[bold red]Error improving skill: {str(e)}[/bold red]")
+                            agent.remember_conversation()
+                            console.print("[bold green]Conversation stored in memory![/bold green]")
+                        except Exception as e:
+                            console.print(f"[bold red]Error storing conversation: {str(e)}[/bold red]")
                     user_input = None
                     continue
                 
             # Get streaming response
             console.print("\n[bold purple]Assistant[/bold purple]")
-            response = agent.get_response(user_input, stream=True)
-            stream_response(response)
+            response = await agent.ask(user_input, new_session=recall, stream=True)
+            await stream_response(response)
             
             # Check if we should ask user for code execution
             user_input = None
+            recall = True
             if agent.should_ask_user():
                 if Confirm.ask("\nDo you want to execute the code snippets?"):
                     results = agent.confirm()
@@ -185,6 +185,7 @@ def main():
                             console.print(result)
                         
                         user_input = agent.get_follow_up(results)
+                        recall = False
                         loop_count += 1
                         if agent.should_stop_follow_up(loop_count, MAX_FOLLOW_UP_LOOPS):
                             console.print("\n[bold yellow]Maximum follow-up iterations reached![/bold yellow]")
@@ -197,4 +198,4 @@ def main():
         agent.cleanup()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
