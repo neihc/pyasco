@@ -109,7 +109,7 @@ class CodeExecutor:
             
             while True:
                 try:
-                    msg = self.kc.get_iopub_msg(timeout=10)
+                    msg = self.kc.get_iopub_msg(timeout=1000)
                     msg_type = msg['msg_type']
                     content = msg['content']
                     
