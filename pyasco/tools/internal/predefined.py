@@ -1,9 +1,9 @@
 """Predefined functions and utilities for the code executor environment"""
 
-from ...services.lance_memory import LanceDBMemoryHandler
-from ...services.embedding import EmbeddingService
-from ...services.llm import LLMService
-from ...agent.memory_manager import MemoryManager
+from pyasco.services.lance_memory import LanceDBMemoryHandler
+from pyasco.services.embedding import EmbeddingService
+from pyasco.services.llm import LLMService
+from pyasco.agent.memory_manager import MemoryManager
 
 async def search_context(query: str) -> str:
     """Search memory context using the given query
