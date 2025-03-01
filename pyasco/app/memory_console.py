@@ -28,28 +28,10 @@ console = Console()
 
 class MemoryConsole:
     def __init__(self, config_path: Optional[str] = None, db_path: Optional[str] = None):
-        # Load configuration
-        if config_path:
-            config = ConfigManager.load_from_yaml(config_path)
-        else:
-            # Create minimal config for memory operations
-            parser = argparse.ArgumentParser()
-            parser.add_argument("--db-path", default="~/.pyasco/memories")
-            args = parser.parse_args([])
-            if db_path:
-                args.db_path = db_path
-            config = ConfigManager.from_args(args)
-
         # Initialize services
         self.embedding_service = EmbeddingService()
-        self.memory_handler = LanceDBMemoryHandler(
-            db_path=config.memory.db_path if hasattr(config.memory, 'db_path') else db_path or "~/.pyasco/memories"
-        )
-        self.llm_service = LLMService(
-            api_key=config.llm.api_key if hasattr(config, 'llm') else None,
-            base_url=config.llm.base_url if hasattr(config, 'llm') else "https://openrouter.ai/api/v1",
-            model=config.llm.model if hasattr(config, 'llm') else "meta-llama/llama-3.3-70b-instruct"
-        )
+        self.memory_handler = LanceDBMemoryHandler()
+        self.llm_service = LLMService()
         self.memory_manager = MemoryManager(
             memory_handler=self.memory_handler,
             llm_service=self.llm_service
