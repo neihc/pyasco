@@ -48,12 +48,27 @@ class MemoryConsole:
     async def get_context(self, query: str) -> None:
         """Retrieve context based on query"""
         try:
-            context = await self.memory_manager.get_context(query)
-            if context:
-                console.print("\n[blue]Retrieved context:[/blue]")
-                console.print(context)
-            else:
+            context = await self.memory_manager.get_context(query, raw=True)
+            
+            if not context:
                 console.print("[yellow]No relevant context found[/yellow]")
+                return
+
+            table = Table(title="Memory Context", show_header=True)
+            table.add_column("Type", style="cyan")
+            table.add_column("Score", style="magenta")
+            table.add_column("Content")
+            table.add_column("Created", style="green")
+            
+            for memory in context:
+                table.add_row(
+                    memory['memory_type'],
+                    f"{memory.get('final_score', 0):.3f}",
+                    memory['content'][:100] + "..." if len(memory['content']) > 100 else memory['content'],
+                    memory['created_at'].strftime("%Y-%m-%d %H:%M")
+                )
+            
+            console.print(table)
         except Exception as e:
             console.print(f"[red]Error retrieving context: {str(e)}[/red]")
 
