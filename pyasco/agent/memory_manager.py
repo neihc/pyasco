@@ -68,10 +68,10 @@ class MemoryManager:
         
         # Weights for different factors
         weights = {
-            'decay': 0.35,      # Recent memories
-            'relevance': 0.15,   # Search relevance
+            'decay': 0.25,      # Recent memories
+            'relevance': 0.25,   # Search relevance
             'frequency': 0.15,   # Access frequency
-            'importance': 0.25  # Explicit importance
+            'importance': 0.35  # Explicit importance
         }
         
         # Calculate weighted sum
@@ -102,16 +102,6 @@ class MemoryManager:
         sections = []
         
         # Format short-term memories (conversation) - sorted by created_at ascending
-        if MemoryType.SHORT_TERM in grouped:
-            sections.append("<current conversation>")
-            # Sort by created_at in ascending order
-            sorted_memories = sorted(grouped[MemoryType.SHORT_TERM], 
-                                    key=lambda x: x['created_at'])
-            for memory in sorted_memories:
-                sections.append(memory['content'])
-            sections.append("</current conversation>")
-            sections.append("")  # Empty line between sections
-        
         # Format long-term memories (reference) with dividers
         if MemoryType.LONG_TERM in grouped:
             sections.append("<reference memory>")
@@ -129,6 +119,17 @@ class MemoryManager:
                 sections.append(memory['content'])
             sections.append("</reflection>")
             sections.append("")  # Empty line between sections
+
+        if MemoryType.SHORT_TERM in grouped:
+            sections.append("<current conversation>")
+            # Sort by created_at in ascending order
+            sorted_memories = sorted(grouped[MemoryType.SHORT_TERM], 
+                                    key=lambda x: x['created_at'])
+            for memory in sorted_memories:
+                sections.append(memory['content'])
+            sections.append("</current conversation>")
+            sections.append("")  # Empty line between sections
+        
 
         return "\n".join(sections).strip()
 
@@ -218,7 +219,7 @@ class MemoryManager:
                 self.logger.debug("Fetching long-term memories")
                 long_term_memories = await self.memory_handler.search_similar(
                     query=query,
-                    limit=10,
+                    limit=20,
                     filter_dict=f"memory_type = '{MemoryType.LONG_TERM.value}'"
                 )
                 self.logger.debug(f"Retrieved {len(long_term_memories)} long-term memories")
