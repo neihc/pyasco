@@ -44,9 +44,7 @@ console = Console()
 class VoiceInterface:
     def __init__(self, agent: Agent, deepgram_key: str):
         self.agent = agent
-        self.deepgram = DeepgramClient(
-            DeepgramClientOptions(api_key=deepgram_key)
-        )
+        self.deepgram = DeepgramClient()
         self.dg_connection = None
         self.microphone = None
         self.console = Console()
@@ -54,6 +52,7 @@ class VoiceInterface:
     async def on_message(self, *args, **kwargs):
         """Handle transcription results"""
         try:
+            logger.debug(f"Message received: {args}")
             # Extract result from args (first argument)
             result = args[0]
             transcript = result.channel.alternatives[0].transcript
