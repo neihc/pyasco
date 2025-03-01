@@ -18,6 +18,7 @@ import asyncio
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.prompt import Prompt
+from rich.table import Table
 from ..config import ConfigManager
 from ..services.lance_memory import LanceDBMemoryHandler
 from ..services.embedding import EmbeddingService
