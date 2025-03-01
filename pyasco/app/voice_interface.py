@@ -19,8 +19,13 @@ import logging
 from dotenv import load_dotenv
 import os
 from typing import Optional
-from deepgram import DeepgramClient, LiveOptions, LiveTranscriptionEvents
-from deepgram.clients.live.microphone import Microphone
+from deepgram import (
+    DeepgramClient,
+    DeepgramClientOptions,
+    LiveTranscriptionEvents,
+    LiveOptions,
+    Microphone,
+)
 from rich.console import Console
 from rich.live import Live
 from rich.panel import Panel
@@ -37,9 +42,9 @@ logger = setup_logger('voice', 'voice.log')
 console = Console()
 
 class VoiceInterface:
-    def __init__(self, agent: Agent, deepgram_key: str):
+    def __init__(self, agent: Agent):
         self.agent = agent
-        self.deepgram = DeepgramClient(deepgram_key)
+        self.deepgram = DeepgramClient()
         self.dg_connection = None
         self.microphone = None
         self.console = Console()
@@ -65,14 +70,14 @@ class VoiceInterface:
             logger.error(f"Error processing transcript: {str(e)}")
             console.print(f"[red]Error processing transcript: {str(e)}[/red]")
 
-    def on_metadata(self, metadata, **kwargs):
+    def on_metadata(self, *args, **kwargs):
         """Handle metadata events"""
-        logger.debug(f"Metadata received: {metadata}")
+        logger.debug(f"Metadata received: {args}")
 
-    def on_error(self, error, **kwargs):
+    def on_error(self, *args, **kwargs):
         """Handle error events"""
-        logger.error(f"Deepgram error: {error}")
-        console.print(f"[red]Deepgram error: {error}[/red]")
+        logger.error(f"Deepgram error: {args}")
+        console.print(f"[red]Deepgram error: {args}[/red]")
 
     async def start(self):
         """Start voice interface"""
@@ -87,11 +92,14 @@ class VoiceInterface:
             
             # Configure transcription options
             options = LiveOptions(
+                model="nova-2",
                 punctuate=True,
                 language="en-US",
                 encoding="linear16",
                 channels=CHANNELS,
                 sample_rate=RATE,
+                interim_results=True,
+                utterance_end_ms="1000",
             )
             
             # Start the connection
@@ -105,7 +113,7 @@ class VoiceInterface:
             console.print("[italic](Press Enter to stop)[/italic]")
             
             # Wait for user to stop
-            input()
+            await asyncio.Event().wait()
             
         except KeyboardInterrupt:
             console.print("\n[yellow]Stopping voice interface...[/yellow]")
@@ -113,8 +121,58 @@ class VoiceInterface:
             if self.microphone:
                 self.microphone.finish()
             if self.dg_connection:
-                await self.dg_connection.finish()
+                self.dg_connection.finish()
             self.agent.cleanup()
+
+def parse_args():
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(description="PyAsco Telegram Bot")
+    parser.add_argument("--config", help="Path to YAML configuration file")
+    parser.add_argument("--model", default="meta-llama/llama-3.3-70b-instruct",
+                       help="LLM model to use for responses")
+    parser.add_argument("--log-level", default="INFO",
+                       choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                       help="Set the logging level")
+    parser.add_argument("--auto", action="store_true",
+                       help="Automatically execute code without asking user",
+                       default=os.getenv('PYASCO_AUTO', 'false').lower() == 'true')
+    return parser.parse_args()
+
+async def main():
+    """Main function to run the voice interface"""
+    args = parse_args()
+    
+    # Setup logging
+    log_level = getattr(logging, args.log_level.upper())
+    logger = setup_logger(__name__, log_file='voice.log', level=log_level)
+    
+    # Load environment variables
+    load_dotenv()
+    
+    # Load configuration
+    if args.config and os.path.exists(args.config):
+        logger.info(f"Loading configuration from {args.config}")
+        config = ConfigManager.load_from_yaml(args.config)
+    else:
+        logger.info("Loading configuration from command line arguments")
+        config = ConfigManager.from_args(args)
+    
+    # Initialize agent and interface
+    agent = Agent(config)
+    interface = VoiceInterface(agent)
+    
+    try:
+        await interface.start()
+    except Exception as e:
+        logger.error(f"Error in voice interface: {str(e)}", exc_info=True)
+    finally:
+        agent.cleanup()
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        console.print("\n[red]Voice interface stopped by user[/red]")
 
 def parse_args():
     """Parse command line arguments"""
@@ -156,7 +214,7 @@ async def main():
     
     # Initialize agent and interface
     agent = Agent(config)
-    interface = VoiceInterface(agent, deepgram_key)
+    interface = VoiceInterface(agent)
     
     try:
         await interface.start()
