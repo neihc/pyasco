@@ -121,32 +121,10 @@ class Agent:
             stream
         )
 
-    def _is_struggling(self) -> bool:
-        """Check if the agent appears to be struggling based on conversation length"""
-        STRUGGLE_THRESHOLD = 10  # Number of exchanges that indicates struggling
-        return len(self.conversation.messages) >= STRUGGLE_THRESHOLD
-
-    def _get_suggestion_based_on_state(self) -> str:
-        """Get appropriate suggestion based on agent's state"""
-        if self._is_struggling():
-            return (
-                "I notice we've been going back and forth quite a bit. "
-                "To help resolve this more effectively, you could:\n"
-                "1. Try rephrasing your request more specifically\n"
-                "2. Break down the problem into smaller steps\n"
-                "3. Share any error messages or specific examples\n"
-                "4. Consider starting a new session with /reset"
-            )
-        return ""  # Normal suggestion placeholder
 
     async def ask(self, user_input: str, stream: bool = False, new_session: bool = False) -> Dict:
         """Process user input and get response"""
         self.logger.info(f"Getting response for user input (stream={stream}, new_session={new_session})")
-        
-        # Add suggestion if agent is struggling
-        suggestion = self._get_suggestion_based_on_state()
-        if suggestion and not new_session:
-            user_input = f"{user_input}\n\nNote from system: {suggestion}"
         
         if new_session:
             # Get relevant context from memory
@@ -181,7 +159,21 @@ class Agent:
 
     def get_follow_up(self, results: List[str]) -> str:
         output, _ = self.tool_handler.compress_results(results)
-        return FOLLOW_UP_PROMPT.format(output=output)
+        base_prompt = FOLLOW_UP_PROMPT.format(output=output)
+        
+        # Check if agent is struggling (threshold of 10 exchanges)
+        if len(self.conversation.messages) >= 10:
+            struggle_suggestion = (
+                "\n\nNote: I notice we've been going back and forth quite a bit. "
+                "To help resolve this more effectively, you could:\n"
+                "1. Try rephrasing your request more specifically\n"
+                "2. Break down the problem into smaller steps\n"
+                "3. Share any error messages or specific examples\n"
+                "4. Consider starting a new session with /reset"
+            )
+            return base_prompt + struggle_suggestion
+            
+        return base_prompt
 
     async def should_ask_user(self) -> bool:
         last_message = self.conversation.last_message
