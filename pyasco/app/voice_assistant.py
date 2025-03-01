@@ -88,7 +88,7 @@ class TranscriptCollector:
 
 class VoiceAssistant:
     """Voice interface for PyAsco AI assistant"""
-    def __init__(self, agent: Agent):
+    def __init__(self, agent: Agent, auto: bool = True):
         self.agent = agent
         self.transcript_collector = TranscriptCollector()
         self.deepgram_api_key = os.getenv("DEEPGRAM_API_KEY", "")
@@ -97,6 +97,7 @@ class VoiceAssistant:
         self.microphone = None
         self.dg_connection = None
         self.live = None  # Store the live display object
+        self.auto = auto  # Auto-execute code without asking
         
         # UI components
         self.console = Console()
@@ -186,24 +187,64 @@ class VoiceAssistant:
             should_execute = await self.agent.should_ask_user()
             logger.debug(f"Should execute code: {should_execute}")
             if should_execute:
-                self.response_text += "\n\n*Executing code...*"
-                logger.debug("Confirming code execution")
-                results = self.agent.confirm()
-                if results:
-                    logger.debug(f"Execution results: {len(results)} items")
-                    result_text = "\n\n**Execution Results:**\n```\n"
-                    result_text += "\n".join(results)
-                    result_text += "\n```"
-                    self.response_text += result_text
+                # Auto-execute if enabled
+                if self.auto:
+                    max_loops = 5
+                    loop_count = 0
                     
-                    # Get follow-up if needed
-                    logger.debug("Getting follow-up")
-                    follow_up = self.agent.get_follow_up(results)
-                    if follow_up:
-                        logger.debug(f"Follow-up query: '{follow_up}'")
-                        follow_up_response = await self.agent.get_response(follow_up, stream=False)
-                        logger.debug(f"Follow-up response received: {len(follow_up_response.content)} chars")
-                        self.response_text += "\n\n" + follow_up_response.content
+                    while await self.agent.should_ask_user() and not self.agent.should_stop_follow_up(loop_count, max_loops):
+                        self.response_text += "\n\n*Executing code...*"
+                        logger.debug(f"Auto-executing code (loop {loop_count+1}/{max_loops})")
+                        
+                        # Execute current tools
+                        results = self.agent.confirm()
+                        if not results:
+                            logger.debug("No results from execution")
+                            break
+                            
+                        # Display execution results
+                        logger.debug(f"Execution results: {len(results)} items")
+                        result_text = "\n\n**Execution Results:**\n```\n"
+                        result_text += "\n".join(results)
+                        result_text += "\n```"
+                        self.response_text += result_text
+                        self._update_display()
+                        
+                        # Get follow-up if needed
+                        logger.debug("Getting follow-up")
+                        follow_up = self.agent.get_follow_up(results)
+                        if follow_up:
+                            logger.debug(f"Follow-up query: '{follow_up}'")
+                            follow_up_response = await self.agent.get_response(follow_up, stream=False)
+                            logger.debug(f"Follow-up response received: {len(follow_up_response.content)} chars")
+                            self.response_text += "\n\n" + follow_up_response.content
+                            self._update_display()
+                        
+                        loop_count += 1
+                    
+                    if loop_count >= max_loops:
+                        logger.warning("Reached maximum follow-up iterations")
+                        self.response_text += "\n\n*Reached maximum number of execution steps*"
+                else:
+                    # Manual execution (not auto)
+                    self.response_text += "\n\n*Executing code...*"
+                    logger.debug("Confirming code execution")
+                    results = self.agent.confirm()
+                    if results:
+                        logger.debug(f"Execution results: {len(results)} items")
+                        result_text = "\n\n**Execution Results:**\n```\n"
+                        result_text += "\n".join(results)
+                        result_text += "\n```"
+                        self.response_text += result_text
+                        
+                        # Get follow-up if needed
+                        logger.debug("Getting follow-up")
+                        follow_up = self.agent.get_follow_up(results)
+                        if follow_up:
+                            logger.debug(f"Follow-up query: '{follow_up}'")
+                            follow_up_response = await self.agent.get_response(follow_up, stream=False)
+                            logger.debug(f"Follow-up response received: {len(follow_up_response.content)} chars")
+                            self.response_text += "\n\n" + follow_up_response.content
         
         except Exception as e:
             logger.error(f"Error processing input: {str(e)}", exc_info=True)
@@ -327,6 +368,9 @@ def parse_args():
     parser.add_argument("--log-level", default="INFO",
                        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
                        help="Set the logging level")
+    parser.add_argument("--no-auto", action="store_true",
+                       help="Disable automatic code execution (enabled by default)",
+                       default=os.getenv('PYASCO_NO_AUTO', 'false').lower() == 'true')
     return parser.parse_args()
 
 async def main():
@@ -351,7 +395,7 @@ async def main():
     agent = Agent(config)
     
     # Initialize voice assistant
-    voice_assistant = VoiceAssistant(agent)
+    voice_assistant = VoiceAssistant(agent, auto=not args.no_auto)
     
     # Run the voice assistant
     await voice_assistant.run()
