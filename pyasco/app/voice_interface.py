@@ -74,73 +74,64 @@ class VoiceInterface:
 
     async def process_audio(self):
         """Process audio stream with Deepgram"""
-        try:
-            logger.info("Setting up Deepgram connection...")
-            
-            # Create websocket connection
-            dg_connection = self.deepgram.listen.live.v("1")
-            
-            # Configure options
-            options = LiveOptions(
-                model="nova-2",
-                language="en-US",
-                smart_format=True,
-            )
+        logger.info("Setting up Deepgram connection...")
+        
+        # Create websocket connection
+        dg_connection = self.deepgram.listen.live.v("1")
+        
+        # Configure options
+        options = LiveOptions(
+            model="nova-2",
+            language="en-US",
+            smart_format=True,
+        )
 
-            # Define event handlers
-            async def on_message(transcript_result, **kwargs):
-                try:
-                    if transcript_result.is_final:
-                        transcript = transcript_result.channel.alternatives[0].transcript
-                        if transcript.strip():
-                            logger.info(f"Recognized: {transcript}")
-                            await self.process_text(transcript)
-                except Exception as e:
-                    logger.error(f"Error in message handler: {str(e)}")
+        # Define event handlers
+        async def on_message(transcript_result, **kwargs):
+            try:
+                if transcript_result.is_final:
+                    transcript = transcript_result.channel.alternatives[0].transcript
+                    if transcript.strip():
+                        logger.info(f"Recognized: {transcript}")
+                        await self.process_text(transcript)
+            except Exception as e:
+                logger.error(f"Error in message handler: {str(e)}")
 
-            async def on_error(error, **kwargs):
-                logger.error(f"Deepgram error: {error}")
+        async def on_error(error, **kwargs):
+            logger.error(f"Deepgram error: {error}")
 
-            async def on_connected(**kwargs):
-                logger.info("Connected to Deepgram websocket")
+        async def on_close():
+            logger.info("Deepgram connection closed")
 
-            async def on_close():
-                logger.info("Deepgram connection closed")
+        # Register handlers
+        dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
+        dg_connection.on(LiveTranscriptionEvents.Error, on_error)
 
-            # Register handlers
-            dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
-            dg_connection.on(LiveTranscriptionEvents.Error, on_error)
-            dg_connection.on(LiveTranscriptionEvents.Connected, on_connected)
-            dg_connection.on(LiveTranscriptionEvents.CloseConnection, on_close)
+        logger.info("Starting Deepgram connection...")
+        dg_connection.start(options)
+        logger.info("Successfully connected to Deepgram")
 
-            logger.info("Starting Deepgram connection...")
-            await dg_connection.start(options)
-            logger.info("Successfully connected to Deepgram")
+        # Stream audio data
+        while self.is_recording:
+            try:
+                if not self.audio_queue.empty():
+                    data = self.audio_queue.get()
+                    if data: # Ensure we have valid data
+                        dg_connection.send(data)
+                        logger.debug(f"Sent audio chunk to Deepgram")
+                await asyncio.sleep(0.01)  # Shorter sleep to be more responsive
+            except Exception as e:
+                logger.error(f"Error streaming audio: {str(e)}")
+                if "not connected" in str(e).lower():
+                    logger.info("Reconnecting to Deepgram...")
+                    dg_connection.start(options)
+                else:
+                    break
 
-            # Stream audio data
-            while self.is_recording:
-                try:
-                    if not self.audio_queue.empty():
-                        data = self.audio_queue.get()
-                        if   # Ensure we have valid data
-                            await dg_connection.send(data)
-                            logger.debug("Sent audio chunk to Deepgram")
-                    await asyncio.sleep(0.01)  # Shorter sleep to be more responsive
-                except Exception as e:
-                    logger.error(f"Error streaming audio: {str(e)}")
-                    if "not connected" in str(e).lower():
-                        logger.info("Reconnecting to Deepgram...")
-                        await dg_connection.start(options)
-                    else:
-                        break
+        # Close connection
+        logger.info("Closing Deepgram connection...")
+        dg_connection.finish()
 
-            # Close connection
-            logger.info("Closing Deepgram connection...")
-            await dg_connection.finish()
-
-        except Exception as e:
-            logger.error(f"Error in audio processing: {str(e)}")
-            self.stop_recording()
 
     def start_recording(self):
         """Start recording audio"""
@@ -231,29 +222,17 @@ async def main():
         config = ConfigManager.from_args(args)
     
     # Initialize agent and interface
-    try:
-        logger.info("Initializing agent and voice interface...")
-        agent = Agent(config)
-        interface = VoiceInterface(agent, args.deepgram_key)
-        
-        # Start recording and processing
-        logger.info("Starting voice interface...")
-        print("Voice interface started! Speak to interact. Press Ctrl+C to stop.")
-        interface.start_recording()
-        
-        try:
-            # Process audio in main loop
-            await interface.process_audio()
-        except Exception as e:
-            logger.error(f"Error in audio processing loop: {str(e)}")
-            raise
-        
-    except Exception as e:
-        logger.error(f"Error in main: {str(e)}")
-    finally:
-        logger.info("Cleaning up...")
-        interface.cleanup()
-        agent.cleanup()
+    logger.info("Initializing agent and voice interface...")
+    agent = Agent(config)
+    interface = VoiceInterface(agent, args.deepgram_key)
+    
+    # Start recording and processing
+    logger.info("Starting voice interface...")
+    print("Voice interface started! Speak to interact. Press Ctrl+C to stop.")
+    interface.start_recording()
+    await interface.process_audio()
+    interface.cleanup()
+    agent.cleanup()
 
 if __name__ == "__main__":
     import asyncio
