@@ -87,12 +87,7 @@ class Agent:
                 }
         
         return CodeExecutor(
-            use_docker=config.docker.use_docker,
-            docker_image=config.docker.image,
-            docker_options=docker_options,
             bash_shell=config.docker.bash_command,
-            python_command=config.docker.python_command,
-            env_file=config.docker.env_file
         )
 
     def _initialize_chat(self, context: str = "") -> None:
