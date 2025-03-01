@@ -314,7 +314,7 @@ class MemoryCLI:
         # Format metadata as JSON
         content.append(f"Meta\n", style="bold")
         metadata = memory.get("metadata", {})
-        if meta
+        if metadata:
             json_str = json.dumps(metadata, indent=2)
             syntax = Syntax(json_str, "json", theme="monokai", line_numbers=False)
             self.console.print(Panel(content, title=f"Memory Details", border_style="cyan"))
