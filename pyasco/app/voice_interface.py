@@ -37,7 +37,7 @@ from ..agent import Agent
 from ..logger_config import setup_logger
 
 # Audio recording parameters
-CHUNK = 1024
+CHUNK = 80000  # 5 seconds of audio at 16kHz
 FORMAT = pyaudio.paFloat32
 CHANNELS = 1
 RATE = 16000
