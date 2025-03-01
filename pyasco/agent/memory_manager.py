@@ -60,63 +60,97 @@ class MemoryManager:
         if created_at.tzinfo is None:
             created_at = created_at.replace(tzinfo=timezone.utc)
         
-        # Enhanced time decay with multiple components
+        # Enhanced time decay with adaptive half-life
         age_seconds = (now - created_at).total_seconds()
         age_hours = age_seconds / 3600
         age_days = age_hours / 24
         
-        # Short-term decay (hours)
-        short_term_decay = math.exp(-age_hours / 12)  # 12-hour half-life
-        
-        # Medium-term decay (days) 
-        medium_term_decay = math.exp(-age_days / 7)   # 7-day half-life
-        
-        # Long-term decay (weeks)
-        long_term_decay = math.exp(-age_days / 30)    # 30-day half-life
-        
-        # Combined decay score weighted by time period
-        if age_days < 1:
-            decay_score = short_term_decay
-        elif age_days < 7:
-            decay_score = 0.7 * short_term_decay + 0.3 * medium_term_decay
-        else:
-            decay_score = 0.2 * medium_term_decay + 0.8 * long_term_decay
-
-        # Enhanced frequency scoring
+        # Adaptive half-life based on access patterns
         access_count = memory.get('access_count', 0)
-        recency_bonus = 1.0 if age_hours < 24 else 0.8  # Bonus for recent accesses
-        frequency_score = (1 - math.exp(-access_count / 8)) * recency_bonus
+        base_half_life = 12  # Base 12-hour half-life
+        access_factor = min(access_count / 5, 2.0)  # Cap at 2x extension
+        adaptive_half_life = base_half_life * (1 + access_factor)
         
-        # Importance scoring with multiple factors
+        # Multi-scale decay with adaptive components
+        short_term_decay = math.exp(-age_hours / adaptive_half_life)
+        medium_term_decay = math.exp(-age_days / (7 * (1 + access_factor * 0.5)))
+        long_term_decay = math.exp(-age_days / (30 * (1 + access_factor * 0.25)))
+        
+        # Dynamic decay weighting based on memory characteristics
+        content_length = len(memory.get('content', ''))
+        complexity_factor = min(content_length / 1000, 1.5)  # Longer content decays slower
+        
+        if age_days < 1:
+            decay_score = short_term_decay * complexity_factor
+        elif age_days < 7:
+            decay_score = (0.7 * short_term_decay + 0.3 * medium_term_decay) * complexity_factor
+        else:
+            decay_score = (0.2 * medium_term_decay + 0.8 * long_term_decay) * complexity_factor
+
+        # Enhanced frequency scoring with recency weighting
+        last_access = memory.get('last_accessed_at', created_at)
+        if isinstance(last_access, str):
+            last_access = datetime.fromisoformat(last_access.replace('Z', '+00:00'))
+        access_age_hours = (now - last_access).total_seconds() / 3600
+        
+        recency_weight = math.exp(-access_age_hours / 24)  # Exponential decay for access recency
+        frequency_base = 1 - math.exp(-access_count / 10)  # Smoother saturation curve
+        frequency_score = frequency_base * (0.7 + 0.3 * recency_weight)  # Blend base frequency with recency
+        
+        # Enhanced importance scoring with contextual factors
         base_importance = memory.get('importance_score', 0.5)
         emotional_salience = memory.get('emotional_score', 0.5)
         context_relevance = memory.get('context_score', 0.5)
         
-        # Combine importance factors
+        # Consider metadata presence as signal of importance
+        metadata = memory.get('metadata', {})
+        metadata_richness = min(len(metadata) / 5, 1.0)  # Cap at 1.0
+        
+        # Consider tag presence as relevance signal
+        tags = memory.get('tags', [])
+        tag_relevance = min(len(tags) / 3, 1.0)  # Cap at 1.0
+        
+        # Dynamic importance weighting
         importance_score = (
-            0.5 * base_importance +
-            0.3 * emotional_salience +
-            0.2 * context_relevance
+            0.4 * base_importance +
+            0.2 * emotional_salience +
+            0.2 * context_relevance +
+            0.1 * metadata_richness +
+            0.1 * tag_relevance
         )
         
-        # Dynamic weights based on memory type and age
+        # Adaptive weights based on memory characteristics
         memory_type = memory.get('memory_type', 'short_term')
+        age_weight = math.exp(-age_days / 14)  # 2-week characteristic time
+        
         if memory_type == 'short_term':
-            weights = {
-                'decay': 0.35,      # Higher weight for recency
-                'relevance': 0.25,   # Moderate weight for relevance
-                'frequency': 0.15,   # Lower weight for frequency
-                'importance': 0.25   # Moderate weight for importance
+            base_weights = {
+                'decay': 0.35,
+                'relevance': 0.25,
+                'frequency': 0.15,
+                'importance': 0.25
             }
         else:  # long_term or reflection
-            weights = {
-                'decay': 0.15,      # Lower weight for recency
-                'relevance': 0.30,   # Higher weight for relevance
-                'frequency': 0.20,   # Moderate weight for frequency
-                'importance': 0.35   # Higher weight for importance
+            base_weights = {
+                'decay': 0.15,
+                'relevance': 0.30,
+                'frequency': 0.20,
+                'importance': 0.35
             }
+            
+        # Adjust weights based on age and access patterns
+        weights = {
+            'decay': base_weights['decay'] * (1 + 0.5 * age_weight),
+            'relevance': base_weights['relevance'],
+            'frequency': base_weights['frequency'] * (1 - 0.3 * age_weight),
+            'importance': base_weights['importance'] * (1 + 0.3 * (1 - age_weight))
+        }
         
-        # Calculate final score with normalization
+        # Normalize weights
+        weight_sum = sum(weights.values())
+        weights = {k: v/weight_sum for k, v in weights.items()}
+        
+        # Calculate raw score with normalized weights
         raw_score = (
             weights['decay'] * decay_score +
             weights['relevance'] * relevance_score +
@@ -124,8 +158,10 @@ class MemoryManager:
             weights['importance'] * importance_score
         )
         
-        # Normalize to 0-1 range and apply sigmoid for smoother distribution
-        final_score = 1 / (1 + math.exp(-5 * (raw_score - 0.5)))
+        # Apply sigmoid with dynamic steepness
+        steepness = 5 + 2 * age_weight  # Sharper curve for newer memories
+        midpoint = 0.5 - 0.1 * age_weight  # Slight shift based on age
+        final_score = 1 / (1 + math.exp(-steepness * (raw_score - midpoint)))
         
         return final_score
 
