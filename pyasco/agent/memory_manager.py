@@ -244,7 +244,7 @@ class MemoryManager:
             self.logger.error(f"Failed to create memory: {str(e)}", exc_info=True)
             raise
 
-    async def get_context(self, query: str) -> str:
+    async def get_context(self, query: str, raw: bool = False) -> Union[str, List[Dict[str, Any]]]:
         """
         Get relevant context from different types of memories
         
@@ -404,6 +404,13 @@ class MemoryManager:
         self.logger.debug(f"Memory scores: {[m['final_score'] for m in final_memories]}")
         self.logger.debug(f"Memory types: {[m['memory_type'] for m in final_memories]}")
         
+        # Increment access count for retrieved memories
+        memory_ids = [memory['id'] for memory in final_memories]
+        await self.memory_handler.increment_access_count(memory_ids)
+
+        if raw:
+            return final_memories
+            
         # Format and return the context
         formatted_context = await self._format_memories_by_type(final_memories)
         self.logger.debug(f"Formatted context length: {len(formatted_context)}")
