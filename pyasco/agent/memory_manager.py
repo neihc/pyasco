@@ -244,15 +244,17 @@ class MemoryManager:
             self.logger.error(f"Failed to create memory: {str(e)}", exc_info=True)
             raise
 
-    async def get_context(self, query: str, raw: bool = False) -> Union[str, List[Dict[str, Any]]]:
+    async def get_context(self, query: str, raw: bool = False, memory_type: Optional[str] = None) -> Union[str, List[Dict[str, Any]]]:
         """
         Get relevant context from different types of memories
         
         Args:
             query: The query to search memories with
+            raw: If True, return raw memory dictionaries instead of formatted string
+            memory_type: Optional filter for specific memory type (short_term, long_term, reflection)
             
         Returns:
-            str: Formatted context from relevant memories
+            str: Formatted context from relevant memories or List of memory dicts if raw=True
         """
         self.logger.info(f"Getting context for query: '{query[:50]}...' (truncated)")
 
@@ -324,12 +326,19 @@ class MemoryManager:
                 return []
 
         try:
-            self.logger.info("Gathering memories from all sources")
-            # Gather all memory fetching tasks
-            short_term, long_term = await asyncio.gather(
-                get_short_term(),
-                get_long_term(),
-            )
+            self.logger.info(f"Gathering memories from sources{' filtered by ' + memory_type if memory_type else ''}")
+            
+            # Only gather memories for specified type or all if none specified
+            tasks = []
+            if not memory_type or memory_type == MemoryType.SHORT_TERM.value:
+                tasks.append(get_short_term())
+            if not memory_type or memory_type == MemoryType.LONG_TERM.value:
+                tasks.append(get_long_term())
+                
+            results = await asyncio.gather(*tasks)
+            short_term = results[0] if not memory_type or memory_type == MemoryType.SHORT_TERM.value else []
+            long_term = results[-1] if not memory_type or memory_type == MemoryType.LONG_TERM.value else []
+            
             self.logger.info(f"Successfully gathered memories: {len(short_term)} short-term, {len(long_term)} long-term")
         except Exception as e:
             self.logger.error(f"Error gathering memories: {e}", exc_info=True)
