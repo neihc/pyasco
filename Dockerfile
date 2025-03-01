@@ -7,15 +7,9 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv
-RUN pip install --no-cache-dir uv
-
-# Create virtual environment
-ENV UV_SYSTEM_PYTHON=1
-
 # Copy requirements and install dependencies
-COPY pyproject.toml .
-RUN uv pip install -r pyproject.toml
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .

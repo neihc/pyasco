@@ -1,6 +1,5 @@
 version: '3.8'
 
-
 services:
   telegram-bot:
     build:
@@ -13,7 +12,5 @@ services:
     environment:
       - PYTHONPATH=/app
       - PYASCO_AUTO=${PYASCO_AUTO:-false}
-      - VIRTUAL_ENV=/root/.pyasco/venv
-      - UV_SYSTEM_PYTHON=1
     restart: unless-stopped
-    command: uv run -m pyasco.app.telegram_bot --telegram-token ${TELEGRAM_BOT_TOKEN} --model ${LLM_MODEL}
+    command: python -m pyasco.app.telegram_bot --telegram-token ${TELEGRAM_BOT_TOKEN} --model ${LLM_MODEL}
