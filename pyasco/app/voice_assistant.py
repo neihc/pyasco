@@ -171,6 +171,8 @@ class VoiceAssistant:
                 if chunk.content:
                     self.response_text += chunk.content
                     logger.debug(f"Received chunk: {len(chunk.content)} chars")
+                    # Update the display with each chunk
+                    self._update_display(live)
             
             # Execute any code if needed
             should_execute = await self.agent.should_ask_user()
