@@ -70,26 +70,7 @@ class Agent:
         self._initialize_chat()
 
     def _setup_executor(self, config: Config) -> CodeExecutor:
-        docker_options = None
-        if config.docker.use_docker:
-            docker_options = {
-                'mem_limit': config.docker.mem_limit,
-                'cpu_count': config.docker.cpu_count,
-                'volumes': {}
-            }
-            
-            if config.docker.volumes:
-                docker_options['volumes'].update(config.docker.volumes)
-            
-            if config.skills_path not in docker_options['volumes']:
-                docker_options['volumes'][config.skills_path] = {
-                    'bind': '/skills',
-                    'mode': 'ro'
-                }
-        
-        return CodeExecutor(
-            bash_shell=config.docker.bash_command,
-        )
+        return CodeExecutor()
 
     def _initialize_chat(self, context: str = "") -> None:
         system_info = get_system_info(self.python_executor)
@@ -209,7 +190,7 @@ class Agent:
         self.python_executor.reset()
         self._initialize_chat()
     
-    def stop_stream(self):
+    async def stop_stream(self):
         """Stop the current streaming response"""
         self.logger.info("Stopping current stream")
         self.response_handler.stop_stream()

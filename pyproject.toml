@@ -37,6 +37,3 @@ allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["pyasco"]
-
-[tool.uv]
-managed = false

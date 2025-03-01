@@ -324,22 +324,8 @@ def parse_args():
     parser.add_argument("--config", help="Path to YAML configuration file")
     parser.add_argument("--telegram-token", required=True,
                        help="Telegram bot token")
-    parser.add_argument("--use-docker", action="store_true",
-                       help="Run code in Docker")
-    parser.add_argument("--docker-image", default="python:3.9-slim",
-                       help="Docker image to use")
-    parser.add_argument("--mem-limit", default="512m",
-                       help="Docker memory limit (e.g., 512m, 1g)")
-    parser.add_argument("--cpu-count", type=int, default=1,
-                       help="Docker CPU count")
-    parser.add_argument("--env-file",
-                       help="Path to environment file for Docker container")
-    parser.add_argument("--mount", action='append',
-                       help="Mount points in format 'host_path:container_path'")
     parser.add_argument("--model", default="meta-llama/llama-3.3-70b-instruct",
                        help="LLM model to use for responses")
-    parser.add_argument("--skills-path", default="skills",
-                       help="Path to skills directory")
     parser.add_argument("--log-level", default="INFO",
                        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
                        help="Set the logging level")
