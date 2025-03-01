@@ -17,9 +17,9 @@ class MemoryManager:
     
     # Token allocation percentages and minimums
     TOKEN_ALLOCATIONS = {
-        MemoryType.SHORT_TERM: {'percent': 0.4, 'min_tokens': 2000},
-        MemoryType.LONG_TERM: {'percent': 0.4, 'min_tokens': 2000},
-        MemoryType.REFLECTION: {'percent': 0.2, 'min_tokens': 1000}
+        MemoryType.SHORT_TERM: {'percent': 0.4, 'min_tokens': 3000},
+        MemoryType.LONG_TERM: {'percent': 0.6, 'min_tokens': 2000},
+        MemoryType.REFLECTION: {'percent': 0, 'min_tokens': 0}
     }
 
     def __init__(self, 
