@@ -46,7 +46,7 @@ from ..logger_config import setup_logger
 load_dotenv()
 
 # Setup logging
-logger = setup_logger('voice_assistant', 'voice_assistant.log')
+logger = setup_logger('voice_assistant', 'voice_assistant.log', level=logging.DEBUG)
 console = Console()
 
 class TranscriptCollector:
@@ -151,36 +151,48 @@ class VoiceAssistant:
     async def process_voice_input(self, text):
         """Process voice input with the agent"""
         if not text.strip() or self.is_processing:
+            logger.debug(f"Skipping processing: empty={not text.strip()}, already_processing={self.is_processing}")
             return
             
         self.is_processing = True
+        logger.debug(f"Processing voice input: '{text}'")
         try:
             # Clear previous response
             self.response_text = "Processing..."
             
             # Get response from agent
+            logger.debug("Sending request to agent")
             response = await self.agent.ask(text, stream=True)
             
             # Handle streaming response
             self.response_text = ""
+            logger.debug("Processing streaming response")
             async for chunk in response:
                 if chunk.content:
                     self.response_text += chunk.content
+                    logger.debug(f"Received chunk: {len(chunk.content)} chars")
             
             # Execute any code if needed
-            if await self.agent.should_ask_user():
+            should_execute = await self.agent.should_ask_user()
+            logger.debug(f"Should execute code: {should_execute}")
+            if should_execute:
                 self.response_text += "\n\n*Executing code...*"
+                logger.debug("Confirming code execution")
                 results = self.agent.confirm()
                 if results:
+                    logger.debug(f"Execution results: {len(results)} items")
                     result_text = "\n\n**Execution Results:**\n```\n"
                     result_text += "\n".join(results)
                     result_text += "\n```"
                     self.response_text += result_text
                     
                     # Get follow-up if needed
+                    logger.debug("Getting follow-up")
                     follow_up = self.agent.get_follow_up(results)
                     if follow_up:
+                        logger.debug(f"Follow-up query: '{follow_up}'")
                         follow_up_response = await self.agent.get_response(follow_up, stream=False)
+                        logger.debug(f"Follow-up response received: {len(follow_up_response.content)} chars")
                         self.response_text += "\n\n" + follow_up_response.content
         
         except Exception as e:
@@ -191,12 +203,16 @@ class VoiceAssistant:
             
     async def setup_deepgram(self):
         """Setup Deepgram connection"""
+        logger.debug("Setting up Deepgram connection")
         if not self.deepgram_api_key:
+            logger.error("Deepgram API key not found")
             raise ValueError("Deepgram API key not found. Please set DEEPGRAM_API_KEY in your .env file.")
             
         config = DeepgramClientOptions(options={"keepalive": "true"})
+        logger.debug("Initializing Deepgram client")
         deepgram = DeepgramClient(self.deepgram_api_key, config)
         
+        logger.debug("Creating Deepgram live connection")
         self.dg_connection = deepgram.listen.asynclive.v("1")
         
         # Define event handlers
@@ -205,6 +221,8 @@ class VoiceAssistant:
             
             if not sentence.strip():
                 return
+            
+            logger.debug(f"Deepgram transcript: '{sentence}', final: {result.speech_final}")
                 
             if not result.speech_final:
                 # Update the partial transcript
@@ -213,12 +231,14 @@ class VoiceAssistant:
                 # This is the final part of the current sentence
                 self.transcript_collector.add_part(sentence)
                 full_sentence = self.transcript_collector.get_full_transcript()
+                logger.debug(f"Final sentence: '{full_sentence}'")
                 
                 # Add to completed sentences
                 self.transcript_collector.add_sentence(full_sentence)
                 self.transcript_collector.update_partial("")
                 
                 # Process the completed sentence
+                logger.debug("Processing completed sentence")
                 await self.process_voice_input(full_sentence)
                 
                 # Reset for next sentence
@@ -242,28 +262,36 @@ class VoiceAssistant:
             endpointing=True
         )
         
+        logger.debug("Starting Deepgram connection with options")
         await self.dg_connection.start(options)
+        logger.debug("Deepgram connection started successfully")
         
     async def run(self):
         """Run the voice assistant"""
         try:
+            logger.info("Starting voice assistant")
             # Setup Deepgram
             await self.setup_deepgram()
             
             # Open microphone stream
+            logger.debug("Opening microphone stream")
             self.microphone = Microphone(self.dg_connection.send)
             self.microphone.start()
+            logger.info("Microphone activated and listening")
             
             # Display UI
+            logger.debug("Setting up live display")
             with Live(self.layout, refresh_per_second=4) as live:
                 self.console.print("[bold green]Voice Assistant started. Speak to interact![/]")
                 
                 # Main loop
+                logger.debug("Entering main loop")
                 while True:
                     self._update_display(live)
                     await asyncio.sleep(0.25)
                     
                     if not self.microphone.is_active():
+                        logger.warning("Microphone is no longer active")
                         break
         
         except KeyboardInterrupt:
@@ -297,6 +325,7 @@ async def main():
     # Setup logging with command line specified level
     log_level = getattr(logging, args.log_level.upper())
     logger = setup_logger(__name__, log_file='voice_assistant.log', level=log_level)
+    logger.info("Voice assistant starting up")
     
     # Load configuration
     if args.config and os.path.exists(args.config):
