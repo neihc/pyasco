@@ -1,19 +1,6 @@
 version: '3.8'
 
 services:
-  memory-console:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    volumes:
-      - .:/app
-      - ~/.pyasco:/root/.pyasco
-    env_file: .env
-    environment:
-      - PYTHONPATH=/app
-    restart: unless-stopped
-    command: uv run -m pyasco.app.memory_console --config /app/config.yml --auto-decay --decay-interval 3600
-
   telegram-bot:
     build:
       context: .
@@ -26,4 +13,4 @@ services:
       - PYTHONPATH=/app
       - PYASCO_AUTO=${PYASCO_AUTO:-false}
     restart: unless-stopped
-    command: uv run -m pyasco.app.telegram_bot --config /app/config.yml --telegram-token ${TELEGRAM_BOT_TOKEN}
+    command: uv run -m pyasco.app.telegram_bot --telegram-token ${TELEGRAM_BOT_TOKEN} --model ${LLM_MODEL}
