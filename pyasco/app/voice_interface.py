@@ -42,16 +42,20 @@ logger = setup_logger('voice', 'voice.log')
 console = Console()
 
 class VoiceInterface:
-    def __init__(self, agent: Agent):
+    def __init__(self, agent: Agent, deepgram_key: str):
         self.agent = agent
-        self.deepgram = DeepgramClient()
+        self.deepgram = DeepgramClient(
+            DeepgramClientOptions(api_key=deepgram_key)
+        )
         self.dg_connection = None
         self.microphone = None
         self.console = Console()
 
-    async def on_message(self, result, **kwargs):
+    async def on_message(self, *args, **kwargs):
         """Handle transcription results"""
         try:
+            # Extract result from args (first argument)
+            result = args[0]
             transcript = result.channel.alternatives[0].transcript
             if transcript.strip():
                 with console.status("[bold green]Processing your request..."):
@@ -124,55 +128,6 @@ class VoiceInterface:
                 self.dg_connection.finish()
             self.agent.cleanup()
 
-def parse_args():
-    """Parse command line arguments"""
-    parser = argparse.ArgumentParser(description="PyAsco Telegram Bot")
-    parser.add_argument("--config", help="Path to YAML configuration file")
-    parser.add_argument("--model", default="meta-llama/llama-3.3-70b-instruct",
-                       help="LLM model to use for responses")
-    parser.add_argument("--log-level", default="INFO",
-                       choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-                       help="Set the logging level")
-    parser.add_argument("--auto", action="store_true",
-                       help="Automatically execute code without asking user",
-                       default=os.getenv('PYASCO_AUTO', 'false').lower() == 'true')
-    return parser.parse_args()
-
-async def main():
-    """Main function to run the voice interface"""
-    args = parse_args()
-    
-    # Setup logging
-    log_level = getattr(logging, args.log_level.upper())
-    logger = setup_logger(__name__, log_file='voice.log', level=log_level)
-    
-    # Load environment variables
-    load_dotenv()
-    
-    # Load configuration
-    if args.config and os.path.exists(args.config):
-        logger.info(f"Loading configuration from {args.config}")
-        config = ConfigManager.load_from_yaml(args.config)
-    else:
-        logger.info("Loading configuration from command line arguments")
-        config = ConfigManager.from_args(args)
-    
-    # Initialize agent and interface
-    agent = Agent(config)
-    interface = VoiceInterface(agent)
-    
-    try:
-        await interface.start()
-    except Exception as e:
-        logger.error(f"Error in voice interface: {str(e)}", exc_info=True)
-    finally:
-        agent.cleanup()
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        console.print("\n[red]Voice interface stopped by user[/red]")
 
 def parse_args():
     """Parse command line arguments"""
@@ -214,7 +169,7 @@ async def main():
     
     # Initialize agent and interface
     agent = Agent(config)
-    interface = VoiceInterface(agent)
+    interface = VoiceInterface(agent, deepgram_key)
     
     try:
         await interface.start()
