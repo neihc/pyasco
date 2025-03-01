@@ -170,7 +170,7 @@ async def main():
                 
             # Get streaming response
             console.print("\n[bold purple]Assistant[/bold purple]")
-            response = await agent.ask(user_input, recall=recall, stream=True)
+            response = await agent.ask(user_input, new_session=recall, stream=True)
             await stream_response(response)
             
             # Check if we should ask user for code execution
