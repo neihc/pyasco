@@ -25,7 +25,7 @@ from ..tools.code_execute import CodeExecutor
 
 
 class Agent:
-    def __init__(self, config: Config, user_id: str = "0", app_type: str = "console", **metadata):
+    async def __init__(self, config: Config, user_id: str = "0", app_type: str = "console", **metadata):
         self.logger = setup_logger('agent')
         self.logger.info("Initializing Agent")
         self.user_id = user_id
@@ -72,7 +72,7 @@ class Agent:
     def _setup_executor(self, config: Config) -> CodeExecutor:
         return CodeExecutor()
 
-    def _initialize_chat(self, context: str = "") -> None:
+    async def _initialize_chat(self, context: str = "") -> None:
         system_info = get_system_info(self.python_executor)
         base_prompt = f"{DEFAULT_SYSTEM_PROMPT}\n\n{system_info}"
         system_content = f"{base_prompt}\n\n{self.custom_instructions}" if self.custom_instructions else base_prompt
@@ -184,11 +184,11 @@ class Agent:
         except Exception as e:
             self.logger.error(f"Failed to trigger memory decay: {str(e)}")
 
-    def reset(self):
+    async def reset(self):
         self.logger.info("Resetting agent state")
         self.conversation.clear()
         self.python_executor.reset()
-        self._initialize_chat()
+        await self._initialize_chat()
     
     async def stop_stream(self):
         """Stop the current streaming response"""
