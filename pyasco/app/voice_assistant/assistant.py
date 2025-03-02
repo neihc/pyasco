@@ -35,19 +35,33 @@ class VoiceAssistant:
         try:
             logger.debug(f"Processing user input: '{text}'")
 
+            # Get streaming response from agent
             response = await self.agent.ask(text, new_session=new_session, stream=True)
             
             self.response_text = ""
 
-            if self.enable_audio:
-                text_chunks = self._create_text_chunk_generator(response)
-                asyncio.create_task(self.tts.text_to_speech_stream(text_chunks))
-
+            # Create a copy of the response generator for TTS
+            if self.enable_audio and self.tts:
+                # We need to create two separate iterators from the same response
+                # One for TTS and one for display
+                response_list = []
+                
+                # Collect all response chunks
                 for chunk in response:
                     if chunk.content:
+                        response_list.append(chunk.content)
                         self.response_text += chunk.content
                         await asyncio.sleep(0.05)
+                
+                # Create a generator for TTS from the collected chunks
+                async def text_chunks():
+                    for chunk in response_list:
+                        yield chunk
+                
+                # Start TTS in background
+                asyncio.create_task(self.tts.text_to_speech_stream(text_chunks()))
             else:
+                # Just display the response without TTS
                 for chunk in response:
                     if chunk.content:
                         self.response_text += chunk.content
@@ -92,13 +106,6 @@ class VoiceAssistant:
         result_text = "\n\n**Execution Results:**\n```\n" + "\n".join(results) + "\n```"
         self.response_text = result_text
         
-    def _create_text_chunk_generator(self, response_generator):
-        """Create a generator that yields text chunks from the response"""
-        async def text_iterator():
-            for chunk in response_generator:
-                if chunk.content:
-                    yield chunk.content
-        return text_iterator()
 
     async def _process_follow_up(self, results):
         """Process follow-up questions based on execution results"""
