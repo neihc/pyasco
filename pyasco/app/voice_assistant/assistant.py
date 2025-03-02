@@ -91,6 +91,14 @@ class VoiceAssistant:
         """Display execution results"""
         result_text = "\n\n**Execution Results:**\n```\n" + "\n".join(results) + "\n```"
         self.response_text = result_text
+        
+    def _create_text_chunk_generator(self, response_generator):
+        """Create a generator that yields text chunks from the response"""
+        async def text_iterator():
+            for chunk in response_generator:
+                if chunk.content:
+                    yield chunk.content
+        return text_iterator()
 
     async def _process_follow_up(self, results):
         """Process follow-up questions based on execution results"""
@@ -108,6 +116,7 @@ class VoiceAssistant:
         # Setup Deepgram for voice recognition
         try:
             await self.deepgram_processor.setup_deepgram()
+            self.deepgram_processor.start_microphone()
             logger.info("Voice recognition ready")
         except Exception as e:
             logger.error(f"Failed to initialize voice recognition: {e}", exc_info=True)
@@ -124,6 +133,11 @@ class VoiceAssistant:
         try:
             while True:
                 await asyncio.sleep(1)
+                
+                # Check if microphone is still active
+                if not self.deepgram_processor.is_microphone_active():
+                    logger.warning("Microphone is no longer active")
+                    break
         except asyncio.CancelledError:
             logger.info("Voice assistant task cancelled")
         except Exception as e:
@@ -134,9 +148,11 @@ class VoiceAssistant:
         logger.info("Cleaning up voice assistant resources...")
         
         # Close Deepgram connection if it exists
-        if hasattr(self.deepgram_processor, 'close'):
-            await self.deepgram_processor.close()
+        await self.deepgram_processor.close()
         
         # Close TTS connection if it exists
         if self.tts and hasattr(self.tts, 'close'):
             await self.tts.close()
+            
+        # Clean up agent resources
+        self.agent.cleanup()

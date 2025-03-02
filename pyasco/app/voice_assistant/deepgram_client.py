@@ -3,7 +3,7 @@
 import os
 import logging
 import asyncio
-from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents, LiveOptions
+from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents, LiveOptions, Microphone
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +15,7 @@ class DeepgramVoiceProcessor:
         self.process_voice_callback = process_voice_callback
         self.deepgram_api_key = os.getenv("DEEPGRAM_API_KEY", "")
         self.dg_connection = None
+        self.microphone = None
 
     async def setup_deepgram(self):
         """Setup Deepgram connection"""
@@ -62,3 +63,26 @@ class DeepgramVoiceProcessor:
         )
 
         await self.dg_connection.start(options)
+        
+    def start_microphone(self):
+        """Start the microphone to capture audio input"""
+        if not self.dg_connection:
+            logger.error("Deepgram connection not initialized")
+            raise RuntimeError("Must call setup_deepgram() before starting microphone")
+            
+        logger.debug("Opening microphone stream")
+        self.microphone = Microphone(self.dg_connection.send)
+        self.microphone.start()
+        logger.info("Microphone activated and listening")
+        
+    def is_microphone_active(self):
+        """Check if the microphone is active"""
+        return self.microphone and self.microphone.is_active()
+        
+    async def close(self):
+        """Clean up resources"""
+        logger.debug("Cleaning up Deepgram resources")
+        if self.microphone:
+            self.microphone.finish()
+        if self.dg_connection:
+            self.dg_connection.finish()
