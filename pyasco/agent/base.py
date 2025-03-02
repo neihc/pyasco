@@ -25,7 +25,7 @@ from ..tools.code_execute import CodeExecutor
 
 
 class Agent:
-    async def __init__(self, config: Config, user_id: str = "0", app_type: str = "console", **metadata):
+    def __init__(self, config: Config, user_id: str = "0", app_type: str = "console", **metadata):
         self.logger = setup_logger('agent')
         self.logger.info("Initializing Agent")
         self.user_id = user_id
@@ -37,7 +37,7 @@ class Agent:
             "conversation_id": self.conversation_id,
             **metadata
         }
-        self.conversation = Conversation(memory_manager=self.memory_manager)
+        
         self.code_extractor = CodeSnippetExtractor()
         self.python_executor = self._setup_executor(config)
         self.custom_instructions = config.custom_instructions or ""
@@ -63,11 +63,20 @@ class Agent:
             llm_service=self.llm_service
         )
         
+        self.conversation = Conversation(memory_manager=self.memory_manager)
+        
         # Initialize handlers
         self.response_handler = ResponseHandler(self.code_extractor, self.llm_service)
         self.tool_handler = ToolHandler(self.python_executor)
         
-        self._initialize_chat()
+        # Note: async initialization will be done in setup()
+        self._system_message_sent = False
+
+    async def setup(self):
+        """Async initialization tasks"""
+        if not self._system_message_sent:
+            await self._initialize_chat()
+            self._system_message_sent = True
 
     def _setup_executor(self, config: Config) -> CodeExecutor:
         return CodeExecutor()
