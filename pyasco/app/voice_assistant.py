@@ -169,7 +169,13 @@ class VoiceAssistant:
             
             # Get response from agent
             logger.debug("Sending request to agent")
-            response = await self.agent.ask(text, new_session=True, stream=True)
+            try:
+                response = await self.agent.ask(text, new_session=True, stream=True)
+            except Exception as e:
+                logger.error(f"Error getting response from agent: {str(e)}", exc_info=True)
+                self.response_text = f"Error: {str(e)}"
+                self._update_display()
+                return
             
             # Handle streaming response
             self.response_text = ""
@@ -240,6 +246,9 @@ class VoiceAssistant:
         # Cancel any existing task
         self._cancel_current_task()
         
+        # Stop any ongoing stream from the agent
+        await self.agent.stop_stream()
+        
         # Start a new task
         logger.debug(f"Creating new task for input: '{text}'")
         self.current_task = asyncio.create_task(self._process_voice_input_task(text))
@@ -283,9 +292,9 @@ class VoiceAssistant:
                 # Update the display immediately
                 self._update_display()
                 
-                # Process the completed sentence
+                # Process the completed sentence - don't await to avoid blocking
                 logger.debug("Processing completed sentence")
-                await self.process_voice_input(full_sentence)
+                asyncio.create_task(self.process_voice_input(full_sentence))
                 
                 # Reset for next sentence
                 self.transcript_collector.reset()
