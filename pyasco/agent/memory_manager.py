@@ -215,7 +215,7 @@ class MemoryManager:
 
         formatted_result = "\n".join(sections).strip()
         format_duration = (datetime.now() - format_start_time).total_seconds()
-        self.logger.debug(f"Memory formatting completed in {format_duration:.3f}s for {len(memories)} memories")
+        self.logger.debug(f"[TIME] Memory formatting completed in {format_duration:.3f}s for {len(memories)} memories")
         return formatted_result
 
 
@@ -346,7 +346,7 @@ class MemoryManager:
             long_term = results[-1] if not memory_type or memory_type == MemoryType.LONG_TERM.value else []
             
             fetch_duration = (datetime.now() - fetch_start_time).total_seconds()
-            self.logger.info(f"Successfully gathered memories in {fetch_duration:.3f}s: {len(short_term)} short-term, {len(long_term)} long-term")
+            self.logger.info(f"[TIME] Successfully gathered memories in {fetch_duration:.3f}s: {len(short_term)} short-term, {len(long_term)} long-term")
         except Exception as e:
             self.logger.error(f"Error gathering memories: {e}", exc_info=True)
             short_term, long_term = [], []
@@ -364,7 +364,7 @@ class MemoryManager:
             await asyncio.sleep(0)
         
         scoring_duration = (datetime.now() - scoring_start_time).total_seconds()
-        self.logger.info(f"Memory scoring completed in {scoring_duration:.3f}s for {len(all_memories)} memories")
+        self.logger.info(f"[TIME] Memory scoring completed in {scoring_duration:.3f}s for {len(all_memories)} memories")
 
         # Group memories by type
         memories_by_type = defaultdict(list)
@@ -432,7 +432,7 @@ class MemoryManager:
         if raw:
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
-            self.logger.info(f"get_context completed in {duration:.3f} seconds (returning raw memories)")
+            self.logger.info(f"[TIME] get_context completed in {duration:.3f} seconds (returning raw memories)")
             return final_memories
             
         # Format and return the context
@@ -442,7 +442,7 @@ class MemoryManager:
         # Log execution time
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
-        self.logger.info(f"get_context completed in {duration:.3f} seconds with {len(final_memories)} memories and {len(formatted_context)} chars")
+        self.logger.info(f"[TIME] get_context completed in {duration:.3f} seconds with {len(final_memories)} memories and {len(formatted_context)} chars")
         
         return formatted_context
 
@@ -476,7 +476,7 @@ class MemoryManager:
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
             
-            self.logger.info(f"Memory decay process completed in {duration:.2f} seconds")
+            self.logger.info(f"[TIME] Memory decay process completed in {duration:.2f} seconds")
             self.logger.info(f"Short-term memory count after decay: {after_count}")
             self.logger.info(f"Memories processed: {before_count - after_count}")
         except Exception as e:
