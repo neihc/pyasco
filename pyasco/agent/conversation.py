@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List, Dict, Optional
 from datetime import datetime
 from .types import Message
 
@@ -50,3 +50,21 @@ class Conversation:
     def last_message(self) -> Message:
         """Get the last message in the conversation"""
         return self.messages[-1] if self.messages else None
+        
+    async def remember(self, memory_manager, message: Optional[Message] = None) -> None:
+        """Remember a message in the memory manager
+        
+        Args:
+            memory_manager: The memory manager to use for remembering
+            message: The message to remember. If None, remembers the last message
+        """
+        if not memory_manager:
+            return
+            
+        msg = message or self.last_message
+        if not msg:
+            return
+            
+        # Format the message as "role: content" for the memory
+        memory_content = f"{msg.role}: {msg.content}"
+        await memory_manager.remember(memory_content)
