@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import sys
+import time
 from .transcript import TranscriptCollector
 from .deepgram_client import DeepgramVoiceProcessor
 from .elevenlabs_client import ElevenLabsTextToSpeech
@@ -101,4 +103,40 @@ class VoiceAssistant:
 
     async def run(self):
         """Run the voice assistant"""
-        await self.deepgram_processor.setup_deepgram()
+        logger.info("Setting up voice assistant...")
+        
+        # Setup Deepgram for voice recognition
+        try:
+            await self.deepgram_processor.setup_deepgram()
+            logger.info("Voice recognition ready")
+        except Exception as e:
+            logger.error(f"Failed to initialize voice recognition: {e}", exc_info=True)
+            return
+        
+        # Print welcome message
+        print("\n" + "="*50)
+        print("PyAsco Voice Assistant is ready!")
+        print("Speak to interact with the assistant.")
+        print("Press Ctrl+C to exit.")
+        print("="*50 + "\n")
+        
+        # Keep the assistant running until interrupted
+        try:
+            while True:
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            logger.info("Voice assistant task cancelled")
+        except Exception as e:
+            logger.error(f"Error in voice assistant main loop: {e}", exc_info=True)
+    
+    async def cleanup(self):
+        """Clean up resources before shutdown"""
+        logger.info("Cleaning up voice assistant resources...")
+        
+        # Close Deepgram connection if it exists
+        if hasattr(self.deepgram_processor, 'close'):
+            await self.deepgram_processor.close()
+        
+        # Close TTS connection if it exists
+        if self.tts and hasattr(self.tts, 'close'):
+            await self.tts.close()

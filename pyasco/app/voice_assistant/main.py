@@ -17,9 +17,11 @@ Options:
     All other options from console.py are supported
 """
 
+import os
 import asyncio
 import argparse
 import logging
+import signal
 from .assistant import VoiceAssistant
 from ...config import ConfigManager
 from ...agent import Agent
@@ -64,9 +66,40 @@ async def main():
     # Initialize agent
     logger.info("Initializing agent...")
     agent = Agent(config)
-    voice_assistant = VoiceAssistant(agent)
     
-    await voice_assistant.run()
+    # Initialize voice assistant with proper parameters
+    voice_assistant = VoiceAssistant(
+        agent=agent,
+        voice_id=args.voice_id,
+        enable_audio=not args.no_audio
+    )
+    
+    # Setup signal handlers for graceful shutdown
+    loop = asyncio.get_event_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, lambda: asyncio.create_task(shutdown(voice_assistant, loop)))
+    
+    logger.info("Starting voice assistant...")
+    try:
+        await voice_assistant.run()
+    except Exception as e:
+        logger.error(f"Error in voice assistant: {e}", exc_info=True)
+        await shutdown(voice_assistant, loop)
+
+async def shutdown(voice_assistant, loop):
+    """Gracefully shutdown the voice assistant"""
+    logger.info("Shutting down voice assistant...")
+    if hasattr(voice_assistant, 'cleanup'):
+        await voice_assistant.cleanup()
+    if hasattr(voice_assistant.agent, 'cleanup'):
+        voice_assistant.agent.cleanup()
+    
+    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+    for task in tasks:
+        task.cancel()
+    
+    await asyncio.gather(*tasks, return_exceptions=True)
+    loop.stop()
 
 if __name__ == "__main__":
     asyncio.run(main())
