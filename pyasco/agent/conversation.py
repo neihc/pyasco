@@ -1,16 +1,18 @@
-from typing import List, Dict
+from typing import List, Dict, Optional
 from datetime import datetime
 from .types import Message
+from .memory_manager import MemoryManager
 
 class Conversation:
     """Manages the conversation history and message formatting"""
     
-    def __init__(self):
+    def __init__(self, memory_manager: Optional[MemoryManager] = None):
         self.messages: List[Message] = []
+        self.memory_manager = memory_manager
 
-    def add_message(self, role: str, content: str, user_id: str = "default", 
+    async def add_message(self, role: str, content: str, user_id: str = "default", 
                    tools: List[Dict] = None) -> Message:
-        """Add a new message to the conversation"""
+        """Add a new message to the conversation and store in memory if enabled"""
         message = Message(
             role=role,
             content=content,
@@ -19,6 +21,11 @@ class Conversation:
             timestamp=datetime.now()
         )
         self.messages.append(message)
+        
+        # Store message in memory if memory manager is available
+        if self.memory_manager and role != "system":
+            await self.memory_manager.remember(f"{role}: {content}")
+            
         return message
 
     def get_messages(self) -> List[Message]:

@@ -37,7 +37,7 @@ class Agent:
             "conversation_id": self.conversation_id,
             **metadata
         }
-        self.conversation = Conversation()
+        self.conversation = Conversation(memory_manager=self.memory_manager)
         self.code_extractor = CodeSnippetExtractor()
         self.python_executor = self._setup_executor(config)
         self.custom_instructions = config.custom_instructions or ""
@@ -82,7 +82,7 @@ class Agent:
             
         self.logger.info(system_content)
         
-        self.conversation.add_message(
+        await self.conversation.add_message(
             role="system",
             content=system_content
         )
