@@ -103,21 +103,12 @@ def parse_args():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(description="PyAsco Chat Console")
     parser.add_argument("--config", help="Path to YAML configuration file")
-    parser.add_argument("--use-docker", action="store_true", help="Run code in Docker")
-    parser.add_argument("--docker-image", default="python:3.9-slim", help="Docker image to use")
-    parser.add_argument("--mem-limit", default="512m", help="Docker memory limit (e.g., 512m, 1g)")
-    parser.add_argument("--cpu-count", type=int, default=1, help="Docker CPU count")
-    parser.add_argument("--env-file", help="Path to environment file for Docker container")
-    parser.add_argument("--mount", action='append', 
-                       help="Mount points in format 'host_path:container_path'. Can be specified multiple times")
     parser.add_argument("--model", default="meta-llama/llama-3.3-70b-instruct",
                        help="LLM model to use for responses")
     parser.add_argument("--llm-base-url", default="https://openrouter.ai/api/v1",
                        help="Base URL for LLM API")
     parser.add_argument("--llm-api-key",
                        help="API key for LLM service (defaults to OPENROUTER_API_KEY env var)")
-    parser.add_argument("--skills-path", default="skills",
-                       help="Path to skills directory")
     return parser.parse_args()
 
 async def main():
@@ -135,10 +126,6 @@ async def main():
     
     try:
         console.print("\n[bold blue]Welcome to PyAsco Chat![/bold blue]")
-        if config.docker.use_docker:
-            console.print(f"[bold green]Running code in Docker ({config.docker.image})[/bold green]")
-            if config.docker.env_file:
-                console.print(f"[bold green]Environment loaded from: {config.docker.env_file}[/bold green]")
         console.print("Magic commands:")
         console.print("  %exit - quit the console")
         console.print("  %reset - start over")
