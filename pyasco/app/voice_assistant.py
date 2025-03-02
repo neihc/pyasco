@@ -52,10 +52,11 @@ console = Console()
 
 class TranscriptCollector:
     """Collects and manages transcript parts from Deepgram"""
-    def __init__(self):
+    def __init__(self, max_sentences=10):
         self.reset()
         self.full_sentences = []
         self.current_partial = ""
+        self.max_sentences = max_sentences
         
     def reset(self):
         """Reset the current transcript collection"""
@@ -77,6 +78,13 @@ class TranscriptCollector:
         """Add a completed sentence to the history"""
         if sentence.strip():
             self.full_sentences.append(sentence.strip())
+            # Keep only the last max_sentences
+            if len(self.full_sentences) > self.max_sentences:
+                self.full_sentences = self.full_sentences[-self.max_sentences:]
+    
+    def get_combined_input(self):
+        """Get combined input from the sliding window of sentences"""
+        return ' '.join(self.full_sentences)
             
     def get_display_text(self):
         """Get text for display purposes"""
@@ -91,7 +99,7 @@ class VoiceAssistant:
     """Voice interface for PyAsco AI assistant"""
     def __init__(self, agent: Agent):
         self.agent = agent
-        self.transcript_collector = TranscriptCollector()
+        self.transcript_collector = TranscriptCollector(max_sentences=10)
         self.deepgram_api_key = os.getenv("DEEPGRAM_API_KEY", "")
         self.current_task: Optional[Task] = None
         self.response_text = ""
@@ -306,9 +314,10 @@ class VoiceAssistant:
                 # Update the display immediately
                 self._update_display()
                 
-                # Process the completed sentence - don't await to avoid blocking
-                logger.debug("Processing completed sentence")
-                asyncio.create_task(self.process_voice_input(full_sentence))
+                # Process the combined sentences - don't await to avoid blocking
+                combined_input = self.transcript_collector.get_combined_input()
+                logger.debug(f"Processing combined input from {len(self.transcript_collector.full_sentences)} sentences")
+                asyncio.create_task(self.process_voice_input(combined_input))
                 
                 # Reset for next sentence
                 self.transcript_collector.reset()
