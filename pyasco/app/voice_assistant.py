@@ -158,9 +158,6 @@ class VoiceAssistant:
             )
         )
         
-        # Render the layout
-        self.live.update(self.layout)
-        
     def _cancel_current_task(self):
         """Cancel the current processing task if it exists"""
         if self.current_task and not self.current_task.done():
@@ -203,7 +200,7 @@ class VoiceAssistant:
                 if chunk.content:
                     self.response_text += chunk.content
                     self._update_display()
-                    await asyncio.sleep(0)
+                    await asyncio.sleep(0.05)  # Small delay to reduce update frequency
         except Exception as e:
             logger.error(f"Error getting response from agent: {str(e)}", exc_info=True)
             self.response_text = f"Error: {str(e)}"
@@ -311,7 +308,7 @@ class VoiceAssistant:
                 self.transcript_collector.add_sentence(full_sentence)
                 self.transcript_collector.update_partial("")
                 
-                # Update the display immediately
+                # Update the display
                 self._update_display()
                 
                 # Process the combined sentences - don't await to avoid blocking
@@ -359,14 +356,14 @@ class VoiceAssistant:
             
             # Display UI
             logger.debug("Setting up live display")
-            with Live(self.layout, refresh_per_second=4) as live:
+            with Live(self.layout, refresh_per_second=4, auto_refresh=True) as live:
                 self.live = live  # Store the live object
                 self.console.print("[bold green]Voice Assistant started. Speak to interact![/]")
+                self._update_display()  # Initial display update
                 
                 # Main loop
                 logger.debug("Entering main loop")
                 while True:
-                    self._update_display()
                     await asyncio.sleep(0.25)
                     
                     if not self.microphone.is_active():
