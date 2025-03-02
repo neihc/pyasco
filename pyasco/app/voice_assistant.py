@@ -163,71 +163,16 @@ class VoiceAssistant:
         """Background task to process voice input with the agent"""
         logger.debug(f"Processing voice input in background task: '{text}'")
         try:
-            # Clear previous response
+            # Show processing status
             self.response_text = "Processing..."
             self._update_display()
             
-            # Get response from agent
-            logger.debug("Sending request to agent")
-            try:
-                response = await self.agent.ask(text, new_session=True, stream=True)
-            except Exception as e:
-                logger.error(f"Error getting response from agent: {str(e)}", exc_info=True)
-                self.response_text = f"Error: {str(e)}"
-                self._update_display()
-                return
+            # Get and display streaming response
+            await self._get_agent_response(text)
             
-            # Handle streaming response
-            self.response_text = ""
-            logger.debug("Processing streaming response")
-            for chunk in response:
-                if chunk.content:
-                    self.response_text += chunk.content
-                    # Update the display with each chunk
-                    self._update_display()
+            # Handle code execution if needed
+            await self._handle_code_execution()
             
-            # Execute any code if needed
-            should_execute = await self.agent.should_ask_user()
-            logger.debug(f"Should execute code: {should_execute}")
-            if should_execute:
-                max_loops = 5
-                loop_count = 0
-                
-                while await self.agent.should_ask_user() and not self.agent.should_stop_follow_up(loop_count, max_loops):
-                    self.response_text = "\n\n*Executing code...*"
-                    self._update_display()
-                    logger.debug(f"Auto-executing code (loop {loop_count+1}/{max_loops})")
-                    
-                    # Execute current tools
-                    results = self.agent.confirm()
-                    if not results:
-                        logger.debug("No results from execution")
-                        break
-                        
-                    # Display execution results
-                    logger.debug(f"Execution results: {len(results)} items")
-                    result_text = "\n\n**Execution Results:**\n```\n"
-                    result_text += "\n".join(results)
-                    result_text += "\n```"
-                    self.response_text = result_text
-                    self._update_display()
-                    
-                    # Get follow-up if needed
-                    logger.debug("Getting follow-up")
-                    follow_up = await self.agent.get_follow_up(results)
-                    if follow_up:
-                        logger.debug(f"Follow-up query: '{follow_up}'")
-                        follow_up_response = await self.agent.ask(follow_up, stream=False)
-                        logger.debug(f"Follow-up response received")
-                        self.response_text = "\n\n" + follow_up_response.content
-                        self._update_display()
-                    
-                    loop_count += 1
-                
-                if loop_count >= max_loops:
-                    logger.warning("Reached maximum follow-up iterations")
-                    self.response_text = "\n\n*Reached maximum number of execution steps*"
-        
         except asyncio.CancelledError:
             logger.info("Voice processing task was cancelled")
             await self.agent.stop_stream()
@@ -236,20 +181,90 @@ class VoiceAssistant:
             logger.error(f"Error processing input: {str(e)}", exc_info=True)
             self.response_text = f"Error: {str(e)}"
             self._update_display()
+            
+    async def _get_agent_response(self, text: str):
+        """Get response from agent and handle streaming"""
+        try:
+            logger.debug("Sending request to agent")
+            response = await self.agent.ask(text, new_session=True, stream=True)
+            
+            # Handle streaming response
+            self.response_text = ""
+            logger.debug("Processing streaming response")
+            for chunk in response:
+                if chunk.content:
+                    self.response_text += chunk.content
+                    self._update_display()
+        except Exception as e:
+            logger.error(f"Error getting response from agent: {str(e)}", exc_info=True)
+            self.response_text = f"Error: {str(e)}"
+            self._update_display()
+            
+    async def _handle_code_execution(self):
+        """Handle code execution and follow-ups"""
+        should_execute = await self.agent.should_ask_user()
+        logger.debug(f"Should execute code: {should_execute}")
+        
+        if not should_execute:
+            return
+            
+        max_loops = 5
+        loop_count = 0
+        
+        while await self.agent.should_ask_user() and not self.agent.should_stop_follow_up(loop_count, max_loops):
+            self.response_text = "\n\n*Executing code...*"
+            self._update_display()
+            logger.debug(f"Auto-executing code (loop {loop_count+1}/{max_loops})")
+            
+            # Execute current tools
+            results = self.agent.confirm()
+            if not results:
+                logger.debug("No results from execution")
+                break
+                
+            # Display execution results
+            self._display_execution_results(results)
+            
+            # Get follow-up if needed
+            await self._process_follow_up(results)
+            
+            loop_count += 1
+        
+        if loop_count >= max_loops:
+            logger.warning("Reached maximum follow-up iterations")
+            self.response_text = "\n\n*Reached maximum number of execution steps*"
+            
+    def _display_execution_results(self, results):
+        """Display execution results in the UI"""
+        logger.debug(f"Execution results: {len(results)} items")
+        result_text = "\n\n**Execution Results:**\n```\n"
+        result_text += "\n".join(results)
+        result_text += "\n```"
+        self.response_text = result_text
+        self._update_display()
+        
+    async def _process_follow_up(self, results):
+        """Process follow-up queries based on execution results"""
+        logger.debug("Getting follow-up")
+        follow_up = await self.agent.get_follow_up(results)
+        if follow_up:
+            logger.debug(f"Follow-up query: '{follow_up}'")
+            follow_up_response = await self.agent.ask(follow_up, stream=False)
+            logger.debug(f"Follow-up response received")
+            self.response_text = "\n\n" + follow_up_response.content
+            self._update_display()
     
     async def process_voice_input(self, text):
         """Process voice input with the agent"""
         if not text.strip():
-            logger.debug(f"Skipping processing: empty input")
+            logger.debug("Skipping processing: empty input")
             return
             
-        # Cancel any existing task
+        # Cancel any existing task and stop ongoing streams
         self._cancel_current_task()
-        
-        # Stop any ongoing stream from the agent
         await self.agent.stop_stream()
         
-        # Start a new task
+        # Start a new background task
         logger.debug(f"Creating new task for input: '{text}'")
         self.current_task = asyncio.create_task(self._process_voice_input_task(text))
             
