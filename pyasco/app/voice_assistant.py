@@ -20,7 +20,7 @@ import os
 import sys
 import logging
 import time
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Task
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.live import Live
@@ -92,7 +92,7 @@ class VoiceAssistant:
         self.agent = agent
         self.transcript_collector = TranscriptCollector()
         self.deepgram_api_key = os.getenv("DEEPGRAM_API_KEY", "")
-        self.is_processing = False
+        self.current_task: Optional[Task] = None
         self.response_text = ""
         self.microphone = None
         self.dg_connection = None
@@ -152,22 +152,19 @@ class VoiceAssistant:
         # Render the layout
         self.live.update(self.layout)
         
-    async def process_voice_input(self, text):
-        """Process voice input with the agent"""
-        if not text.strip():
-            logger.debug(f"Skipping processing: empty input")
-            return
+    def _cancel_current_task(self):
+        """Cancel the current processing task if it exists"""
+        if self.current_task and not self.current_task.done():
+            logger.debug("Cancelling current processing task")
+            self.current_task.cancel()
             
-        # If already processing, stop the current stream before starting a new one
-        if self.is_processing:
-            logger.debug("Already processing, stopping current stream")
-            await self.agent.stop_stream()
-            
-        self.is_processing = True
-        logger.debug(f"Processing voice input: '{text}'")
+    async def _process_voice_input_task(self, text: str):
+        """Background task to process voice input with the agent"""
+        logger.debug(f"Processing voice input in background task: '{text}'")
         try:
             # Clear previous response
             self.response_text = "Processing..."
+            self._update_display()
             
             # Get response from agent
             logger.debug("Sending request to agent")
@@ -191,6 +188,7 @@ class VoiceAssistant:
                 
                 while await self.agent.should_ask_user() and not self.agent.should_stop_follow_up(loop_count, max_loops):
                     self.response_text = "\n\n*Executing code...*"
+                    self._update_display()
                     logger.debug(f"Auto-executing code (loop {loop_count+1}/{max_loops})")
                     
                     # Execute current tools
@@ -223,11 +221,27 @@ class VoiceAssistant:
                     logger.warning("Reached maximum follow-up iterations")
                     self.response_text = "\n\n*Reached maximum number of execution steps*"
         
+        except asyncio.CancelledError:
+            logger.info("Voice processing task was cancelled")
+            await self.agent.stop_stream()
+            raise
         except Exception as e:
             logger.error(f"Error processing input: {str(e)}", exc_info=True)
             self.response_text = f"Error: {str(e)}"
-        finally:
-            self.is_processing = False
+            self._update_display()
+    
+    async def process_voice_input(self, text):
+        """Process voice input with the agent"""
+        if not text.strip():
+            logger.debug(f"Skipping processing: empty input")
+            return
+            
+        # Cancel any existing task
+        self._cancel_current_task()
+        
+        # Start a new task
+        logger.debug(f"Creating new task for input: '{text}'")
+        self.current_task = asyncio.create_task(self._process_voice_input_task(text))
             
     async def setup_deepgram(self):
         """Setup Deepgram connection"""
@@ -337,6 +351,7 @@ class VoiceAssistant:
                 self.microphone.finish()
             if self.dg_connection:
                 self.dg_connection.finish()
+            self._cancel_current_task()
             self.agent.cleanup()
 
 def parse_args():
