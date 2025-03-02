@@ -118,7 +118,7 @@ class Agent:
                 context = await self.memory_manager.get_context(user_input)
             
             # Reset conversation before starting new session
-            self.conversation.clear()
+            await self.conversation.clear()
             self._initialize_chat(context)
             
             content = user_input
@@ -178,9 +178,9 @@ class Agent:
         except Exception as e:
             self.logger.error(f"Failed to trigger memory decay: {str(e)}")
 
-    def reset(self):
+    async def reset(self):
         self.logger.info("Resetting agent state")
-        self.conversation.clear()
+        await self.conversation.clear()
         self.python_executor.reset()
         self._initialize_chat()
     

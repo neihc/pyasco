@@ -12,6 +12,7 @@ class Conversation:
     def __init__(self):
         self.messages: List[Message] = []
         self.memory_manager = None
+        self._remember_tasks = []
 
     def set_memory_manager(self, memory_manager):
         """Set the memory manager for auto-remembering messages"""
@@ -31,7 +32,10 @@ class Conversation:
         
         # Auto-remember in background if memory manager is set
         if self.memory_manager and role != "system":
-            asyncio.create_task(self._remember_message(message))
+            task = asyncio.create_task(self._remember_message(message))
+            self._remember_tasks.append(task)
+            # Clean up completed tasks
+            self._remember_tasks = [t for t in self._remember_tasks if not t.done()]
             
         return message
 
@@ -39,9 +43,18 @@ class Conversation:
         """Get all messages in the conversation"""
         return self.messages
 
-    def clear(self) -> None:
-        """Clear all messages from the conversation"""
+    async def clear(self) -> None:
+        """Clear all messages from the conversation, waiting for any pending remember tasks"""
+        # Wait for any pending remember tasks to complete
+        if hasattr(self, '_remember_tasks'):
+            for task in self._remember_tasks:
+                if not task.done():
+                    await task
+        
         self.messages = []
+        
+        # Reset the remember tasks list
+        self._remember_tasks = []
 
     def to_llm_format(self) -> List[Dict]:
         """Convert conversation to format expected by LLM"""
