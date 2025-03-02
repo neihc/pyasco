@@ -1,13 +1,15 @@
 import asyncio
-import logging
 import sys
 import time
 import traceback
+from dotenv import load_dotenv
+from ...logger_config import setup_logger
 from .transcript import TranscriptCollector
 from .deepgram_client import DeepgramVoiceProcessor
 from .elevenlabs_client import ElevenLabsTextToSpeech
 
-logger = logging.getLogger(__name__)
+load_dotenv()
+logger = setup_logger('voice_assistant', 'voice_assistant.log')
 
 class VoiceAssistant:
     """Main Voice Assistant handling audio input and AI response"""
