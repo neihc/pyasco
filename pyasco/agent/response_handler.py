@@ -68,4 +68,4 @@ class ResponseHandler:
             content=full_content,
             tools=tools
         )
-        yield final_message
+        #yield final_message

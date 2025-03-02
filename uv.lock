@@ -1149,6 +1149,7 @@ name = "pyasco"
 version = "0.1.1"
 source = { editable = "." }
 dependencies = [
+    { name = "aiohttp" },
     { name = "deepgram-sdk" },
     { name = "docker" },
     { name = "duckdb" },
@@ -1172,10 +1173,12 @@ dependencies = [
     { name = "tantivy" },
     { name = "tree-sitter" },
     { name = "tree-sitter-languages" },
+    { name = "websockets" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", specifier = ">=3.11.13" },
     { name = "deepgram-sdk", specifier = ">=3.10.0" },
     { name = "docker", specifier = ">=7.1.0" },
     { name = "duckdb", specifier = ">=1.2.0" },
@@ -1199,6 +1202,7 @@ requires-dist = [
     { name = "tantivy", specifier = ">=0.22.0" },
     { name = "tree-sitter", specifier = "==0.21.3" },
     { name = "tree-sitter-languages", specifier = ">=1.10.2" },
+    { name = "websockets", specifier = ">=15.0" },
 ]
 
 [[package]]

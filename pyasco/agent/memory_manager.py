@@ -353,6 +353,7 @@ class MemoryManager:
             memory['final_score'] = final_score
             all_memories.append(memory)
             self.logger.debug(f"Memory {memory['id'][:8]}... scored {final_score:.4f}")
+            await asyncio.sleep(0)
 
         # Group memories by type
         memories_by_type = defaultdict(list)

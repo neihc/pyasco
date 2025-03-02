@@ -163,7 +163,7 @@ async def main():
             # Check if we should ask user for code execution
             user_input = None
             recall = True
-            if agent.should_ask_user():
+            if await agent.should_ask_user():
                 if Confirm.ask("\nDo you want to execute the code snippets?"):
                     results = agent.confirm()
                     if results:
