@@ -1,8 +1,9 @@
 """
-PyAsco Voice Assistant - An AI-powered Python assistant with voice input
+PyAsco Voice Assistant - An AI-powered Python assistant with voice input and output
 
 This module provides a voice interface for the PyAsco AI assistant,
-capable of listening to voice input and displaying responses in real-time.
+capable of listening to voice input, displaying responses in real-time,
+and speaking responses using ElevenLabs text-to-speech.
 
 Usage:
     python -m pyasco.app.voice_assistant [options]
@@ -11,6 +12,8 @@ Options:
     --config PATH          Path to YAML configuration file
     --model TEXT           LLM model to use
     --log-level TEXT       Logging level (DEBUG, INFO, WARNING, ERROR)
+    --voice-id TEXT        ElevenLabs voice ID to use for speech output
+    --no-audio             Disable audio output (text-only mode)
     All other options from console.py are supported
 """
 
@@ -20,7 +23,12 @@ import os
 import sys
 import logging
 import time
-from typing import List, Dict, Optional, Any
+import json
+import base64
+import shutil
+import subprocess
+import websockets
+from typing import List, Dict, Optional, Any, AsyncGenerator, Iterator
 from asyncio import Task
 from rich.console import Console
 from rich.markdown import Markdown
@@ -96,21 +104,30 @@ class TranscriptCollector:
             return "\n".join(history + ["🎤 Listening..."])
 
 class VoiceAssistant:
-    """Voice interface for PyAsco AI assistant"""
-    def __init__(self, agent: Agent):
+    """Voice interface for PyAsco AI assistant with speech output"""
+    def __init__(self, agent: Agent, voice_id: Optional[str] = None, enable_audio: bool = True):
         self.agent = agent
         self.transcript_collector = TranscriptCollector(max_sentences=10)
         self.deepgram_api_key = os.getenv("DEEPGRAM_API_KEY", "")
+        self.elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY", "")
+        self.voice_id = voice_id or os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
+        self.enable_audio = enable_audio and bool(self.elevenlabs_api_key)
         self.current_task: Optional[Task] = None
         self.response_text = ""
         self.microphone = None
         self.dg_connection = None
         self.live = None  # Store the live display object
+        self.tts_task = None  # Task for text-to-speech streaming
         
         # UI components
         self.console = Console()
         self.layout = Layout()
         self._setup_layout()
+        
+        # Check for mpv if audio is enabled
+        if self.enable_audio and not self._is_installed("mpv"):
+            logger.warning("mpv not found, audio output disabled. Install mpv to enable audio: https://mpv.io/installation/")
+            self.enable_audio = False
         
     def _setup_layout(self):
         """Setup the rich layout for the UI"""
@@ -196,11 +213,33 @@ class VoiceAssistant:
             # Handle streaming response
             self.response_text = ""
             logger.debug("Processing streaming response")
-            for chunk in response:
-                if chunk.content:
-                    self.response_text += chunk.content
-                    self._update_display()
-                    await asyncio.sleep(0.05)  # Small delay to reduce update frequency
+            
+            # Create text iterator for TTS
+            if self.enable_audio:
+                # Cancel any existing TTS task
+                if self.tts_task and not self.tts_task.done():
+                    self.tts_task.cancel()
+                
+                # Start TTS streaming in background
+                text_chunks = self._create_text_chunk_generator(response)
+                self.tts_task = asyncio.create_task(
+                    self._stream_text_to_speech(text_chunks)
+                )
+                
+                # Process the same response for display
+                for chunk in response:
+                    if chunk.content:
+                        self.response_text += chunk.content
+                        self._update_display()
+                        await asyncio.sleep(0.05)  # Small delay to reduce update frequency
+            else:
+                # Process response without TTS
+                for chunk in response:
+                    if chunk.content:
+                        self.response_text += chunk.content
+                        self._update_display()
+                        await asyncio.sleep(0.05)  # Small delay to reduce update frequency
+                        
         except Exception as e:
             logger.error(f"Error getting response from agent: {str(e)}", exc_info=True)
             self.response_text = f"Error: {str(e)}"
@@ -341,6 +380,105 @@ class VoiceAssistant:
         await self.dg_connection.start(options)
         logger.debug("Deepgram connection started successfully")
         
+    def _is_installed(self, lib_name):
+        """Check if a system library is installed"""
+        return shutil.which(lib_name) is not None
+        
+    def _create_text_chunk_generator(self, response_generator):
+        """Create a generator that yields text chunks from the response"""
+        async def text_iterator():
+            for chunk in response_generator:
+                if chunk.content:
+                    yield chunk.content
+        return text_iterator()
+    
+    async def _text_chunker(self, chunks):
+        """Split text into chunks, ensuring to not break sentences."""
+        splitters = (".", ",", "?", "!", ";", ":", "—", "-", "(", ")", "[", "]", "}", " ")
+        buffer = ""
+
+        async for text in chunks:
+            if not text:
+                continue
+                
+            if buffer.endswith(splitters):
+                yield buffer + " "
+                buffer = text
+            elif text.startswith(splitters):
+                yield buffer + text[0] + " "
+                buffer = text[1:]
+            else:
+                buffer += text
+
+        if buffer:
+            yield buffer + " "
+    
+    async def _stream_audio(self, audio_stream):
+        """Stream audio data using mpv player."""
+        if not self._is_installed("mpv"):
+            logger.error("mpv not found, necessary to stream audio")
+            return
+
+        mpv_process = subprocess.Popen(
+            ["mpv", "--no-cache", "--no-terminal", "--", "fd://0"],
+            stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+
+        logger.debug("Started streaming audio")
+        try:
+            async for chunk in audio_stream:
+                if chunk and mpv_process.stdin:
+                    mpv_process.stdin.write(chunk)
+                    mpv_process.stdin.flush()
+        except Exception as e:
+            logger.error(f"Error streaming audio: {str(e)}")
+        finally:
+            if mpv_process.stdin:
+                mpv_process.stdin.close()
+            mpv_process.wait()
+    
+    async def _stream_text_to_speech(self, text_iterator):
+        """Send text to ElevenLabs API and stream the returned audio."""
+        if not self.elevenlabs_api_key:
+            logger.error("ElevenLabs API key not found")
+            return
+            
+        uri = f"wss://api.elevenlabs.io/v1/text-to-speech/{self.voice_id}/stream-input?model_id=eleven_flash_v2_5"
+        
+        try:
+            logger.debug(f"Connecting to ElevenLabs with voice ID: {self.voice_id}")
+            async with websockets.connect(uri) as websocket:
+                await websocket.send(json.dumps({
+                    "text": " ",
+                    "voice_settings": {"stability": 0.5, "similarity_boost": 0.8},
+                    "xi_api_key": self.elevenlabs_api_key,
+                }))
+
+                async def listen():
+                    """Listen to the websocket for audio data and stream it."""
+                    while True:
+                        try:
+                            message = await websocket.recv()
+                            data = json.loads(message)
+                            if data.get("audio"):
+                                yield base64.b64decode(data["audio"])
+                            elif data.get('isFinal'):
+                                break
+                        except websockets.exceptions.ConnectionClosed:
+                            logger.debug("ElevenLabs connection closed")
+                            break
+
+                listen_task = asyncio.create_task(self._stream_audio(listen()))
+
+                async for text in self._text_chunker(text_iterator):
+                    await websocket.send(json.dumps({"text": text}))
+
+                await websocket.send(json.dumps({"text": ""}))
+                await listen_task
+                
+        except Exception as e:
+            logger.error(f"Error in text-to-speech streaming: {str(e)}")
+    
     async def run(self):
         """Run the voice assistant"""
         try:
@@ -358,7 +496,12 @@ class VoiceAssistant:
             logger.debug("Setting up live display")
             with Live(self.layout, refresh_per_second=4, auto_refresh=True) as live:
                 self.live = live  # Store the live object
-                self.console.print("[bold green]Voice Assistant started. Speak to interact![/]")
+                status = "[bold green]Voice Assistant started. Speak to interact!"
+                if self.enable_audio:
+                    status += " [bold blue](Audio output enabled)[/]"
+                else:
+                    status += " [bold yellow](Audio output disabled)[/]"
+                self.console.print(status)
                 self._update_display()  # Initial display update
                 
                 # Main loop
@@ -382,6 +525,9 @@ class VoiceAssistant:
             if self.dg_connection:
                 self.dg_connection.finish()
             self._cancel_current_task()
+            # Cancel TTS task if running
+            if self.tts_task and not self.tts_task.done():
+                self.tts_task.cancel()
             self.agent.cleanup()
 
 def parse_args():
@@ -393,6 +539,10 @@ def parse_args():
     parser.add_argument("--log-level", default="INFO",
                        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
                        help="Set the logging level")
+    parser.add_argument("--voice-id", 
+                       help="ElevenLabs voice ID to use for speech output")
+    parser.add_argument("--no-audio", action="store_true",
+                       help="Disable audio output (text-only mode)")
     return parser.parse_args()
 
 async def main():
@@ -417,7 +567,11 @@ async def main():
     agent = Agent(config)
     
     # Initialize voice assistant
-    voice_assistant = VoiceAssistant(agent)
+    voice_assistant = VoiceAssistant(
+        agent,
+        voice_id=args.voice_id,
+        enable_audio=not args.no_audio
+    )
     
     # Run the voice assistant
     await voice_assistant.run()
