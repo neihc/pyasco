@@ -195,9 +195,9 @@ class TelegramInterface:
                     self._archive_files([f[0] for f in sent_files])
                 
                 # Handle follow-up if needed
-                follow_up = self.agent.get_follow_up(results)
+                follow_up = await self.agent.get_follow_up(results)
                 if follow_up:
-                    response = await self.agent.get_response(follow_up, stream=False)
+                    response = await self.agent.ask(follow_up, stream=False, new_session=False)
                     await query.message.reply_text(response.content)
                     
                     # If there's more code to execute, ask again
@@ -215,7 +215,7 @@ class TelegramInterface:
         
         elif query.data == "execute_no":
             # Cancel the execution
-            response = self.agent.get_response("no", stream=False)
+            response = await self.agent.ask("no", stream=False, new_session=False)
             await query.message.reply_text(response.content)
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -282,10 +282,10 @@ class TelegramInterface:
                     await action_msg.delete()
                     
                     # Get follow-up response and delete previous output
-                    follow_up = self.agent.get_follow_up(results)
+                    follow_up = await self.agent.get_follow_up(results)
                     if output_msg:
                         await output_msg.delete()
-                    current_response = await self.agent.get_response(follow_up, stream=False)
+                    current_response = await self.agent.ask(follow_up, stream=False, new_session=False)
                     response = current_response
                     loop_count += 1
                 

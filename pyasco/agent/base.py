@@ -90,21 +90,6 @@ class Agent:
             content=system_content
         )
 
-    async def get_response(self, user_input: str, stream: bool = False) -> Union[Message, Generator[Message, None, None]]:
-        """Get response without recall for follow-up messages"""
-        self.logger.info(f"Getting response for user input (stream={stream})")
-        
-        self.conversation.add_message(
-            role="user",
-            content=user_input
-        )
-        
-        return self.response_handler.handle_response(
-            self.conversation.to_llm_format(),
-            self.model,
-            self.conversation,
-            stream
-        )
 
 
     async def ask(self, user_input: str, stream: bool = False, new_session: bool = False) -> Dict:
@@ -139,7 +124,7 @@ class Agent:
             stream
         )
 
-    def get_follow_up(self, results: List[str]) -> str:
+    async def get_follow_up(self, results: List[str]) -> str:
         output, _ = self.tool_handler.compress_results(results)
         base_prompt = FOLLOW_UP_PROMPT.format(output=output)
         

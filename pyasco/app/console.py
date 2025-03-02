@@ -171,7 +171,7 @@ async def main():
                         for result in results:
                             console.print(result)
                         
-                        user_input = agent.get_follow_up(results)
+                        user_input = await agent.get_follow_up(results)
                         recall = False
                         loop_count += 1
                         if agent.should_stop_follow_up(loop_count, MAX_FOLLOW_UP_LOOPS):
