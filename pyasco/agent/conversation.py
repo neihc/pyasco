@@ -1,3 +1,4 @@
+import asyncio
 from typing import List, Dict, Optional
 from datetime import datetime
 from .types import Message
@@ -8,9 +9,17 @@ class Conversation:
     def __init__(self):
         self.messages: List[Message] = []
 
+    def __init__(self):
+        self.messages: List[Message] = []
+        self.memory_manager = None
+
+    def set_memory_manager(self, memory_manager):
+        """Set the memory manager for auto-remembering messages"""
+        self.memory_manager = memory_manager
+
     def add_message(self, role: str, content: str, user_id: str = "default", 
                    tools: List[Dict] = None) -> Message:
-        """Add a new message to the conversation"""
+        """Add a new message to the conversation and remember it in the background"""
         message = Message(
             role=role,
             content=content,
@@ -19,6 +28,11 @@ class Conversation:
             timestamp=datetime.now()
         )
         self.messages.append(message)
+        
+        # Auto-remember in background if memory manager is set
+        if self.memory_manager and role != "system":
+            asyncio.create_task(self._remember_message(message))
+            
         return message
 
     def get_messages(self) -> List[Message]:
@@ -51,20 +65,11 @@ class Conversation:
         """Get the last message in the conversation"""
         return self.messages[-1] if self.messages else None
         
-    async def remember(self, memory_manager, message: Optional[Message] = None) -> None:
-        """Remember a message in the memory manager
-        
-        Args:
-            memory_manager: The memory manager to use for remembering
-            message: The message to remember. If None, remembers the last message
-        """
-        if not memory_manager:
-            return
-            
-        msg = message or self.last_message
-        if not msg:
+    async def _remember_message(self, message: Message) -> None:
+        """Remember a message in the memory manager (internal method)"""
+        if not self.memory_manager or not message:
             return
             
         # Format the message as "role: content" for the memory
-        memory_content = f"{msg.role}: {msg.content}"
-        await memory_manager.remember(memory_content)
+        memory_content = f"{message.role}: {message.content}"
+        await self.memory_manager.remember(memory_content)

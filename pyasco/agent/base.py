@@ -63,6 +63,9 @@ class Agent:
             llm_service=self.llm_service
         )
         
+        # Set memory manager in conversation for auto-remembering
+        self.conversation.set_memory_manager(self.memory_manager)
+        
         # Initialize handlers
         self.response_handler = ResponseHandler(self.code_extractor, self.llm_service)
         self.tool_handler = ToolHandler(self.python_executor)
@@ -122,15 +125,11 @@ class Agent:
         else:
             content = user_input
             
-        # Add message to conversation
+        # Add message to conversation (auto-remembers in background)
         user_message = self.conversation.add_message(
             role="user",
             content=content
         )
-        
-        # Remember the user message
-        if self.memory_manager:
-            await self.conversation.remember(self.memory_manager, user_message)
         
         # Get response from LLM
         return self.response_handler.handle_response(
@@ -165,9 +164,6 @@ class Agent:
 
     async def should_ask_user(self) -> bool:
         last_message = self.conversation.last_message
-        if self.memory_manager and last_message and last_message.role == "assistant":
-            await self.conversation.remember(self.memory_manager, last_message)
-        
         return bool(last_message and last_message.tools)
 
     async def remember_conversation(self):
