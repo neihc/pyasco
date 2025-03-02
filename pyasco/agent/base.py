@@ -3,6 +3,7 @@ from typing import List, Dict, Optional, Generator, Union, Any
 from datetime import datetime
 import re
 import asyncio
+from asyncio import Task
 
 from .types import Message
 from .conversation import Conversation
@@ -26,6 +27,7 @@ from ..tools.code_execute import CodeExecutor
 
 class Agent:
     def __init__(self, config: Config, user_id: str = "0", app_type: str = "console", **metadata):
+        self._current_ask_task: Optional[Task] = None
         self.logger = setup_logger('agent')
         self.logger.info("Initializing Agent")
         self.user_id = user_id
@@ -96,6 +98,28 @@ class Agent:
         """Process user input and get response"""
         self.logger.info(f"Getting response for user input (stream={stream}, new_session={new_session})")
         
+        # Cancel any previous ongoing ask operation
+        if self._current_ask_task and not self._current_ask_task.done():
+            self.logger.info("Cancelling previous ask operation")
+            self._current_ask_task.cancel()
+            try:
+                await self._current_ask_task
+            except asyncio.CancelledError:
+                self.logger.info("Previous ask operation cancelled successfully")
+            except Exception as e:
+                self.logger.error(f"Error while cancelling previous ask: {str(e)}")
+        
+        # Create a new task for this ask operation
+        self._current_ask_task = asyncio.create_task(self._process_ask(user_input, stream, new_session))
+        
+        try:
+            return await self._current_ask_task
+        except asyncio.CancelledError:
+            self.logger.info("Current ask operation was cancelled")
+            raise
+    
+    async def _process_ask(self, user_input: str, stream: bool = False, new_session: bool = False) -> Dict:
+        """Internal method to process the ask operation"""
         if new_session:
             # Get relevant context from memory
             context = ""
@@ -173,6 +197,11 @@ class Agent:
         """Stop the current streaming response"""
         self.logger.info("Stopping current stream")
         self.response_handler.stop_stream()
+        
+        # Also cancel any ongoing ask operation
+        if self._current_ask_task and not self._current_ask_task.done():
+            self.logger.info("Cancelling current ask operation")
+            self._current_ask_task.cancel()
 
     def cleanup(self):
         self.logger.info("Cleaning up agent resources")
