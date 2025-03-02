@@ -182,11 +182,11 @@ class VoiceAssistant:
             self.response_text = f"Error: {str(e)}"
             self._update_display()
             
-    async def _get_agent_response(self, text: str):
+    async def _get_agent_response(self, text: str, new_session=True):
         """Get response from agent and handle streaming"""
         try:
             logger.debug("Sending request to agent")
-            response = await self.agent.ask(text, new_session=True, stream=True)
+            response = await self.agent.ask(text, new_session=new_session, stream=True)
             
             # Handle streaming response
             self.response_text = ""
@@ -195,6 +195,7 @@ class VoiceAssistant:
                 if chunk.content:
                     self.response_text += chunk.content
                     self._update_display()
+                    await asyncio.sleep(0)
         except Exception as e:
             logger.error(f"Error getting response from agent: {str(e)}", exc_info=True)
             self.response_text = f"Error: {str(e)}"
@@ -227,6 +228,7 @@ class VoiceAssistant:
             
             # Get follow-up if needed
             await self._process_follow_up(results)
+            await asyncio.sleep(0)
             
             loop_count += 1
         
@@ -249,10 +251,7 @@ class VoiceAssistant:
         follow_up = await self.agent.get_follow_up(results)
         if follow_up:
             logger.debug(f"Follow-up query: '{follow_up}'")
-            follow_up_response = await self.agent.ask(follow_up, stream=False)
-            logger.debug(f"Follow-up response received")
-            self.response_text = "\n\n" + follow_up_response.content
-            self._update_display()
+            await self._get_agent_response(follow_up, new_session=False)
     
     async def process_voice_input(self, text):
         """Process voice input with the agent"""
